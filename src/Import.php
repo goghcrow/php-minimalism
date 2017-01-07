@@ -2,8 +2,6 @@
 
 namespace Blue;
 
-Import::github("https://raw.githubusercontent.com/goghcrow/php-deps/master/src/RandStr.php");
-//echo RandStr::gen(10);
 
 class Import
 {
