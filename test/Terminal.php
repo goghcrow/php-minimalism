@@ -1,9 +1,9 @@
 <?php
 
-namespace Blue\Test;
+namespace Minimalism\Test;
 
 
-use Blue\Terminal as T;
+use Minimalism\Terminal as T;
 
 require __DIR__ . "/../src/Terminal.php";
 

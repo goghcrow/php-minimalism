@@ -1,9 +1,9 @@
 <?php
 
-namespace Blue\Test;
+namespace Minimalism\Test;
 
 
-use Blue\SimpleHttp;
+use Minimalism\SimpleHttp;
 
 require __DIR__ . "/../src/SimpleHttp.php";
 

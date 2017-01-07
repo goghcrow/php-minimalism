@@ -1,8 +1,8 @@
 <?php
 
-namespace Blue\Test;
+namespace Minimalism\Test;
 
-use Blue\RandStr;
+use Minimalism\RandStr;
 
 require __DIR__ . "/../src/RandStr.php";
 

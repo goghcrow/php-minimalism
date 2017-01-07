@@ -1,9 +1,9 @@
 <?php
 
-namespace Blue\Test;
+namespace Minimalism\Test;
 
-use Blue\Import;
-use Blue\RandStr;
+use Minimalism\Import;
+use Minimalism\RandStr;
 
 require __DIR__ . "/../src/Import.php";
 

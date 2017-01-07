@@ -1,6 +1,6 @@
 <?php
 
-namespace Blue;
+namespace Minimalism;
 
 
 class Import
