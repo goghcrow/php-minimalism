@@ -8,6 +8,7 @@ class RandStr
     const ALPHA     = 1;
     const NUM       = 2;
     const CHINESE   = 4;
+    const ALL = self::ALPHA | self::NUM | self::CHINESE;
 
     const __ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const __NUM = "0123456789";

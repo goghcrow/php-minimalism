@@ -12,6 +12,10 @@ namespace Minimalism;
  * ANSI/VT100 Terminal Control Escape Sequences
  * @standard http://www.termsys.demon.co.uk/vtansi.htm
  *
+ * class T extends Terminal {}
+ * class_alias(Terminal::class, "T");
+ * use Terminal as T;
+ *
  */
 class Terminal
 {
