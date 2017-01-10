@@ -1,0 +1,38 @@
+    /*PHP_ME(ae_eventloop, free,          NULL,   ZEND_ACC_PUBLIC)*/
+    // PHP_ME(ae_eventloop, GetFileEvents,              NULL,   ZEND_ACC_PUBLIC)
+    // PHP_ME(ae_eventloop, ProcessEvents,              NULL,   ZEND_ACC_PUBLIC)
+    // PHP_ME(ae_eventloop, Wait,                       NULL,   ZEND_ACC_PUBLIC)
+    // PHP_ME(ae_eventloop, SetBeforeSleepProc,         NULL,   ZEND_ACC_PUBLIC)
+    /*
+    int aeGetFileEvents(aeEventLoop *eventLoop, int fd);
+    void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
+    int aeProcessEvents(aeEventLoop *eventLoop, int flags);
+    char *aeGetApiName(void);
+    int aeWait(int fd, int mask, long long milliseconds);
+     */
+
+
+
+// $c = new __PHP_Incomplete_Class();
+// var_dump($c);
+/* 做一个tcp server*/ 
+/* 有内存泄漏 TODO add 方法 确认引用计数对不对 !!!!!!*/
+/* TODO __destruct 不能定义成私有的， 添加一个free方法，防御手动调用析构函数 */
+
+/* !!!!!!!!! \Ae\EventLoop 去掉 getInstance方法， 其他方法全部修改成静态方法 ！！！ */
+
+
+// fdset default 65536
+// add的第一个参数将会传递到事件回调函数的第一个参数为
+// \Ae\EventLoop::add(resource|fd $fd, $evType, function(resource|fd $fd, $mask) {});
+
+/*
+\Ae\EventLoop::READABLE
+\Ae\EventLoop::WRITABLE
+bool \Ae\EventLoop::add(mixed fd, int evType, callable callback)
+int \Ae\EventLoop::after(mixed fd, int evType, callable callback)
+int \Ae\EventLoop::tick(mixed fd, int evType, callable callback)
+bool \Ae\EventLoop::del(mixed|int fd|timer_id[, int evType])
+bool \Ae\EventLoop::start()
+bool \Ae\EventLoop::stop()
+*/
