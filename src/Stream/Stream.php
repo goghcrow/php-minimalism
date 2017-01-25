@@ -1,4 +1,5 @@
 <?php
+
 namespace Minimalism\Stream;
 
 use InvalidArgumentException;

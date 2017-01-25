@@ -1,0 +1,198 @@
+未连接的socket fd可以被close但不能被shutdown
+
+
+两种socket检测错误的方式对比
+1. $so_error = socket_get_option($socket, SOL_SOCKET, SO_ERROR);
+2. $errno = socket_last_error($socket);
+socket_strerror($errno);
+
+Quoting Unix Network Programming:
+
+If so_error is nonzero when the process calls read and there is no data to return,
+read returns–1 with errno set to the value of so_error (p. 516 of TCPv2).
+The value of so_error is then reset to 0.
+If there is data queued for the socket,
+that data is returned by read instead of the error condition.
+If so_error is nonzero when the process calls write, –1 is returned
+with errno set to the value of so_error (p. 495 of TCPv2) and so_error is reset to 0.
+
+当有数据积压, read返回数据
+当无数据可读时, read()返回-1, so_error非零, errno被置为so_error, 之后so_error被重置为0.
+当write()返回-1, so_error非零, errno被置为so_error, 之后so_error被重置为0.
+
+
+setsockopt只能用在读写时候不能用在connect上
+
+
+UNIX Socket FAQ» 6.11 Connect with timeout (or another use for select() )
+http://developerweb.net/viewtopic.php?id=3196
+
+
+
+<<socket连接超时的问题>>
+http://www.chinaunix.net/old_jh/23/136566.html
+
+作者:liwei790611  发表于：2008-11-01 17:52:33
+
+在客户端与服务器端通过socket连接时，有两个问题必须考虑
+1、connect连接时可能会发生连接不上的情况，需要实现超时退出程序。
+2、连接后在接收数据的过程中，可能发生网络中断，不能接受数据的情况，需要退出程序。
+
+这两个问题应该很常见，希望高手给大家详细地讲解一下，谢谢。
+
+ gadfly 回复于：2003-08-11 14:40:32
+
+这两个都可以用非阻塞socket，select控制超时
+
+ yuanyawei 回复于：2003-08-12 09:08:00
+
+我觉得第一种情况用select可以很好解决。
+但第二种情况在遇到客户端直接拔网线的情况时，server端的情况较难判断，要看内核的参数，
+linux下较好处理，BSD也没问题，HP和AIX也能处理，但SCO下就不好办了（参数老调不好）。
+
+ minsky 回复于：2003-08-12 10:52:27
+
+1. connect超时:
+1)setsockopt();//将socket置为非阻塞模式;
+2)connect();
+3)判断connect()的返回值,一般情况会返回-1,这时你还必须判断错误码如果是EINPROGRESS,那说明connect还在继续;
+如果错误码不是前者那么就是有问题了,不必往下执行,必须关掉socket;待下次重联;
+4)select();
+设置好函数中的超时时间,将select()中的read和write项置上,在超时时间内,如果select返回1,即描述字变为了可写,那么连接成功;
+如果返回2,即描述字变为即可读又可写,那么出错;如果返回0,那么超时;
+
+2. 网络中断:
+如果你的程序是客户端.用select检查描述符的状态,如果可读就recv(),根据recv()的返回值来判断网络情况;
+
+ calfen 回复于：2003-12-18 15:18:55
+unp上明确说setsockopt只能用在读写时候不能用在connect上啊...
+
+ grouploo 回复于：2004-06-25 23:06:35
+
+// 此函数实现判断m_server的m_port端口是否可以连上，超时限制为nTimeOut秒
+BOOL ConnectTest(char * m_server,int m_port)
+{
+    struct hostent* host = NULL;
+    struct sockaddr_in saddr;
+    unsigned int s = 0;
+    BOOL  ret;
+    time_t start;
+    int error;
+    host = gethostbyname (m_server);
+    if (host==NULL)return  FALSE;
+
+    saddr.sin_family = AF_INET;
+    saddr.sin_port = htons(m_port);
+    saddr.sin_addr = *((struct in_addr*)host->;h_addr);
+
+    if( (s=socket(AF_INET, SOCK_STREAM, 0))<0){
+        return FALSE;
+    }
+
+    fcntl(s,F_SETFL, O_NONBLOCK);
+
+    if(connect(s,(struct sockaddr*)&saddr, sizeof(saddr)) == -1) {
+        // it is in the connect process
+        if (errno == EINPROGRESS){
+            struct timeval tv;
+            fd_set writefds;
+            tv.tv_sec = m_nTimeOut;
+            tv.tv_usec = 0;
+            FD_ZERO(&writefds);
+            FD_SET(s, &writefds);
+            if(select(s+1,NULL,&writefds,NULL,&tv)>;0) {
+                int len=sizeof(int);
+                //下面的一句一定要，主要针对防火墙
+                getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &len);
+                if(error==0) ret=TRUE;
+                    else ret=FALSE;
+            }else
+                ret=FALSE;//timeout or error happen
+        } else
+            ret=FALSE;
+    } else
+        ret=TRUE;
+
+    close(s);
+    return ret;
+}
+
+ DirtyBear 回复于：2007-06-13 17:10:07
+
+“主要针对防火墙”那一行，能解释解释吗？
+
+ 福瑞哈哥 回复于：2007-06-13 17:14:52
+
+一般都是用nonblocking+select，但是blocking+alarm也是可以的。
+
+ C_C 回复于：2007-06-13 17:24:07
+
+alarm当出现超时的时候容易打乱IO，似乎不是很好用
+
+ 福瑞哈哥 回复于：2007-06-13 17:28:14
+
+引用：原帖由 C_C 于 2007-6-13 17:24 发表
+alarm当出现超时的时候容易打乱IO，似乎不是很好用
+
+已經超時了，打亂IO不正是需要的嗎？
+
+ DirtyBear 回复于：2007-06-14 10:41:13
+
+我的问题是，下面这段代码，的getsockopt调用为什么是针对防火墙的？什么道道？
+
+ if(select(s+1,NULL,&writefds,NULL,&tv)>;0) {
+                int len=sizeof(int);
+                //下面的一句一定要，主要针对防火墙
+                getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &len);
+                if(error==0) ret=TRUE;
+                    else ret=FALSE;
+            }else
+                ret=FALSE;//timeout or error happen
+
+
+
+ xhl 回复于：2007-06-14 11:23:49
+
+引用：原帖由 DirtyBear 于 2007-6-14 10:41 发表
+我的问题是，下面这段代码，的getsockopt调用为什么是针对防火墙的？什么道道？
+
+                       if(select(s+1,NULL,&writefds,NULL,&tv)>;0){
+    in ...
+
+是不是针对防火墙， 这个要看防火墙的行为了，但这句是肯定要的。原因如下：
+
+当套接口上发生错误时，源自Berkeley的内核中的协议模块将此套接口的名为so_error的变量设为标准的UNIX Exxx值中的一个，
+它称为此套接口的待处理错误（pending error）。内核可立即以以下两种方式通知进程：
+
+   1. 如果进程阻塞于此套接口的select调用，则无论是检查可读条件还是可写条件，select都返回并设置其中一个或所有两个条件。
+
+   2. 如果进程使用信号驱动I/O模型，则给进程或进程组生成信号SIGIO。
+
+进程然后可以通过获取SO_ERROR套接口选项来得到so_error的值。由getsockopt返回的整数值就是此套接口的待处理错误。so_error随后由内核复位为0。
+
+当进程调用read且没有数据返回时，如果so_error为非0值，则read返回-1且errno设为so_error的值，接着so_error的值被复位为0。
+
+如果此套接口上有数据在排队，则read返回那些数据而不是返回错误条件。
+
+如果进程调用write时so_error为非0值，则write返回-1且errno设为so_error的值，随后so_error也被复位。
+
+
+ astezheng 回复于：2008-11-01 15:46:14
+
+感觉并没有回答出来getsockopt用在此处的必要性啊，有哪位大哥知道的话还请赐教下了
+
+ astezheng 回复于：2008-11-01 15:47:32
+
+引用：原帖由 xhl 于 2007-6-14 11:23 发表
+
+是不是针对防火墙， 这个要看防火墙的行为了，但这句是肯定要的。原因如下：
+
+当套接口上发生错误时，源自Berkeley的内核中的协议模块将此套接口的名为so_error的变量设为标准的UNIX Exxx值中的一个， ...
+
+感觉并没有回答出来getsockopt用在此处的必要性啊，或者和防火墙的行为有什么关系呢，有哪位大哥知道的话还请赐教下了
+
+ chenzhanyiczy 回复于：2008-11-01 17:52:33
+
+两种情况系统其实都会返回的，当然这些最好由程序来控制
+
+用select()控制

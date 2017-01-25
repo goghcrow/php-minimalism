@@ -17,12 +17,8 @@ namespace Minimalism;
  * use Terminal as T;
  *
  */
-class Terminal
+final class Terminal
 {
-    const ESC          = "\033";
-
-    const RESET_ALL    = 0;
-
     const BRIGHT       = 1;
     const DIM          = 2;
     const UNDERSCORE   = 4;
@@ -64,22 +60,32 @@ class Terminal
      *  <ESC>[{attr1};...;{attrn}m
      * e.g. \033[4;34;mhello 蓝色下划线文件hello
      * \033[0m
+     *
+     * \033 ESC
      */
-    public static function put($text, ...$attrs) {
+    public static function put($text, ...$attrs)
+    {
         // $text = addslashes($text);
-        $resetAll = static::ESC . "[0m";
         $attrStr = implode(";", array_map("intval", $attrs));
-        $buffer = static::ESC . "[{$attrStr}m{$text}" . $resetAll;
-        echo $buffer;
+        $buffer = "\033[{$attrStr}m{$text}";
+        $resetAll = "\033[0m";
+        echo $buffer, $resetAll;
+    }
+
+    public static function putln($text, ...$attrs)
+    {
+        self::put($text, ...$attrs);
+        echo PHP_EOL;
     }
 
     /**
      * 手动控制输出格式
      * @param array $attrs
      */
-    public static function attr(array $attrs) {
+    public static function attr(array $attrs)
+    {
         $attrStr = implode(";", array_map("intval", $attrs));
-        echo static::ESC . "[{$attrStr}m";
+        echo "\033[{$attrStr}m";
     }
 
     /**
@@ -101,8 +107,9 @@ class Terminal
      * @param bool $return
      * @return string
      */
-    public static function erase($attr, $return = false) {
-        $buffer = static::ESC . "[$attr";
+    public static function erase($attr, $return = false)
+    {
+        $buffer = "\033[$attr";
         if ($return) {
             return $buffer;
         }

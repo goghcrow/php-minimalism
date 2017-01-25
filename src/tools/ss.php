@@ -9,12 +9,12 @@
 $usage = "Usage: $argv[0] ZanProjectRoot\n";
 checkEnv($usage);
 
-    $runMode = getenv('KDT_RUN_MODE') ?: get_cfg_var('kdt.RUN_MODE') ?: "online";
-    $connDir = "$argv[1]/resource/config/$runMode/connection";
-    if (!file_exists($connDir)) {
-        exit($usage);
-    }
-    statConn($connDir);
+$runMode = getenv('KDT_RUN_MODE') ?: get_cfg_var('kdt.RUN_MODE') ?: "online";
+$connDir = "$argv[1]/resource/config/$runMode/connection";
+if (!file_exists($connDir)) {
+    exit($usage);
+}
+statConn($connDir);
 
 
 function checkEnv($usage)
