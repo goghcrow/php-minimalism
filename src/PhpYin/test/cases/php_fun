@@ -1,0 +1,7 @@
+(echo "你好\n")
+(echo (strtoupper "hello world\n\n"))
+
+(define file "/Users/chuxiaofeng/Documents/BoJack/PhpYin/test/cases/php_fun")
+(define n (fprintf
+  STDERR
+  (file_get_contents file)))

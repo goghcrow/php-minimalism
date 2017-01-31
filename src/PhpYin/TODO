@@ -1,0 +1,42 @@
+1. 移除 parseStr
+require
+
+
+加入 quote 关键词
+Value.php             // TODO
+                      case "array":
+                          break;
+                      case "object":
+                          break;
+
+
+1. 整理测试case
+2. record 字面量为什么RecordType
+3. 写一份语法示例文档
+4. !set 向量与record元素的值
+eval | & ^
+Closure -> PHP Closure
+generator -> xrange
+foreach -> php foreach
+vec eq
+
+5. 库函数
+
+
+// 处理 Name interp 之后 = null的情景
+6. $node instanceof Name && $value === null
+
+
+
+
+
+
+1. 8进制 16进制数字有问题
+
+把Type类型常量 修改成
+
+Int::class;
+FloatType::class;
+
+
+2. 函数toString 问题，property 不显示

@@ -1,0 +1,9 @@
+-- 程序序列，依次解析，解析过程可修改scope
+-- seq 返回最后一项解释结果
+-- 返回last
+(seq 1 2 "last")
+-- 返回 hello
+(seq (define x "hello") x)
+-- 返回3，链接上级作用域
+(define a 1)
+(seq (define b 2) (+ a b))

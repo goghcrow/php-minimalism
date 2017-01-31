@@ -1,0 +1,77 @@
+(define EOL (+ PHP_EOL PHP_EOL))
+
+
+
+
+
+(define _ ({:x 1 :y 2}))
+(echo _)
+(echo EOL)
+
+----------------- record_literal ---------------
+-- 匿名record
+(echo (record _ [name String :value "xiaofeng"] [age Int :value 26]))
+(echo EOL)
+(echo {:name "xiaofeng" :age 26})
+(echo EOL)
+
+(echo ({:a 42} :a 41))
+(echo EOL)
+
+-- (record _ [name :value xiaofeng] [age :value 26])
+-- (define self ({:name "xiaofeng" :age 26}))
+-- self
+
+
+----------------- record -----------------------
+
+(record Person
+  [name String :default "xiaofeng"]
+  [age Int :default 26])
+
+
+(define p
+  (Person
+    :name "hello"
+    :age (+ 41 1)))
+
+(echo p)
+
+
+-- (record F [x Fun :default (fun (x) x.a)])
+-- (record A [a Int :default 42])
+-- (define d (F))
+-- (d.x (A))
+
+
+
+----------------- parent ---------------
+
+
+
+----------------- define ---------------
+-- (record Person [name String :value "xiaofeng"] [age Int :value 26])
+-- (person).name
+
+
+-- (record A :x 1 :y 2)
+-- (record B :u 12 :v 2)
+-- (define b (B :v 20))
+-- (define a (A :x b :y 4))
+-- a.x.u
+
+-- (record C (A B) :t 42)
+-- (define c (C))
+-- c
+
+
+(record A
+  [x String]
+  [y Int])
+
+(define a
+  (A
+    :x "hello"
+    :y 42))
+
+-- (set! a.x "world")

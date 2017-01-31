@@ -1,0 +1,92 @@
+
+-- calling function with wrong number of arguments. expected: 1 actual: 2
+-- (echo ((+ 1) 1 2))
+
+---------------- prime fun --------------------
+(define add0 (+))
+(echo add0)
+(echo "\n")
+
+(echo (((add0))))
+(echo "\n")
+
+(define add1 (+ 1))
+(echo add1)
+(echo "\n")
+(add1 2)
+(echo "\n")
+
+(echo ((+ 1) 2))
+(echo "\n")
+
+
+(echo ((* 2) 2))
+(echo "\n")
+(echo "\n")
+(echo "\n")
+
+---------------- closure --------------------
+
+(define add_abc
+  (fun (a b c)
+    (+ a
+       (+ b c))))
+
+-- (echo (add_abc 1 1 1))
+
+(define add_bc (add_abc 1))
+(echo add_bc)
+(echo "\n")
+
+(define add_c (add_bc 1))
+(echo add_c)
+(echo "\n")
+(echo (add_c 1))
+(echo "\n")
+
+(define c3
+  (fun (a b c)
+    (+ (+ a b)
+       c)))
+
+(echo (((c3 "hello") " world") "!\n"))
+(echo ((c3 "hello" " world") "!\n"))
+(echo ((c3 "hello") " world" "!\n"))
+
+
+
+(define x1
+  (fun ([a String :default "a"]
+        [b String :default "b"]
+        [c String :default "c"])
+  (+ (+ a b)
+     c)))
+
+
+-- abd
+(x1 :c "d")
+(echo "\n")
+
+
+
+(define x2
+  (fun ([a String]
+        [b String]
+        [c String])
+  (+ (+ a b)
+     c)))
+
+-- a~b~c~
+(echo (((x2 :b "b~") :c "c~") :a "a~"))
+(echo "\n")
+
+
+-- a~b~c~
+(echo ((x2 :b "b~" :c "c~") :a "a~"))
+(echo "\n")
+
+
+-- a~b~c~
+(echo ((x2 :b "b~") :c "c~" :a "a~"))
+(echo "\n")
+

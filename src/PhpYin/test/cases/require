@@ -1,0 +1,8 @@
+-- (require "../cases/lib")
+
+(define lib
+  (require "lib"))
+
+-- (echo lib.ver)
+
+lib

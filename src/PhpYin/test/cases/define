@@ -1,0 +1,46 @@
+(define assert
+  (fun (a b)
+    (echo (if (= a b) "" "FAIL\n"))))
+
+
+(define nil void)
+(define null void)
+
+(define a 1)
+(define [b [c d] e] [2 [3 4] 5])
+(define {:x f :y g} {:y 7 :x 6})
+
+(define {:x x :y {:z z}} {:x "hello" :y {:z "world"}})
+
+(assert a 1)
+(assert b 2)
+(assert c 3)
+(assert d 4)
+(assert e 5)
+(assert f 6)
+(assert g 7)
+(assert x "hello")
+(assert z "world")
+
+
+
+
+-- define 与 echo 均返回void
+-- (echo
+  -- (echo
+    -- (define self "我")))
+
+
+
+
+
+(define vec1 [a [b c] d])
+(define [x1 [x2 x3] x4] vec1)
+(assert a x1)
+(assert b x2)
+(assert c x3)
+(assert d x4)
+
+
+
+()

@@ -1,0 +1,51 @@
+## Block 与 seq
+3个地方new Block()
+1. 文件保持独立作用域， 每个文件会被parse追加(seq ...) --> Block
+2. seq关键词可以声明独立作用域
+3. 函数body是也是block， 独立作用域,
+
+Block内部实际上是 List<Statement>;
+Block返回最后一个Statement的解析结果，比如(require file)返回的是file最后一个Statement的解析结果;
+Fun interp 结果 会连接当前的Scope，形成Closure结构;
+Block可以读取外部upValue， scope 连接到 Block interp的当前scope;
+
+!!! Block lazy eval
+!!! seq:: 延迟执行序列，需要时候才执行，比如函数的Fun->body
+!!! Closure的执行 $closure->fun->body->interp($funScope);
+
+## 加入Resource类型 与php对应
+
+## redefine
+-- 重定义
+(define a 1)
+(define a 2)
+
+-- Block 不会出现重定义
+(define a 1)
+(seq (define a 1))
+
+-- local scope可以覆盖parent scope
+(define a 1)
+(fun () (define a 1))
+
+
+## record
+
+record字面量实际上是匿名RecordType
+
+
+
+## Primitive 原始函数
+
+PrimFun的arity用来在typecheck中检查参数个数, -1 不定参数
+
+
+## Fun Call
+1. 两种参数声明方式 seq, kv
+2. 两种传参 call 方式
+3. kv call方式可是实现无序的 curry
+4. 函数通过kv声明，支持:default 默认参数
+
+
+## Curry
+PrimeFun 与 Closure 支持curry，还需要重写typecheck，放开参数个数检查

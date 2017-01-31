@@ -1,0 +1,4 @@
+(define a 1)
+(echo a)
+(set! a 2)
+(echo a)

@@ -1,0 +1,19 @@
+{
+    "name": "php-yin",
+    "license": "MIT",
+    "authors": [{ "name": "Yin Wang" }, { "name": "chuxiaofeng" }],
+    "require": {
+        "php": ">=5.6"
+    },
+    "require-dev": {
+        "php": ">=5.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "Minimalism\\Scheme\\": "src",
+            "Minimalism\\Scheme\\Test\\": "test"
+        },
+        "files": [
+        ]
+    }
+}

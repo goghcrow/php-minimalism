@@ -1,0 +1,2 @@
+(define aa [1 2 3])
+(set! aa#0 10)

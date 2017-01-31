@@ -1,0 +1,83 @@
+-- (define ret_hello (fun () hello)) TODO 这种情况应该报找不到hello
+
+(define add +)
+(echo (+ 1 2))
+(define ret_hello (fun () "hello"))
+(echo ret_hello)
+(echo (ret_hello))
+
+
+
+
+
+-- 函数默认参数
+(define hello
+  (fun ([a String :default "hello"]
+        [b String :default "world"])
+      (echo [a b])))
+
+(hello)
+(hello 1 2)
+(hello "你好" "世界")
+
+
+
+
+
+(define a 1)
+(define b 2)
+(define add (fun () (+ a b)))
+(add)
+
+
+
+-- 未定义变量
+((fun () a))
+
+
+
+
+
+(define add1
+  (fun (a b)
+    (+ a b)))
+
+(define add2
+  (fun ([a Int :default 42]
+        [b Int :default 0])
+    (+ a b)))
+
+(define add3
+  (fun ([a Int]
+        [b Int])
+    (+ a b)))
+
+
+(echo ["add1=>" (add1 1 2)])
+(echo ["add2=>" (add2 1 2)])
+(echo ["add3=>" (add3 1 2)])
+
+
+
+
+
+
+-- arguments
+
+(define add
+  (fun
+    ([a Int :default 1]
+     [b Int])
+  (+ a b)))
+
+-- 两种参数传递方式
+(echo (add 1 2))
+(echo (add :a 1 :b 2))
+(echo (add :b 2))
+
+
+
+
+
+-- default arg
+((fun ([x Int :default 1]) (+ a b)) 1)

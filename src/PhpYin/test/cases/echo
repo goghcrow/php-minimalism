@@ -1,0 +1,4 @@
+(echo (echo "echo return void"))
+(seq (echo [[1 2] "hello"]) "world")
+(define x (echo "hello"))
+(echo [x "hello"])
