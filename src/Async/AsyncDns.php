@@ -6,7 +6,7 @@
  * Time: 下午1:40
  */
 
-namespace Minimalism\AsyncTask;
+namespace Minimalism\Async;
 
 
 class AsyncDns extends AsyncWithTimeout

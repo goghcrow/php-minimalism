@@ -6,7 +6,7 @@
  * Time: 下午1:41
  */
 
-namespace Minimalism\AsyncTask\Core;
+namespace Minimalism\Async\Core;
 
 
 class Generator

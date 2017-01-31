@@ -6,12 +6,12 @@
  * Time: 下午1:50
  */
 
-namespace Minimalism\AsyncTask;
+namespace Minimalism\Async;
 
 
 /**
  * Class AsyncHttpClient
- * @package Minimalism\AsyncTask
+ * @package Minimalism\Async
  * @method AsyncHttpClient set(array $setting)
  * @method AsyncHttpClient setMethod(string $method)
  * @method AsyncHttpClient setHeaders(array $headers)

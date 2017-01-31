@@ -1,9 +1,9 @@
 <?php
 namespace Minimalism\Test\AsyncTask;
 
-use Minimalism\AsyncTask\AsyncSleep;
-use Minimalism\AsyncTask\Core\AsyncTask;
-use Minimalism\AsyncTask\Core\CancelTaskException;
+use Minimalism\Async\AsyncSleep;
+use Minimalism\Async\Core\AsyncTask;
+use Minimalism\Async\Core\CancelTaskException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 

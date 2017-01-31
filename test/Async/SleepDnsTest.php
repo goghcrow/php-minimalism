@@ -8,9 +8,9 @@
 
 namespace Minimalism\Test\AsyncTask;
 
-use Minimalism\AsyncTask\AsyncDns;
-use Minimalism\AsyncTask\AsyncSleep;
-use Minimalism\AsyncTask\Core\AsyncTask;
+use Minimalism\Async\AsyncDns;
+use Minimalism\Async\AsyncSleep;
+use Minimalism\Async\Core\AsyncTask;
 
 require __DIR__ . "/../../vendor/autoload.php";
 

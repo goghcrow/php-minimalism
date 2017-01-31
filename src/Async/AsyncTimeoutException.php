@@ -6,7 +6,7 @@
  * Time: 下午2:26
  */
 
-namespace Minimalism\AsyncTask;
+namespace Minimalism\Async;
 
 
 class AsyncTimeoutException extends \Exception

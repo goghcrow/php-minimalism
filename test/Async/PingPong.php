@@ -2,8 +2,8 @@
 
 namespace Minimalism\Test\AsyncTask;
 
-use Minimalism\AsyncTask\AsyncSleep;
-use Minimalism\AsyncTask\Core\AsyncTask;
+use Minimalism\Async\AsyncSleep;
+use Minimalism\Async\Core\AsyncTask;
 
 require __DIR__ . "/../../vendor/autoload.php";
 

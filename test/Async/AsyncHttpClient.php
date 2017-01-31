@@ -8,10 +8,10 @@
 
 namespace Minimalism\Test\AsyncTask;
 
-use Minimalism\AsyncTask\AsyncDns;
-use Minimalism\AsyncTask\AsyncHttpClient;
-use Minimalism\AsyncTask\Core\AsyncTask;
-use Minimalism\AsyncTask\AsyncTimeoutException;
+use Minimalism\Async\AsyncDns;
+use Minimalism\Async\AsyncHttpClient;
+use Minimalism\Async\Core\AsyncTask;
+use Minimalism\Async\AsyncTimeoutException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -32,6 +32,8 @@ function simpleGet()
         if ($e instanceof \Exception) {
             echo $e->getMessage(), "\n";
         }
+        // TODO coredump
+        swoole_event_exit();
     });
 }
 

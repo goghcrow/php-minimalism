@@ -6,12 +6,12 @@
  * Time: 下午1:39
  */
 
-namespace Minimalism\AsyncTask;
+namespace Minimalism\Async;
 
 
-use Minimalism\AsyncTask\Core\Async;
+use Minimalism\Async\Core\IAsync;
 
-abstract class AsyncWithTimeout implements Async
+abstract class AsyncWithTimeout implements IAsync
 {
     public $complete;
     public $timeout;

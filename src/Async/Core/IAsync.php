@@ -6,10 +6,10 @@
  * Time: 下午1:41
  */
 
-namespace Minimalism\AsyncTask\Core;
+namespace Minimalism\Async\Core;
 
 
-interface Async
+interface IAsync
 {
     /**
      * 开启异步任务，立即返回，任务完成回调complete

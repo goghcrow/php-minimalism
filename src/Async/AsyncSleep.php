@@ -6,12 +6,12 @@
  * Time: 下午1:40
  */
 
-namespace Minimalism\AsyncTask;
+namespace Minimalism\Async;
 
 
-use Minimalism\AsyncTask\Core\Async;
+use Minimalism\Async\Core\IAsync;
 
-class AsyncSleep implements Async
+class AsyncSleep implements IAsync
 {
     public $sleep;
     public $complete;
