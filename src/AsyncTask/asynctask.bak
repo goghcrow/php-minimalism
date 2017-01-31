@@ -1,0 +1,179 @@
+<?php
+
+namespace Minimalism;
+
+interface Async
+{
+    public function start(callable $callback);
+}
+
+class CancelTaskException extends \Exception {}
+
+class Generator
+{
+    private $g;
+    private $isfirst = true;
+
+    public function __construct(\Generator $g)
+    {
+        $this->g = $g;
+    }
+
+    public function valid()
+    {
+        return $this->g->valid();
+    }
+
+    public function send($value = null)
+    {
+        if ($this->isfirst) {
+            $this->isfirst = false;
+            return $this->g->current();
+        } else {
+            return $this->g->send($value);
+        }
+    }
+
+    public function throw_(\Exception $ex)
+    {
+        return $this->g->throw($ex);
+    }
+}
+
+
+/**
+ * Class AsyncTask
+ *
+ * CPS continue passing style
+ * 脱糖直接控制，迭代器执行
+ *
+ * 1. 可以通过start回调取回任务最终结果
+ * 2. 不会因为exception导致fatal error， 通过start回调取回异常
+ * 3. CancelTaskException 及其子类 不在任务间透传
+ * 4. 抛出 CancelTaskException 及其子类 终止异步任务，任务不会被继续调度，complete回调不会执行
+ * 5. 抛出 其他异常 内部不捕获， 任务会终止，异常通过complete回调参数传递
+ * 6. 抛出 其他异常 内部捕获， 任务继续执行
+ * 7. Async 实现类通过回调传递执行结果与异常
+ */
+class AsyncTask implements Async
+{
+    private $generator;
+    private $complete;
+    private $isFirst = true;
+
+    public function __construct(\Generator $generator)
+    {
+        $this->generator = $generator;
+    }
+
+    /**
+     * @param callable|null $complete
+     * 任务完成回调 complete: function($r, $ex) { }
+     */
+    public function start(callable $complete = null)
+    {
+        $this->complete = $complete;
+        $this->next();
+    }
+
+    public function next($result = null, \Exception $ex = null)
+    {
+        if ($ex instanceof CancelTaskException) {
+            return;
+        }
+
+        try {
+            // 优先处理异常
+            if ($ex) {
+                $value = $this->generator->throw($ex);
+            } else {
+                // \Generator限制，send()方法无法获取迭代器第一个元素
+                if ($this->isFirst) {
+                    $value = $this->generator->current();
+                    $this->isFirst = false;
+                } else {
+                    // 传递 yield `左值`: r = (yield) 并进行迭代
+                    $value = $this->generator->send($result);
+                }
+            }
+
+            if ($this->generator->valid()) {
+                // yield \Generator 转换为 yield Async
+                if ($value instanceof \Generator) {
+                    $value = new self($value);
+                }
+
+                if ($value instanceof Async) {
+                    $value->start([$this, "next"]);
+                } else {
+                    // 传递 yield `右值`: yield value;
+                    $this->next($value, null);
+                }
+            } else {
+                // \Generator 迭代完成
+                if ($cb = $this->complete) {
+                    // continuation
+                    // 传递 嵌套\Generator的返回值与异常
+                    $cb($result, $ex);
+                }
+            }
+        } catch (\Exception $ex) {
+            $this->next(null, $ex);
+        }
+    }
+
+    /*
+    public function next($result = null, \Exception $ex = null)
+    {
+        if ($ex instanceof CancelTaskException) {
+            return;
+        }
+
+        try {
+            if ($this->generator->valid()) {
+                // 优先处理异常
+                if ($ex) {
+                    $value = $this->generator->throw($ex);
+                } else {
+                    // \Generator限制，send()方法无法获取迭代器第一个元素
+                    if ($this->beforeFirstYield) {
+                        $value = $this->generator->current();
+                        $this->beforeFirstYield = false;
+                    } else {
+                        // 传递 yield `左值`: r = (yield)
+//                        if ($result !== null) {
+//                            $this->sendValue = $result;
+//                        }
+                        // 迭代
+                        $value = $this->generator->send($result);
+                    }
+                }
+
+                // yield \Generator 转换为 yield Async
+                if ($value instanceof \Generator) {
+                    $value = new self($value);
+                }
+
+                if ($value instanceof Async) {
+                    $value->start([$this, "next"]);
+                } else {
+                    // 传递 yield `右值`: yield value;
+//                    if ($value !== null) {
+//                        $this->sendValue = $value;
+//                    }
+                    $this->next($result, null);
+                }
+            } else {
+                // \Generator 迭代完成
+                if ($cb = $this->complete) {
+                    // continuation
+                    // 传递 嵌套\Generator的返回值与异常
+                    $cb($this->sendValue, $ex);
+                }
+            }
+        } catch (\Exception $ex) {
+            $this->next(null, $ex);
+        }
+    }
+    */
+}
