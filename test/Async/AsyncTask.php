@@ -72,7 +72,6 @@ function testCancelException()
 {
     $task = function() {
         yield 1;
-        echo "testCancelException\tDONE\n";
         throw new CancelTaskException("cancel task exception");
         /** @noinspection PhpUnreachableStatementInspection */
         assert(false);
@@ -81,12 +80,9 @@ function testCancelException()
 
     $atask = new AsyncTask($task());
     $atask->start(function($r, $ex) {
-        assert(false);
-        // CancelTaskException 不会触发complete回调
-        var_dump($r);
-        if ($ex instanceof \Exception) {
-            var_dump($ex->getMessage());
-        }
+        assert($ex instanceof CancelTaskException);
+        assert($r === null);
+        echo "testCancelException\tDONE\n";
     });
 }
 testCancelException();
@@ -98,7 +94,6 @@ function testCatchCancelException()
 {
     $subTask = function() {
         yield "sub\n";
-        echo "testCatchCancelException\tDONE\n";
         throw new CancelTaskException("CancelTaskException");
     };
 
@@ -117,11 +112,9 @@ function testCatchCancelException()
 
     $atask = new AsyncTask($task());
     $atask->start(function($r, $ex) {
-        assert(false);
-        var_dump($r);
-        if ($ex instanceof \Exception) {
-            var_dump($ex->getMessage());
-        }
+        assert($ex instanceof CancelTaskException);
+        assert($r === null);
+        echo "testCatchCancelException\tDONE\n";
     });
 }
 testCatchCancelException();
@@ -182,7 +175,6 @@ function nestedAsyncTask()
 }
 
 nestedAsyncTask();
-
 
 assert(ob_get_clean() ===
     <<<R

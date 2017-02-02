@@ -2,10 +2,14 @@
 /**
  * Created by IntelliJ IDEA.
  * User: chuxiaofeng
- * Date: 17/1/31
- * Time: 下午5:25
+ * Date: 17/2/2
+ * Time: 下午7:56
  */
 
+namespace Minimalism\Async\Inspiration;
+
+
+/*
 //http://blog.zhaojie.me/2010/06/code-for-fun-iterator-generator-yield-in-javascript-answer-1-yield-and-yieldseq.html
 
 // 实现yield的链表结构
@@ -13,10 +17,8 @@ class Iter
 {
     public $value;
 
-    /** @var  Iter */
     private $iter;
 
-    /** @var callable */
     private $continuation;
 
     public static function _yield($value, callable $continuation = null)
@@ -78,3 +80,5 @@ function _yieldSeq($iter, $rest)
 for ($iter = numSeq(0); $iter !== null; $iter = $iter->next()) {
     echo $iter->value, "\n";
 }
+
+*/

@@ -8,7 +8,10 @@
 
 namespace Minimalism\Async\Core;
 
-
+/**
+ * Interface IAsync
+ * @package Minimalism\Async\Core
+ */
 interface IAsync
 {
     /**

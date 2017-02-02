@@ -104,7 +104,6 @@ function seqReq()
 
 
 
-
 function loopGet()
 {
     $t = function() {
@@ -132,7 +131,7 @@ function loopGet()
     });
 }
 
-//loopGet();
+// loopGet();
 
 
 function testTimeout1()

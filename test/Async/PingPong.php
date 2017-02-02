@@ -2,28 +2,24 @@
 
 namespace Minimalism\Test\AsyncTask;
 
-use Minimalism\Async\AsyncSleep;
-use Minimalism\Async\Core\AsyncTask;
+use Minimalism\Async\Async;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-// ping pong, pong ping, ping pong, pong ping
-
-function ping()
+function ping($val)
 {
-    while (true) {
-        echo "ping\n";
-        yield new AsyncSleep(1000);
-    }
+    echo "ping: $val\n";
+    yield Async::sleep(500);
+    yield pong($val + 1);
 }
 
-function pong()
+function pong($val)
 {
-    while (true) {
-        echo "pong\n";
-        yield new AsyncSleep(1000);
-    }
+    echo "pong: $val\n";
+    yield Async::sleep(500);
+    yield ping($val + 1);
 }
 
-(new AsyncTask(ping()))->start();
-(new AsyncTask(pong()))->start();
+Async::exec(function() {
+    yield ping(0);
+});
