@@ -256,3 +256,4 @@ jspm_packages
 /.private
 src/deps
 src/Coroutine
+test/Config/config

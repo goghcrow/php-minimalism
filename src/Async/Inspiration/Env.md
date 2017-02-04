@@ -1,0 +1,10 @@
+动态作用域就是整个程序运行的时候只有一个env。
+什么是env呢？env就是一组binding。
+binding是什么呢？binding就是从identifer到value的映射。
+dynamic scope在每次函数求值的时候都会在这唯一的一个env里查询或更新。
+而static scope是每次函数求值的时候都创建一个新的env，包含了函数定义时候的所能访问到的各种binding。这个新的env连同那个函数一起，俗称闭包Closure。
+
+作者：韦冠楠
+链接：
+来源：知乎
+著作权归作者所有，转载请联系作者获得授权。

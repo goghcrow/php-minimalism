@@ -9,7 +9,7 @@
 namespace Minimalism\Async\Inspiration;
 
 
-// env 引用类型
+// env 引用类型Array
 class Environment implements \ArrayAccess
 {
     public $table;
@@ -53,6 +53,15 @@ class Environment implements \ArrayAccess
 
 // 1. TODO ast入口追加seq关键字(seq 函数调用)， 函数body追加seq关键字(seq 函数调用)
 // 2. TODO curry 支持
+// 3. TODO 理解call/ccc
+// 4. TODO 做代码生成
+
+
+// 词法作用域
+// Lambda 抽象
+// call/cc
+// 有趣的是，这个解释器的框架代码可以沿用到编译器里：
+// 从本质上来说，「编译」也是「解释」的一种。
 
 final class Interpreter
 {
@@ -126,7 +135,7 @@ final class Interpreter
                 // continuation需要一个返回值
                 // echo 非函数，这里返回null
                 echo $v1;
-                $k(null);
+                return $k(null);
             };
         };
         */
@@ -189,14 +198,15 @@ final class Interpreter
                 case "call/cc":
                     assert(count($ast) === 2);
                     $lambda = $ast[1];
-                    return $this->interp1($lambda, $env, function($f) use($k) {
-                        $fk = function() use($k) {
+                    return $this->interp1($lambda, $env, function($fun) use($k) {
+                        // 注释
+                        $funk = function() use($k) {
                             return function($v) use($k) {
-                                $k($v);
+                                return $k($v);
                             };
                         };
-                        $t = $f($fk);
-                        return $t($fk);
+                        $interpBody = $fun($funk);
+                        return $interpBody($funk);
                     });
 
                 case "quote";
@@ -210,6 +220,7 @@ final class Interpreter
                     return $this->interp1($fun, $env, function($callee) use($env, $k, $args) {
                         assert(is_callable($callee));
                         return $this->interpArgs($args, $env, function($args) use($k, $callee) {
+                            // TODO 注释
                             $callee = $callee($k);
                             if ($args === null) {
                                 return $callee();
@@ -409,3 +420,24 @@ function testCall()
     assert(ob_get_clean() === "hello world\n");
 }
 testCall();
+
+
+
+function testCallCC()
+{
+    $ast =
+        ['call/cc',
+            ['fun',
+                ['return'],
+                ['seq',
+                    ['echo', ['quote', 1]],
+                    ['return', ['quote', 2]],
+                    ['echo', ['quote', 3]],
+                ]]];
+
+    ob_start();
+    $r = interp($ast);
+    var_dump(ob_get_clean() === "1");
+    assert($r === 2);
+}
+testCallCC();

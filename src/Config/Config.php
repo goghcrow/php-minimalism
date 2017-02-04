@@ -130,13 +130,14 @@ class Config
      * @param string $dir
      * @param string $regex
      * @param callable $callback
-     * @return RegexIterator
+     * @return \Generator
      */
     protected static function scan($dir, $regex, callable $callback = null)
     {
         $dirIter = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
         $iterIter = new RecursiveIteratorIterator($dirIter, RecursiveIteratorIterator::LEAVES_ONLY);
         $regexIter = new RegexIterator($iterIter, $regex, RegexIterator::GET_MATCH);
+
         foreach($regexIter as $file => $_) {
             yield $callback === null ? $file : $callback($file);
         }

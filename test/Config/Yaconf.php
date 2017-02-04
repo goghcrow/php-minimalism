@@ -2,9 +2,9 @@
 
 namespace Minimalism\Test;
 
-use Minimalism\Yaconf;
+use Minimalism\IniConfig\Yaconf;
 
-require __DIR__ . "/../src/Yaconf.php";
+require __DIR__ . "/../../src/Config/Yaconf.php";
 
 
 test1();
@@ -26,7 +26,7 @@ features.constant=PHP_VERSION ;常量
 features.env=${HOME} ;环境变量
 INI;
 
-    $result = Yaconf::parseStr($ini);
+    $result = Yaconf::parse($ini);
     assert($result === array (
             'name' => 'yaconf',
             'year' => '2015',
@@ -64,7 +64,7 @@ children="NULL"
 children="set"
 INI;
 
-    assert(Yaconf::parseStr($ini) === array (
+    assert(Yaconf::parse($ini) === array (
             'base' =>
                 array (
                     'parent' => 'yaconf',
@@ -86,7 +86,7 @@ function test3()
 children="set"
 INI;
     try {
-        Yaconf::parseStr($ini);
+        Yaconf::parse($ini);
         assert(false);
     } catch (\Exception $ex) {}
 
@@ -97,7 +97,7 @@ INI;
 children="set"
 INI;
     try {
-        Yaconf::parseStr($ini);
+        Yaconf::parse($ini);
         assert(false);
     } catch (\Exception $ex) {}
 }

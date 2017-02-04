@@ -16,7 +16,7 @@ namespace Minimalism\Async\Core;
  *
  * 异步任务辅助类:
  * 通过yield实现控制流操控, 同步语法解糖(CPS转换?!)
- * 手动迭代\Generator, 通过$continuation传递异步任务结果
+ * 展开yield, 手动迭代\Generator, 通过$continuation传递异步任务结果
  *
  *
  * 说明:

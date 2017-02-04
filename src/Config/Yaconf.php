@@ -1,15 +1,9 @@
 <?php
 
-namespace Minimalism;
-
-
-// TODO
-// 将 array 配置 自动转换成 修改成 ini配置
-// 将ini配置迁移到 运维配置中心
+namespace Minimalism\IniConfig;
 
 /**
- * Class Yaconf
- * @package Minimalism
+ * Class IniConfig
  *
  * Yaconf php版本
  * 用于swoole长生命周期的模型中
@@ -44,21 +38,11 @@ final class Yaconf
         return self::get($name) !== null;
     }
 
-    public static function array2ini(array $arr)
-    {
-
-    }
-
-    public static function parseFile($file)
-    {
-        return self::parseStr(file_get_contents($file));
-    }
-
     /**
      * @param string $ini
      * @return array|bool
      */
-    public static function parseStr($ini)
+    public static function parse($ini)
     {
         $result = parse_ini_string($ini, true, 0);
         if ($result === false) {
