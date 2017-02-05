@@ -57,4 +57,9 @@ class Assign extends Node
         $keyword = Constants::ASSIGN_KEYWORD;
         return "($keyword $this->pattern $this->value)";
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

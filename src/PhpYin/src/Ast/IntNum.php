@@ -100,4 +100,9 @@ class IntNum extends Node
     {
         return strval($this->value);
     }
+
+    public function __toAst()
+    {
+        return ["quote", $this->value];
+    }
 }

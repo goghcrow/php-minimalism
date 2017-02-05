@@ -85,7 +85,7 @@ class Call extends Node
                         $funScope->putValue($params[$pos]->id, $argValue);
                     }
                 } else {
-                    // keyword 形式参数
+                    // 支持 keyword arguments
                     // try to bind all arguments
                     // 遍历形参，按照Name从实参获取传递值加入闭包环境
                     foreach ($params as $param/* @var $param Name */) {
@@ -346,5 +346,14 @@ class Call extends Node
         } else {
             return "($this->op)";
         }
+    }
+
+    public function __toAst()
+    {
+        $call = [ $this->op->__toAst() ];
+        foreach ($this->args->positional as $pos => $arg) {
+            $call[] = $arg->__toAst();
+        }
+        return $call;
     }
 }

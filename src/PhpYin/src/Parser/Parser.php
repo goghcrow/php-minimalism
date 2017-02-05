@@ -22,7 +22,6 @@ use Minimalism\Scheme\Ast\If_;
 use Minimalism\Scheme\Ast\Keyword;
 use Minimalism\Scheme\Ast\Name;
 use Minimalism\Scheme\Ast\Node;
-use Minimalism\Scheme\Ast\Quote;
 use Minimalism\Scheme\Ast\RecordDefine;
 use Minimalism\Scheme\Ast\RecordLiteral;
 use Minimalism\Scheme\Ast\Tuple;
@@ -45,18 +44,6 @@ class Parser
         $grouped = self::groupAttr($prenode);
         $program = self::parseNode($grouped);
         assert($program instanceof Block);
-        // fprintf(STDERR, "AST: $program\n\n\n"); // for debug
-        return $program;
-    }
-
-    // TODO test
-    public static function parserStr($str, Node $location)
-    {
-        $preparser = new PreParser();
-        $preparser->loadStr($str, $location);
-        $prenode = $preparser->parse();
-        $grouped = self::groupAttr($prenode);
-        $program = self::parseNode($grouped);
         // fprintf(STDERR, "AST: $program\n\n\n"); // for debug
         return $program;
     }

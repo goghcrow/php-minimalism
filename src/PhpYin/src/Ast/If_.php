@@ -69,4 +69,14 @@ class If_ extends Node
         $keyword = Constants::IF_KEYWORD;
         return "($keyword $this->test $this->then $this->orelse)";
     }
+
+    public function __toAst()
+    {
+        return [
+            Constants::IF_KEYWORD,
+            $this->test->__toAst(),
+            $this->then->__toAst(),
+            $this->orelse->__toAst(),
+        ];
+    }
 }

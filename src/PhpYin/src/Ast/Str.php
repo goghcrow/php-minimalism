@@ -53,4 +53,9 @@ class Str extends Node
     {
         return "\"$this->value\"";
     }
+
+    public function __toAst()
+    {
+        return ["quote", "$this->value"];
+    }
 }

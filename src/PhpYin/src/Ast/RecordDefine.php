@@ -121,4 +121,9 @@ class RecordDefine extends Node
 
         return Constants::TUPLE_BEGIN . Constants::RECORD_KEYWORD . " {$this->name}$body" . Constants::TUPLE_END;
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

@@ -143,4 +143,9 @@ class Declare_ extends Node
         }
         return Constants::TUPLE_BEGIN . Constants::DECLARE_KEYWORD . " $body" . Constants::TUPLE_END;
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

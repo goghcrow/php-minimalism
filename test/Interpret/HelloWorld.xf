@@ -1,0 +1,9 @@
+(define say-hello
+  (fun (who)
+    (if (empty who)
+      "Hello World"
+      (string-append "Hello " who))))
+
+(echo (say-hello null))
+(echo "\n")
+(echo (say-hello "chuxiaofeng"))

@@ -97,4 +97,17 @@ class Fun extends Node
 //            return "($keyword ($params) $this->body)";
 //        }
     }
+
+    public function __toAst()
+    {
+        $params = [];
+        foreach ($this->params as $param) {
+            $params[] = "$param";
+        }
+        return [
+            Constants::FUN_KEYWORD,
+            $params,
+            $this->body->__toAst(),
+        ];
+    }
 }

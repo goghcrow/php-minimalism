@@ -47,4 +47,13 @@ class VectorLiteral extends Node
     {
         return Constants::VECTOR_BEGIN . implode(" ", $this->elements) . Constants::VECTOR_END;
     }
+
+    public function __toAst()
+    {
+        $vec = ["vector"];
+        foreach ($this->elements as $element) {
+            $vec[] = $element->__toAst();
+        }
+        return $vec;
+    }
 }

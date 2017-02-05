@@ -80,17 +80,6 @@ class PreParser
         $this->textlen = strlen($this->text);
     }
 
-    // TODO test
-    public function loadStr($str, Node $location)
-    {
-        $this->file = $location->file;
-        $this->text = $str;
-        $this->offset = 0;
-        $this->line = $location->line;
-        $this->col = $location->col;
-        $this->textlen = strlen($this->text);
-    }
-
     public function forward()
     {
         if ($this->text[$this->offset] === "\n") {

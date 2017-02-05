@@ -82,4 +82,6 @@ abstract class Node
     public abstract function typecheck(Scope $s);
 
     public abstract function __toString();
+
+    public abstract function __toAst();
 }

@@ -51,4 +51,9 @@ class Delimiter extends Node
     {
         return $this->shape;
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

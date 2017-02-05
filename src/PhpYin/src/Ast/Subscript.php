@@ -96,4 +96,9 @@ class Subscript extends Node
     {
         return "(ref $this->value $this->index)";
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

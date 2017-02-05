@@ -25,7 +25,7 @@ how to implement cps transform
 
 ## 最简单的程序语言的解释器
 
-### x
+### 变量: x
 
 ```
 Interpret(x) = Value of x
@@ -40,7 +40,7 @@ Interpret(x, env) = Value of x in env
 变量是有作用域(scope)的，解释过程需要传入变量名(name)与环境(env)
 
 
-### [lambda [x] E]
+### 函数抽象: [lambda [x] E]
 
 ```
 Interpret([lambda [x] E], env) = λp.Interpret(E, withvar(env, x=p))
@@ -69,7 +69,7 @@ static scope: 每次函数求值的时都创建一个新的env，包含了函数
 ```
 
 
-### [F X]
+### 函数调用: [F X]
 
 ```
 Interpret([F X], env) = 

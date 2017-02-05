@@ -17,11 +17,11 @@ class ComposerStaticInit40a973755aa0e8b4450a034eb1ebd4a7
     public static $prefixDirsPsr4 = array (
         'Minimalism\\Scheme\\Test\\' => 
         array (
-            0 => __DIR__ . '/../..',
+            0 => __DIR__ . '/../..' . '/test',
         ),
         'Minimalism\\Scheme\\' => 
         array (
-            0 => __DIR__ . '/../..',
+            0 => __DIR__ . '/../..' . '/src',
         ),
     );
 

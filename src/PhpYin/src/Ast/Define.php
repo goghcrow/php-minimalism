@@ -64,4 +64,13 @@ class Define extends Node
     {
         return "(" . Constants::DEF_KEYWORD . " $this->pattern $this->value)";
     }
+
+    public function __toAst()
+    {
+        return [
+            Constants::DEF_KEYWORD,
+            $this->pattern->__toAst(),
+            $this->value->__toAst()
+        ];
+    }
 }

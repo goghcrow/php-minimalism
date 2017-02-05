@@ -9,6 +9,7 @@
 namespace Minimalism\Scheme\Ast;
 
 
+use Minimalism\Scheme\Constants;
 use Minimalism\Scheme\Interpreter;
 use Minimalism\Scheme\Scope;
 use Minimalism\Scheme\Value\Value;
@@ -75,5 +76,14 @@ class Block extends Node
     {
         $sep = count($this->statements) > 5 ? "\n" : " ";
         return "(seq$sep" . implode($sep, $this->statements) . ")";
+    }
+
+    public function __toAst()
+    {
+        $block = [Constants::SEQ_KEYWORD];
+        foreach ($this->statements as $statement) {
+            $block[] = $statement->__toAst();
+        }
+        return $block;
     }
 }

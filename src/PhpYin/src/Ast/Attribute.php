@@ -93,4 +93,9 @@ class Attribute extends Node
     {
         return "$this->value.$this->attr";
     }
+
+    public function __toAst()
+    {
+        // TODO: Implement __toAst() method.
+    }
 }

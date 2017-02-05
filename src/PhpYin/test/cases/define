@@ -40,7 +40,3 @@
 (assert b x2)
 (assert c x3)
 (assert d x4)
-
-
-
-()

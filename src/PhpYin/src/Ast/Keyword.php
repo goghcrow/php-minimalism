@@ -47,4 +47,9 @@ class Keyword extends Node
     {
         return ":$this->id";
     }
+
+    public function __toAst()
+    {
+        return ":$this->id";
+    }
 }

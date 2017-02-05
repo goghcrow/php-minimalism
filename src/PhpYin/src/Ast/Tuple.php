@@ -66,4 +66,13 @@ class Tuple extends Node
     {
         return ($this->open == null ? "" : $this->open) . implode(" ", $this->elements) . ($this->close === null ? "" : $this->close);
     }
+
+    public function __toAst()
+    {
+        $tuple = [];
+        foreach ($this->elements as $element) {
+            $tuple[] = $element->__toAst();
+        }
+        return $tuple;
+    }
 }

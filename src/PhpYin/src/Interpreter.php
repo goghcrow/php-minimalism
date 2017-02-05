@@ -60,6 +60,12 @@ final class Interpreter
         return $program->interp($this->scope);
     }
 
+    public function __toAst($file)
+    {
+        $program = Parser::parse($file);
+        return $program->__toAst();
+    }
+
     public static function abort($msg, Node $loc = null)
     {
         $msg = $loc === null ? $msg : $loc->getFileLineCol() . " $msg";
@@ -114,7 +120,7 @@ final class Interpreter
         // 扩充, ?! 是否应该加入Void
         $init->putValue("echo", new Echo_());
         $init->putValue("require", new Require_());
-        $init->putValue("eval", new Eval_());
+        // $init->putValue("eval", new Eval_());
         $init->putValue("void", Value::$VOID);
 
         return $init;

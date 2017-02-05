@@ -103,4 +103,13 @@ class RecordLiteral extends Node
         $body = implode(" ", $pairs);
         return Constants::RECORD_BEGIN . $body . Constants::RECORD_END;
     }
+
+    public function __toAst()
+    {
+        $record = [Constants::RECORD_KEYWORD];
+        foreach ($this->map as $name => $node) {
+            $record[] = [":$name", $node->__toAst()];
+        }
+        return $record;
+    }
 }
