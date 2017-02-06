@@ -23,7 +23,7 @@ Async::exec(function() {
     $f = "tmp";
     $size = randfile($f, rand(2, 9), 1024 * 1023);
 
-    $txt = (yield new AsyncFile($f));
+    $txt = (yield Async::read($f));
     assert($size === strlen($txt));
     @unlink($f);
 });
@@ -34,10 +34,9 @@ Async::exec(function() {
     $f_copy = "{$f}_copy";
 
     $size = randfile($f, rand(2, 9), 1024 * 1023);
-    // $txt = file_get_contents($f);
-    $txt = (yield new AsyncFile($f));
 
-    $writeSize = (yield new AsyncFile($f_copy, $txt));
+    $txt = (yield Async::read($f));
+    $writeSize = (yield Async::write($f_copy, $txt));
 
     `diff $f $f_copy`;
     assert($size === $writeSize);

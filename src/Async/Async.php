@@ -80,4 +80,14 @@ final class Async
             ->setData($body)
             ->setTimeout($timeo);
     }
+
+    public static function read($file)
+    {
+        return (new AsyncFile($file))->read();
+    }
+
+    public static function write($file, $contents)
+    {
+        return (new AsyncFile($file))->write($contents);
+    }
 }

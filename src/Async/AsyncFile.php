@@ -18,28 +18,38 @@ class AsyncFile implements IAsync
     const EOF = "";
     const MAX_CHUNK = 1024 * 1024;
 
-    private static $READ = 1;
-    private static $WRITE = 2;
-
     public $file;
     public $type;
     public $content;
     public $offset;
 
-    public function __construct($file, $content = null)
+    public function __construct($file)
     {
         $this->file = $file;
+    }
+
+    public function read()
+    {
+        $this->type = "read";
+        return $this;
+    }
+
+    public function write($content)
+    {
         $this->content = $content;
-        $this->type = $content === null ? self::$READ : self::$WRITE;
+        $this->type = "write";
+        return $this;
     }
 
     public function start(callable $complete)
     {
         $this->complete = $complete;
-        if ($this->type === self::$READ) {
+        if ($this->type === "read") {
             $this->getContents();
-        } else if ($this->type === self::$WRITE) {
+        } else if ($this->type === "write") {
             $this->putContents();
+        } else {
+            assert(false);
         }
     }
 
