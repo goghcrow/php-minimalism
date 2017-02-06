@@ -2,7 +2,7 @@
 
 namespace Minimalism\Test;
 
-use Minimalism\IniConfig\Yaconf;
+use Minimalism\Config\Yaconf;
 
 require __DIR__ . "/../../src/Config/Yaconf.php";
 

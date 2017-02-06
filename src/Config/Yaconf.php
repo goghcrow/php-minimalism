@@ -1,6 +1,6 @@
 <?php
 
-namespace Minimalism\IniConfig;
+namespace Minimalism\Config;
 
 /**
  * Class IniConfig

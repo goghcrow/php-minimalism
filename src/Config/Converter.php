@@ -6,7 +6,7 @@
  * Time: 上午11:17
  */
 
-namespace Minimalism\IniConfig;
+namespace Minimalism\Config;
 
 
 /**
@@ -62,6 +62,8 @@ final class Converter
         ob_start();
         /** @noinspection PhpIncludeInspection */
         $conf = require $file;
+        // TODO DEFAULT_CONF_ITEM
+
         if (!preg_match('#\s#', $b = ob_get_clean())) {
             echo $b;
         }
@@ -70,20 +72,10 @@ final class Converter
             return [];
         }
         $path = substr($file, strlen($this->basedir) + 1, -strlen("php"));
+
         $prefix = str_replace("/", ".", $path);
         $this->map[$file] = $this->reduceDim($conf, $prefix);
         return $this;
-    }
-
-    private function scan($dir, $regex)
-    {
-        $iter = new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS);
-        $iter = new \RecursiveIteratorIterator($iter, \RecursiveIteratorIterator::LEAVES_ONLY);
-        $iter = new \RegexIterator($iter, $regex, \RegexIterator::GET_MATCH);
-
-        foreach ($iter as $file) {
-            yield realpath($file[0]);
-        }
     }
 
     private function reduceDim(array $conf, $prefix = null)
@@ -108,5 +100,16 @@ final class Converter
             $r["{$prefix}{$path}.{$subpath}"] = $finalVal;
         }
         return $r;
+    }
+
+    private function scan($dir, $regex)
+    {
+        $iter = new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS);
+        $iter = new \RecursiveIteratorIterator($iter, \RecursiveIteratorIterator::LEAVES_ONLY);
+        $iter = new \RegexIterator($iter, $regex, \RegexIterator::GET_MATCH);
+
+        foreach ($iter as $file) {
+            yield realpath($file[0]);
+        }
     }
 }

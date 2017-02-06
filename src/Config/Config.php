@@ -11,17 +11,17 @@ class Config
 {
     /**
      * 公共配置文件夹名称,其他配置均继承自此文件夹配置
-     * 按照 recursiveMerge 策略 覆盖
+     * 按照 merge 策略 覆盖
      */
     const SHARE_DIR = "share";
 
     /**
      * 单个配置文件公共配置项,其他配置项目均继承自此项
-     * 按照 recursiveMerge 策略 覆盖
+     * 按照 merge 策略 覆盖
      */
     const DEFAULT_CONF_ITEM = "share";
 
-    protected static $conf;
+    public static $conf;
 
     /**
      * get(a.b.c, default)
@@ -32,7 +32,7 @@ class Config
     public static function get($keypath = null, $default = null)
     {
         if ($keypath === null) {
-            return static::$conf;
+            return self::$conf;
         }
 
         $pathes = explode(".", $keypath);
@@ -63,8 +63,8 @@ class Config
             return false;
         }
 
-        $value = self::composeKeypath($paths, $value);
-        self::$conf = static::recursiveMerge(self::$conf, $value);
+        $value = self::expand($paths, $value);
+        self::$conf = self::merge(self::$conf, $value);
         return true;
     }
 
@@ -73,74 +73,62 @@ class Config
      * @param string $dir 不同环境的配置文件的路径
      * @param string $env 环境名称,不同环境的配置存放在以环境命名的文件夹下
      * @param string $ext 配置文件扩展名
+     * @return array
      */
-    public static function load($dir, $env = "", $ext = "php")
+    public static function load($dir, $env, $ext = "php")
     {
         // 载入跨环境公共配置
-        $defaultConf = static::loadDir($dir, self::SHARE_DIR, $ext);
-        $envConf = static::loadDir($dir, $env, $ext);
-        self::$conf = static::recursiveMerge($defaultConf, $envConf);
+        $defaultConf = self::loadDir($dir, self::SHARE_DIR, $ext);
+        $envConf = self::loadDir($dir, $env, $ext);
+
+        self::$conf = self::merge(...array_values($defaultConf), ...array_values($envConf));
     }
 
+    /**
+     * 转换为ini配置
+     */
+    public static function toIni()
+    {
+        $kv = self::array2kv(self::get());
+
+        foreach ($kv as $k => $v) {
+            if (is_string($v)) {
+                $r[] = "$k=\"$v\"";
+            } else {
+                $r[] = "$k=$v";
+            }
+        }
+
+        return implode(PHP_EOL, $r);
+    }
 
     /**
      * 载入整个文件夹的配置
-     * @param string $dir
+     * @param string $basedir
      * @param string $env
      * @param string $ext
      * @return array
      */
-    protected static function loadDir($dir, $env, $ext)
+    public static function loadDir($basedir, $env, $ext = "php")
     {
-        if (!is_dir("$dir/$env")) {
-            throw new InvalidArgumentException("Invalid path $dir/$env");
+        assert(is_dir("$basedir/$env"));
+
+        $basedir = realpath("$basedir/$env");
+        $regex = '#^.+\.' . $ext . '$#i';
+        $iter = self::scan($basedir, $regex);
+
+        $r = [];
+        foreach ($iter as $file) {
+            // path/(a/b/c/xxx).php --> a/b/c/xxx作为keypath
+            $path = substr($file, strlen($basedir) + 1, -strlen(strrchr($file, ".")));
+            $paths = explode("/", $path);
+
+            $conf = require $file;
+            assert(is_array($conf));
+            $r[$file] = self::expand($paths, self::inherit($conf));
         }
 
-        $dir = realpath("$dir/$env");
-        $regex = '/^.+\.' . $ext . '$/i';
-        $confIter = static::scan($dir, $regex, static::loadFile($dir));
-        return call_user_func_array([static::class, "recursiveMerge"], iterator_to_array($confIter));
-    }
-
-    /**
-     * 加载一个文件的配置
-     * @param string $dir 需要移除的路径部分
-     * @return \Closure
-     */
-    protected static function loadFile($dir)
-    {
-        return function($file) use($dir) {
-            $dirLen = mb_strlen($dir);
-            /** @noinspection PhpIncludeInspection */
-            $singleFileConf = require/*_once*/ $file; // Notice Security Problem
-            if (!is_array($singleFileConf)) {
-                throw new \RuntimeException("conf file $file should return array");
-            }
-
-            $singleFileConf = static::composeDefault($singleFileConf);
-            // path/(a/b/c/xxx).php 提起a/b/c/xxx作为keypath
-            $ext = mb_strrchr($file, ".");
-            $keypath = mb_substr($file, $dirLen + 1, -mb_strlen($ext));
-            return static::composeKeypath(explode("/", $keypath), $singleFileConf);
-        };
-    }
-
-    /**
-     * 递归扫描文件
-     * @param string $dir
-     * @param string $regex
-     * @param callable $callback
-     * @return \Generator
-     */
-    protected static function scan($dir, $regex, callable $callback = null)
-    {
-        $dirIter = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
-        $iterIter = new RecursiveIteratorIterator($dirIter, RecursiveIteratorIterator::LEAVES_ONLY);
-        $regexIter = new RegexIterator($iterIter, $regex, RegexIterator::GET_MATCH);
-
-        foreach($regexIter as $file => $_) {
-            yield $callback === null ? $file : $callback($file);
-        }
+        return $r;
     }
 
     /**
@@ -150,7 +138,7 @@ class Config
      * @param $value
      * @return array
      */
-    protected static function composeKeypath(array $pathes, $value)
+    public static function expand(array $pathes, $value)
     {
         $cur = count($pathes);
         while (--$cur >= 0) {
@@ -160,35 +148,34 @@ class Config
     }
 
     /**
-     * 如果存在默认参数,则提取默认参数,补全其他参数
+     * 继承默认参数
      * [ [default => [a=>1, b=>2]], [b=>3] ]  -->  [a=>1, b=>3]
      * @param array $config
      * @return array
      */
-    protected static function composeDefault(array $config)
+    public static function inherit(array $config)
     {
-        if (!isset($config[static::DEFAULT_CONF_ITEM])) {
+        if (!isset($config[self::DEFAULT_CONF_ITEM])) {
             return $config;
         }
 
-        $default = $config[static::DEFAULT_CONF_ITEM];
-        unset($config[static::DEFAULT_CONF_ITEM]);
+        $default = $config[self::DEFAULT_CONF_ITEM];
+        unset($config[self::DEFAULT_CONF_ITEM]);
 
         foreach ($config as $k => &$v) {
-            $v = static::recursiveMerge($default, $v);
+            $v = self::merge($default, $v);
         }
         unset($v);
         return $config;
     }
 
     /**
-     * 递归合并多维数组
-     * @params ...$args array1, array2, ...arrayn
+     * 多维数组 递归合并
+     * @param array $args
      * @return array
      */
-    protected static function recursiveMerge(/*...$args*/)
+    public static function merge(...$args)
     {
-        $args = func_get_args();
         if (empty($args)) {
             return [];
         }
@@ -199,18 +186,58 @@ class Config
                 continue;
             }
             foreach ($arg as $k => $v) {
-                if (!isset($ret[$k])) {
-                    $ret[$k] = $v;
-                    continue;
-                }
-
-                if (is_array($v) && is_array($ret[$k])) {
-                    $ret[$k] = static::recursiveMerge($ret[$k], $v);
+                if (isset($ret[$k])) {
+                    if (is_array($v) && is_array($ret[$k])) {
+                        $ret[$k] = self::merge($ret[$k], $v);
+                    } else {
+                        $ret[$k] = $v;
+                    }
                 } else {
                     $ret[$k] = $v;
                 }
             }
         }
         return $ret;
+    }
+
+    /**
+     * 数据降维 [a => [b => [c => d]]] --> [a.b.c => d]
+     * @param array $conf
+     * @param null $prefix
+     * @return array
+     */
+    public static function array2kv(array $conf, $prefix = null)
+    {
+        $r = [];
+        foreach ($conf as $path => $val) {
+            if (is_array($val)) {
+                $subR = self::expandVal($path, $val, $prefix);
+                $r = array_merge($r, $subR);
+            } else {
+                $r["{$prefix}{$path}"] = $val; // baseline
+            }
+        }
+        return $r;
+    }
+
+    private static function expandVal($path, array $val, $prefix = null)
+    {
+        $r = [];
+        $oneDimArr = self::array2kv($val);
+        foreach ($oneDimArr as $subpath => $finalVal) {
+            $r["{$prefix}{$path}.{$subpath}"] = $finalVal;
+        }
+        return $r;
+    }
+
+    public static function scan($dir, $regex)
+    {
+        $iter = new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS);
+        $iter = new \RecursiveIteratorIterator($iter, \RecursiveIteratorIterator::LEAVES_ONLY);
+        $iter = new \RegexIterator($iter, $regex, \RegexIterator::GET_MATCH);
+
+        foreach ($iter as $file) {
+            yield realpath($file[0]);
+        }
     }
 }
