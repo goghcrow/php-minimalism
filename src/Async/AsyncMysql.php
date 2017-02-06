@@ -14,6 +14,13 @@ class AsyncMysql extends AsyncWithTimeout
 
     protected function execute()
     {
-        // TODO: Implement execute() method.
+
     }
+
+    public function query()
+    {
+
+    }
+
+//    public function commit
 }
