@@ -14,7 +14,7 @@ use Minimalism\Async\Core\IAsync;
 abstract class AsyncWithTimeout implements IAsync
 {
     public $complete;
-    public $timeout;
+    public $timeout = 1000;
 
     public function setTimeout($timeout)
     {

@@ -19,6 +19,7 @@ final class Autoload
     public $vendor = "_";
     public $basedir;
     public $psr4;
+    public $force = false;
 
     /**
      * Autoload constructor.
@@ -80,7 +81,7 @@ final class Autoload
     {
         $file = $this->vendor . parse_url($url, PHP_URL_PATH);
 
-        if (file_exists($file)) {
+        if (!$this->force && file_exists($file)) {
             return $file;
         }
 

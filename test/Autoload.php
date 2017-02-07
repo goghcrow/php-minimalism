@@ -9,6 +9,8 @@
 namespace Minimalism\Test;
 
 use Minimalism\Async\Async;
+use Minimalism\Async\AsyncHttpClient;
+use Minimalism\Async\Core\AsyncTask;
 use Minimalism\Autoload;
 
 require __DIR__ . "/../src/Autoload.php";
@@ -26,9 +28,38 @@ $psr4 = [
 new Autoload($dirs, $psr4);
 
 
-Async::exec(function() {
+/**
+ * @return \Generator
+ */
+function request()
+{
     $ip = (yield Async::dns("www.baidu.com"));
     /* @var \swoole_http_client */
-    $http = (yield Async::get($ip, 80, "/"));
-    echo $http->body;
-});
+    $http = (yield (new AsyncHttpClient($ip, 80))
+        ->setMethod("GET")
+        ->setUri("/")
+        ->setHeaders([])
+        ->setCookies([])
+        ->setData("")
+        ->setTimeout(1000));
+
+    echo memory_get_usage(), "\n";
+    /** @noinspection PhpUndefinedMethodInspection */
+    $http->close();
+}
+
+function loop()
+{
+
+    $task = new AsyncTask(request());
+    $task->start(function($r, $e) {
+        // echo "r: $r\n";
+        if ($e instanceof \Exception) {
+            echo $e->getMessage(), "\n";
+        }
+        loop();
+    });
+}
+
+
+loop();
