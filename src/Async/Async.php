@@ -62,6 +62,8 @@ final class Async
 
     public static function get($ip, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
     {
+        // TODO parser host port
+        // return self::coroutine(function() { });
         return self::request($ip, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
     }
 

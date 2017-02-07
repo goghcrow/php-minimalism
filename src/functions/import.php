@@ -9,8 +9,8 @@ namespace Minimalism\functions;
  */
 function import($path)
 {
-    $isUrl = strncasecmp($path, "http://", 4) === 0 || strncasecmp($path, "https://", 4) === 0;
-    if ($isUrl) {
+    $isurl = strncasecmp($path, "http://", 4) === 0 || strncasecmp($path, "https://", 4) === 0;
+    if ($isurl) {
         $file = __DIR__ . "/deps" . parse_url($path, PHP_URL_PATH);
         if (!file_exists($file)) {
             @mkdir(dirname($file), 0777, true);

@@ -255,5 +255,7 @@ jspm_packages
 .idea/
 /.private
 src/deps
+src/_
+test/_
 src/Coroutine
 test/Config/config
