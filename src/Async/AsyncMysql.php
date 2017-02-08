@@ -8,6 +8,18 @@
 
 namespace Minimalism\Async;
 
+
+/**
+ * Class AsyncMysql
+ * @package Minimalism\Async
+ *
+ * @property int $sock 连接使用的文件描述符
+ * @property bool $connected 是否连接上了MySQL服务器
+ * @property int $errno 最后一次错误
+ * @property string $error 最后一次错误的描述
+ * @property int $affected_rows 影响的行数
+ * @property int $insert_id 最后一个插入的记录id
+ */
 class AsyncMysql extends AsyncWithTimeout
 {
     /** @var callable  */
@@ -24,7 +36,7 @@ class AsyncMysql extends AsyncWithTimeout
                 "port" => 3306,
                 "user" => "root",
                 "password" => "",
-                "database" => "",
+                "database" => "test",
                 "charset" => "utf8mb4",
             ];
 
@@ -36,38 +48,53 @@ class AsyncMysql extends AsyncWithTimeout
         $this->k = [$this, "doConnect"];
     }
 
-    public function connect()
+    public function __get($name)
     {
+        return $this->mysql->$name;
+    }
+
+    public function __call($name, $arguments)
+    {
+        // TODO: Implement __call() method.
+    }
+
+    public function connect($timeout = 1000)
+    {
+        $this->timeout = $timeout;
         $this->k = [$this, "doConnect"];
         return $this;
     }
 
-    public function query($sql, array $bind = [])
+    public function query($sql, array $bind = [], $timeout = 1000)
     {
+        $this->timeout = $timeout;
         $this->sql = $sql;
         $this->bind = $bind;
         $this->k = [$this, "doQuery"];
         return $this;
     }
 
-    public function begin()
+    public function begin($timeout = 1000)
     {
+        $this->timeout = $timeout;
         $this->k = function() {
             $this->mysql->begin([$this, "onTransaction"]);
         };
         return $this;
     }
 
-    public function commit()
+    public function commit($timeout = 1000)
     {
+        $this->timeout = $timeout;
         $this->k = function() {
             $this->mysql->commit([$this, "onTransaction"]);
         };
         return $this;
     }
 
-    public function rollback()
+    public function rollback($timeout = 1000)
     {
+        $this->timeout = $timeout;
         $this->k = function() {
             $this->mysql->rollback([$this, "onTransaction"]);
         };

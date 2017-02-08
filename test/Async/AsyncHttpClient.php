@@ -32,13 +32,11 @@ function simpleGet()
         if ($e instanceof \Exception) {
             echo $e->getMessage(), "\n";
         }
-        // TODO coredump
         swoole_event_exit();
     });
 }
 
-//simpleGet();
-
+// simpleGet();
 
 
 
@@ -73,34 +71,32 @@ function buildReq()
 
 function seqReq()
 {
-    // TODO bug 连续两次请求
-    // WARNING	http_client_parser_on_message_complete: http_response_uncompress failed.
     $t = function() {
         $ip = (yield new AsyncDns("www.baidu.com", 100));
         $cli = new AsyncHttpClient($ip, 80);
 
-        $swCli = (yield $cli->get("/", 1000));
-        var_dump($swCli->statusCode);
-
         $swCli = (yield $cli->setMethod("POST")
             ->setUri("/")
-            ->setHeaders(["hk" => "hv", "Accept-Encoding" => ""])
+            ->setHeaders(["Connection" => "keep-alive", "Accept-Encoding" => ""])
             ->setData("body")
             ->setTimeout(1000));
 
+        var_dump($swCli->statusCode);
+
+        $swCli = (yield $cli->get("/", 1000));
         var_dump($swCli->statusCode);
     };
 
     $task = new AsyncTask($t());
     $task->start(function($r, $e) {
         // var_dump($r);
-        if ($e instanceof \Exception) {
-            echo $e->getMessage(), "\n";
+        if ($e) {
+            echo $e;
         }
     });
 }
 
-// seqReq();
+seqReq();
 
 
 

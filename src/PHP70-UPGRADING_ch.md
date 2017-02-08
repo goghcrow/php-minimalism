@@ -1,6 +1,7 @@
 PHP 7.0 升级指南
 
 TODO 对比一下google翻译
+TODO 新特性RFC
 
 翻译自 https://github.com/php/php-src/blob/PHP-7.0.16/UPGRADING
 
@@ -139,9 +140,7 @@ foreach变更
   现在会打印所有元素(0 1 2), 之前第二个元素1会被跳过.
 
 * 通过by-reference方式迭代数组, 对数组元素的修改会继而影响迭代.
-  但是现在PHP会做的更好, 
-  However PHP will now do a better job of
-  maintaining a correct position in a number of cases. 
+  但在多数情况下, PHP现在会更精确的维护正确的迭代位置.
   例如, by-reference方式迭代期间向数组追加元素
 
       $array = [0];
@@ -153,10 +152,8 @@ foreach变更
   迭代现在会遍历追加元素, 所以以上示例将会输出"int(0) int(1)", 之前只会输出"int(0)".
 
 * 以 by-value 或 by-reference 方式迭代普通对象(非Traversable)
-  will
-  behave like by-reference iteration of arrays. This matches the previous
-  behavior apart from the more accurate position management mentioned in the
-  previous point.
+  都与以 by-reference 方式迭代数组行为一致. 
+  除了上一点提到的精确迭代位置维护.
 
 * Traversable对象迭代行为不变.
 
@@ -228,31 +225,26 @@ Relevant RFC: https://wiki.php.net/phpng
 整型处理变更
 ---------------------------
 
-* 无效的八进制字面量 (containing digits larger than 7) now produce compile
-  errors. For example, the following is no longer valid:
+* 无效的八进制字面量线程将产生编译错误. 比如, 以下表达式不再合法:
 
       $i = 0781; // 8 is not a valid octal digit!
 
-  Previously the invalid digits (and any following valid digits) were simply
-  ignored. As such $i previously held the value 7, because the last two digits
-  were silently discarded.
+  先前不合法的数字(与后继的所有合法数字)会被简单的忽略. 
+  $i 之前值是7, 因为后两位数字会被静默丢弃.
 
-* Bitwise shifts by negative numbers will now throw an ArithmeticError:
+* 位移负数现在会抛出ArithmeticError:
 
       var_dump(1 >> -1);
       // ArithmeticError: Bit shift by negative number
 
-* Left bitwise shifts by a number of bits beyond the bit width of an integer
-  will always result in 0:
+* 左移超过整形比特宽度的位数总是返回0:
 
       var_dump(1 << 64); // int(0)
 
-  Previously the behavior of this code was dependent on the used CPU
-  architecture. For example on x86 (including x86-64) the result was int(1),
-  because the shift operand was wrapped.
-
-* Similarly right bitwise shifts by a number of bits beyond the bit width of an
-  integer will always result in 0 or -1 (depending on sign):
+  之前以上代码的行为取决于CPU架构. 
+  例如, x86(包括x86-64)架构下返回int(1), 因为位移操作会回绕.
+  
+* 类似的, 右移超过整形比特宽度的位数总是返回0或者-1(取决于正负):
 
       var_dump(1 >> 64);  // int(0)
       var_dump(-1 >> 64); // int(-1)
@@ -262,9 +254,7 @@ Relevant RFC: https://wiki.php.net/rfc/integer_semantics
 字符串处理变更
 --------------------------
 
-* Strings that contain hexadecimal numbers are no longer considered to be
-  numeric and don't receive special treatment anymore. Some examples of the
-  new behavior:
+* 含有十六进制数字的字符串不再被当做数字处理, 不再会受到特殊对待: 
 
       var_dump("0x123" == "291");     // bool(false)     (previously true)
       var_dump(is_numeric("0x123"));  // bool(false)     (previously true)
@@ -273,8 +263,7 @@ Relevant RFC: https://wiki.php.net/rfc/integer_semantics
       var_dump(substr("foo", "0x1")); // string(3) "foo" (previously "oo")
       // Notice: A non well formed numeric value encountered
 
-  filter_var() can be used to check if a string contains a hexadecimal number
-  or convert such a string into an integer:
+  可以使用filter_var()检测字符串是否包含十六进制数字并转型成整形:
 
     $str = "0xffff";
     $int = filter_var($str, FILTER_VALIDATE_INT, FILTER_FLAG_ALLOW_HEX);
@@ -283,18 +272,16 @@ Relevant RFC: https://wiki.php.net/rfc/integer_semantics
     }
     var_dump($int); // int(65535)
 
-* Due to the addition of the Unicode Codepoint Escape Syntax for double-quoted
-  strings and heredocs, "\u{" followed by an invalid sequence will now result in
-  an error:
+* 由于双引号字符串与heredocs中添加了Unicode Codepoint Escape语法, 
+  "\u{"如果跟随无效字符序列(sequence)将会触发fatal error.
 
       $str = "\u{xyz}"; // Fatal error: Invalid UTF-8 codepoint escape sequence
 
-  To avoid this the leading backslash should be escaped:
+  为了避免这种情况情况, 应当对前导反斜线转义:
 
       $str = "\\u{xyz}"; // Works fine
 
-  However, "\u" without a following { is unaffected. As such the following code
-  won't error and will work the same as before:
+  "\u"无后继 { 则不受影响. 以下代码行为不变, 不会触发错误.
 
       $str = "\u202e"; // Works fine
 
@@ -311,18 +298,14 @@ Relevant RFCs:
 * 部分 fatal errors 与 recoverable fatal errors 现在通过 Error 抛出.
   由于 Error 是一种不同于 Exception 的类, 所以这一部分异常不会被现有的try/catch代码块捕获.
 
-  For the recoverable fatal errors which have been converted into an exception,
-  it is no longer possible to silently ignore the error from an error handler.
-  In particular, it is no longer possible to ignore type hint failures.
+  现在不能在错误处理函数中静默忽略那些可被转换成异常的recoverable fatal errors.
+  特别的, 不能忽略类型错误.
 
-* Parser errors now generate a ParseError that extends Error. Error
-  handling for eval()s on potentially invalid code should be changed to catch
-  ParseError in addition to the previous return value / error_get_last()
-  based handling.
+* 解析错误现在会抛出继承于Error的ParseError.
+  对于eval()有潜在不合法代码的错误处理应该变更为捕获ParseError, 
+  以及基于上一个返回值 / error_get_last()来判断.
 
-* 现在内部类构造失败总是抛出异常
- Constructors of internal classes will now always throw an exception on
-  failure. Previously some constructors returned NULL or an unusable object.
+* 现在内部类构造失败总是抛出异常. 之前部分构造函数返回NULL或不可用对象.
 
 * 部分E_STRICT提示的错误级别发生变更.
 
@@ -374,10 +357,8 @@ Relevant RFCs:
       mixed
       numeric
 
-* The yield language construct no longer requires parentheses when used in an
-  expression context. It is now a right-associative operator with precedence
-  between the "print" and "=>" operators. This can result in different behavior
-  in some cases, for example:
+* yield语言结构变更为右关联运算符, 优先级介于 "print" 与 "=>". 表达式中的yield不再需要圆括号.
+  变更会导致某些情况与之前不一致的行为:
 
       echo yield -1;
       // Was previously interpreted as
@@ -391,26 +372,24 @@ Relevant RFCs:
       // And is now interpreted as
       (yield $foo) or die;
 
-  Such cases can always be resolved by adding additional parentheses.
+  以上cases都可以通过添加额外的圆括号解决行为不一致的问题.
 
-  . Removed ASP (<%) and script (<script language=php>) tags.
+  . 移除ASP (<%) 与 script (<script language=php>) 标签.
     (RFC: https://wiki.php.net/rfc/remove_alternative_php_tags)
   . Removed support for assigning the result of new by reference.
-  . Removed support for scoped calls to non-static methods from an incompatible
-    $this context. See details in https://wiki.php.net/rfc/incompat_ctx.
-  . Removed support for #-style comments in ini files. Use ;-style comments
-    instead.
-  . $HTTP_RAW_POST_DATA is no longer available. Use the php://input stream instead.
+  . 移除$this出现歧义上下文中, 静态调用非静态方法. 详情参考 https://wiki.php.net/rfc/incompat_ctx.
+  . 移除ini文件中#-风格注释支持, 使用;-风格注释替代.
+  . 移除$HTTP_RAW_POST_DATA, 使用 php://input 流替代.
 
 标准库变更
 ========================
 
-  . substr() now returns an empty string instead of FALSE when the truncation happens on boundaries.
-  . call_user_method() and call_user_method_array() no longer exists.
-  . ob_start() no longer issues an E_ERROR, but instead an E_RECOVERABLE_ERROR in case an
-    output buffer is created in an output buffer handler.
-  . The internal sorting algorithm has been improved, what may result in
-    different sort order of elements that compare as equal.
+  . 当截断发生在边界时, substr() 现在返回空字符串而不是FALSE.
+    (译者: var_dump(substr("a", 1, 1)); PHP5.x bool(false), PHP7.x string(0) "")
+  . call_user_method() 与 call_user_method_array() 被移除.
+  . ob_start() 不再触发E_ERROR, 在但是输出缓冲区处理器中再次创建输出缓冲区会触发E_RECOVERABLE_ERROR.
+  . 优化内部排序算法, 相等元素的排序结果不再发生变动.
+    (译者: 不稳定排序修改为稳定排序)
   . fpm-fcgi移除dl()函数.
   . 调用setcookie()传递空的cookie名称会产生一个WARNING, 而不再发送一个空的set-cookie header line.
 
@@ -418,8 +397,8 @@ Relevant RFCs:
 =====
 
 - Curl:
-  . Removed support for disabling the CURLOPT_SAFE_UPLOAD option. All curl file
-    uploads must use the curl_file / CURLFile APIs.
+  . CURLOPT_SAFE_UPLOAD不能被关闭. Curl文件上传必须使用curl_file / CURLFile接口.
+    (译者: 不再能使用@file这种非安全方式上传文件)
   . curl_getinfo($ch, CURLINFO_CERTINFO) returns certificate Subject and Issuer
     as a string (PHP >= 5.6.25)
 
@@ -465,8 +444,7 @@ Relevant RFCs:
   . session_regenerate_id() saves current $_SESSION before creating new session ID.
 
 - Opcache
-  . Removed opcache.load_comments configuration directive. Now doc comments
-    loading costs nothing and always enabled.
+  . 移除opcache.load_comments配置项. 载入文档注释不再有性能消耗, 因此总被开启.
 
 - OpenSSL:
   . Removed the "rsa_key_size" SSL context option in favor of automatically
@@ -485,16 +463,15 @@ Relevant RFCs:
 - Standard:
   . Removed string category support in setlocale(). Use the LC_* constants
     instead.
-  . Removed set_magic_quotes_runtime() and its alias magic_quotes_runtime().
+  . 移除 set_magic_quotes_runtime() 与 别名 magic_quotes_runtime().
 
 - JSON:
   . Rejected RFC 7159 incompatible number formats in json_decode string -
         top level (07, 0xff, .1, -.1) and all levels ([1.], [1.e1])
-  . Calling json_decode with 1st argument equal to empty PHP string or value that
-    after casting to string is empty string (NULL, FALSE) results in JSON syntax error.
+  . 第一个参数是空字符串或者转型之后是空字符(NULL, FALSE)时, 调用json_decode会导致JSON syntax错误.
 
 - Stream:
-  . Removed set_socket_blocking() in favor of its alias stream_set_blocking().
+  . 移除 set_socket_blocking(), 请使用其别名函数 stream_set_blocking().
 
 - XML:
   . xml_set_object() now requires to manually unset the $parser when finished,
@@ -509,24 +486,22 @@ Relevant RFCs:
 ========================================
 
 - Core
-  . Added group use declarations.
+  . 添加 use group 声明.
     (RFC: https://wiki.php.net/rfc/group_use_declarations)
-  . Added null coalesce operator (??).
+  . 添加 null coalesce 运算符(??).
     (RFC: https://wiki.php.net/rfc/isset_ternary)
-  . Support for strings with length >= 2^31 bytes in 64 bit builds.
-  . Closure::call() method added (works only with userland classes).
-  . Added \u{xxxxxx} Unicode Codepoint Escape Syntax for double-quoted strings
-    and heredocs.
-  . define() now supports arrays as constant values, fixing an oversight where
-    define() did not support arrays yet const syntax did.
-  . Added the comparison operator (<=>), aka the spaceship operator.
+  . 64位版本支持 >= 2^31字节字符串.
+  . 添加 Closure::call() 方法(仅对用户类有效).
+  . 双引号字符串与heredocs中添加\u{xxxxxx} Unicode Codepoint Escape 语法.
+  . define() 现在支持数组作为常量值, 修复const支持数组但define不支持的问题.
+  . 添加比较操作符 (<=>), 又名太空船操作符.
     (RFC: https://wiki.php.net/rfc/combined-comparison-operator)
-  . Added the yield from operator for delegating Generators like coroutines.
+  . 添加用于Generators(比如coroutines)的 yield from 操作符.
     (RFC: https://wiki.php.net/rfc/generator-delegation)
-  . Reserved keywords can now be used in various new contexts.
+  . 允许在各种新的上下文中使用保留字.
     (RFC: https://wiki.php.net/rfc/context_sensitive_lexer)
-  . Added support for scalar type declarations and strict mode using
-    declare(strict_types=1) (RFC: https://wiki.php.net/rfc/scalar_type_hints_v5)
+  . 添加标量类型声明与严格模式(declare(strict_types=1)) 
+    (RFC: https://wiki.php.net/rfc/scalar_type_hints_v5)
   . Added support for cryptographically secure user land RNG
     (RFC: https://wiki.php.net/rfc/easy_userland_csprng)
 
@@ -553,12 +528,10 @@ Relevant RFCs:
     accessible through stream_get_meta_data() output.
 
 - Reflection
-  . Added a ReflectionGenerator class (yield from Traces, current file/line,
-    etc.)
-  . Added a ReflectionType class to better support the new return type and
-    scalar type declarations features. The new ReflectionParameter::getType()
-    and ReflectionFunctionAbstract::getReturnType() methods both return an
-    instance of ReflectionType.
+  . 添加 ReflectionGenerator 类 (yield from Traces, current file/line, etc.)
+  . 添加ReflectionType类以更好支持返回值类型与标量类型声明特性.
+    新的 ReflectionParameter::getType() 与 ReflectionFunctionAbstract::getReturnType() 
+    方法均返回 ReflectionType实例.
 
 - Stream:
   . New Windows only stream context options was added to allow blocking reads
@@ -593,9 +566,9 @@ Relevant RFCs:
 ========================================
 
 - unserialize():
-  . Added second parameter for unserialize function
-    (RFC: https://wiki.php.net/rfc/secure_unserialize) allowing to specify
-    acceptable classes:
+  . 添加第二个参数设置允许被反序列化的类:
+    (RFC: https://wiki.php.net/rfc/secure_unserialize)
+    
     unserialize($foo, ["allowed_classes" => ["MyClass", "MyClass2"]]);
 
 - proc_open():
@@ -619,20 +592,19 @@ Relevant RFCs:
   platform restrictions dead locks on pipe buffers are possible.
 
 - dirname()
-  A new optional argument ($levels) allow to go up various times
+  添加可选参数($levels)允许向上获取多次目录名称.
   dirname(dirname($foo)) => dirname($foo, 2);
 
 - debug_zval_dump
-  It prints now "int" instead of "long", and "float" instead of "double".
+  打印结果中使用 "int" 代替 "long",  "float" 代替 "double".
 
 - getenv()
-  Since 7.0.9, getenv() has optional second parameter, making it only
-  consider local environment and not SAPI environment if true.
+  自7.0.9起, getenv()添加可选的第二个参数, 如果为true, getenv() 仅考虑本地环境变量
+  而排除SAPI环境变量.
 
 - fopen()
-  Since 7.0.16, mode 'e' was added, which sets the close-on-exec flag
-  on the opened file descriptor. This mode is only available in PHP compiled on
-  POSIX.1-2008 conform systems.
+  自7.0.16起, 加入'e'模式, 为打开的文件描述符设置close-on-exec flag.
+  只当PHP在POSIX.1-2008标准操作系统中编译时可用.
 
 ========================================
 6. 新的函数
@@ -646,8 +618,8 @@ Relevant RFCs:
     (RFC: https://wiki.php.net/rfc/preg_replace_callback_array)
 
 - Standard
-  . Added intdiv() function for integer division.
-  . Added error_clear_last() function to reset error state.
+  . 添加 intdiv() 处理整形相除.
+  . 添加 error_clear_last() 重置错误状态.
 
 - Zip:
   . Added ZipArchive::setCompressionIndex() and ZipArchive::setCompressionName()
@@ -688,7 +660,7 @@ Relevant RFCs:
 - ext/sybase_ct
 - ext/ereg
 
-For more details see
+详情参考
 
 https://wiki.php.net/rfc/removal_of_dead_sapis_and_exts
 https://wiki.php.net/rfc/remove_deprecated_functionality_in_php7
@@ -774,10 +746,9 @@ out, that the corresponding SDK isn't available anymore.
 ========================================
 
 - Core
-  . Removed asp_tags ini directive. Trying to enable it will result in a fatal
-    error.
-  . Removed always_populate_raw_post_data ini directive.
-  . realpath_cache_size set to 4096k by default
+  . 移除 asp_tags ini 配置项. 尝试开启将导致fatal error.
+  . 移除 always_populate_raw_post_data ini 配置项.
+  . realpath_cache_size 默认值变更为4096k.
 
 ========================================
 12. Windows支持

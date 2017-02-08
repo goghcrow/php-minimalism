@@ -43,9 +43,17 @@ class AsyncHttpClient extends AsyncWithTimeout
 
     protected function execute()
     {
-        $this->cli->execute($this->uri, function(\swoole_http_client $cli) {
-            $this->returnVal($cli);
-        });
+        // 这里不能使用lambda, 否则execute回调内无法再次调用execute
+        // Fatal error: Cannot destroy active lambda function
+        // $this->cli->execute($this->uri, function(\swoole_http_client $cli) {
+        //    $this->returnVal($cli);
+        // });
+        $this->cli->execute($this->uri, [$this, "executeK"]);
+    }
+
+    public function executeK(\swoole_http_client $cli)
+    {
+        $this->returnVal($cli);
     }
 
     public function setUri($uri)

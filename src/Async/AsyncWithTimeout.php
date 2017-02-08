@@ -15,6 +15,7 @@ abstract class AsyncWithTimeout implements IAsync
 {
     public $complete;
     public $timeout = 1000;
+    private $timer;
 
     public function setTimeout($timeout)
     {
@@ -25,26 +26,39 @@ abstract class AsyncWithTimeout implements IAsync
     public function start(callable $complete)
     {
         $this->complete = $this->once($complete);
-
-        swoole_timer_after($this->timeout, function() {
-            $this->throwEx(new AsyncTimeoutException());
-        });
-
         $this->execute();
+        $this->beginTimeout();
     }
 
     abstract protected function execute();
 
     protected function returnVal($r)
     {
+        $this->cancelTimeout();
         $cb = $this->complete;
         $cb($r, null);
     }
 
     protected function throwEx(\Exception $ex)
     {
+        $this->cancelTimeout();
         $cb = $this->complete;
         $cb(null, $ex);
+    }
+
+    private function beginTimeout()
+    {
+        $this->timer = swoole_timer_after($this->timeout, function() {
+            $this->throwEx(new AsyncTimeoutException(static::class));
+        });
+    }
+
+    private function cancelTimeout()
+    {
+        if ($this->timer) {
+            swoole_timer_clear($this->timer);
+            $this->timer = null;
+        }
     }
 
     private function once(callable $fun)

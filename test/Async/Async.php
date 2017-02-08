@@ -26,7 +26,7 @@ Async::exec(function() {
         $r = (yield Async::post($ip, 80, "/",
             ["Connection" => "close"],
             ["cookieK" => "cookieV"],
-            "body", 1000));
+            "body", 2000));
         var_dump($r->statusCode);
     };
 

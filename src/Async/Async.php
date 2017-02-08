@@ -55,16 +55,16 @@ final class Async
         return new AsyncSleep($ms);
     }
 
+    // ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇ async http ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇
+
     public static function dns($host, $timeo = 100)
     {
         return new AsyncDns($host, $timeo);
     }
 
-    public static function get($ip, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+    public static function get($host, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
     {
-        // TODO parser host port
-        // return self::coroutine(function() { });
-        return self::request($ip, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
+        return self::request($host, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
     }
 
     public static function post($ip, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
@@ -82,6 +82,35 @@ final class Async
             ->setData($body)
             ->setTimeout($timeo);
     }
+
+    // ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇ async mysql ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇
+
+    public static function mysql_connect(AsyncMysql $mysql, $timeo = 1000)
+    {
+        return $mysql->connect($timeo);
+    }
+
+    public static function mysql_query(AsyncMysql $mysql, $sql, array $bind = [], $timeo = 1000)
+    {
+        return $mysql->query($sql, $bind, $timeo);
+    }
+
+    public static function mysql_begin(AsyncMysql $mysql, $timeo = 1000)
+    {
+        return $mysql->begin($timeo);
+    }
+
+    public static function mysql_commit(AsyncMysql $mysql, $timeo = 1000)
+    {
+        return $mysql->commit($timeo);
+    }
+
+    public static function mysql_rollback(AsyncMysql $mysql, $timeo = 1000)
+    {
+        return $mysql->rollback($timeo);
+    }
+
+    // ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇ async file ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇
 
     public static function read($file)
     {

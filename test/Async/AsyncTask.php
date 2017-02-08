@@ -224,8 +224,3 @@ function nestedTask2()
     $task->start($cb);
 }
 nestedTask2();
-
-
-
-// 测试async内部通过回调向外抛出异常
-// TODO

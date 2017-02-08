@@ -28,7 +28,9 @@ namespace Minimalism\Async\Core;
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过complete回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
  * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
- * 7. 递归实现, 注意stack内存占用, Maximum function nesting level 限制, 避免注意循环 yield
+ * 7. 递归实现, 避免循环yield, 会占用大量内存
+ *    其实 \SplStack 实现也无法避免该问题, 某些情况 \SplStack 同样会膨胀
+ *    因为 stack 都在堆上~ 最后都会导致 Fatal error: Allowed memory size ...
  */
 final class AsyncTask implements IAsync
 {
