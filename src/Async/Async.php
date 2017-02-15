@@ -36,16 +36,16 @@ final class Async
     /**
      * 执行 function() {} :\Generator 或者 \Generator
      * @param \Generator|callable $task
-     * @param callable|null $complete
+     * @param callable|null $continuation
      * @param \stdClass $ctx
      */
-    public static function exec($task, callable $complete = null, \stdClass $ctx = null)
+    public static function exec($task, callable $continuation = null, \stdClass $ctx = null)
     {
         if (is_callable($task)) {
             $task = $task();
         }
         assert($task instanceof \Generator);
-        (new AsyncTask($task, $ctx ?: new \stdClass))->start($complete);
+        (new AsyncTask($task, $ctx ?: new \stdClass))->start($continuation);
     }
 
     // for php 5.x

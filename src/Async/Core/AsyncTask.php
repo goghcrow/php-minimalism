@@ -65,7 +65,7 @@ final class AsyncTask implements IAsync
      * 如果是<异步任务(Async)>则启动,并且在异步任务完成时候, 将返回值或异常作为参数, 调用自身
      * 如果是<yield value>, 则直接将value作为参数(result), 调用自身
      * 如果期间捕获到非CancelTaskException异常, 则将exception作为参数(exception), 调用自身
-     * 如果期间捕获到CancelTaskException异常, 迭代器停止, call complete
+     * 如果期间捕获到CancelTaskException异常, 迭代器停止, call continuation
      *
      * @param mixed|null $result
      * @param \Exception|null $ex
@@ -75,7 +75,7 @@ final class AsyncTask implements IAsync
     {
         // CancelTaskException 无条件终止迭代,实现通过异常终止Task
         if ($ex instanceof CancelTaskException || !$this->generator->valid()) {
-            goto complete;
+            goto continuation;
         }
 
         try {
@@ -115,7 +115,7 @@ final class AsyncTask implements IAsync
                 }
             } else {
 
-                complete:
+                continuation:
                 if ($continuation = $this->continuation) {
                     // 传递 嵌套异步任务的返回值与异常
                     $continuation($result, $ex);

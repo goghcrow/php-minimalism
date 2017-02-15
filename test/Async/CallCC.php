@@ -68,8 +68,9 @@ Async::exec(function() {
     echo "sleep 1000ms\n";
 });
 
-/** @var callable */
+/** @var $K callable */
 $K = null;
+
 Async::exec(function() {
     // 或者 $r = (yield Async::callcc(function($k) {...
     $r = (yield new CallCC(function($k) {
@@ -85,6 +86,5 @@ Async::exec(function() {
 
 swoole_timer_after(2000, function() {
     global $K;
-    //
     $K("wa ha ha");
 });
