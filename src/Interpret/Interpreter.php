@@ -113,7 +113,7 @@ final class Interpreter
 
             switch ($ast[0]) {
                 // seq 非必须，可以作为函数存在
-                case Constants::SEQ_KEYWORD:
+                case Keywords::SEQ_KEYWORD:
                     assert(count($ast) > 1);
                     $statements = array_slice($ast, 1);
                     $env1 = new Scope($env);
@@ -122,7 +122,7 @@ final class Interpreter
                     });
 
                 // define 也非必须，语法糖
-                case Constants::DEF_KEYWORD:
+                case Keywords::DEF_KEYWORD:
                     assert(count($ast) === 3);
                     list(, $name, $value) = $ast;
                     assert(is_string($name));
@@ -131,7 +131,7 @@ final class Interpreter
                         return $k(null);
                     });
 
-                case Constants::FUN_KEYWORD:
+                case Keywords::FUN_KEYWORD:
                     assert(count($ast) === 3);
                     list(, $params, $body) = $ast;
                     if ($body === null) {
@@ -139,7 +139,7 @@ final class Interpreter
                     }
                     return $this->interpDefun($params, $body, $env, $k);
 
-                case Constants::IF_KEYWORD:
+                case Keywords::IF_KEYWORD:
                     assert(count($ast) === 4);
                     list(, $test, $then, $else) = $ast;
                     return $this->interp1($test, $env, function($v) use($then, $else, $k, $env) {
@@ -150,7 +150,7 @@ final class Interpreter
                         }
                     });
 
-                case Constants::CALLCC_KEYWORD:
+                case Keywords::CALLCC_KEYWORD:
                     assert(count($ast) === 2);
                     $lambda = $ast[1];
                     return $this->interp1($lambda, $env, function($fun) use($k) {
@@ -164,7 +164,7 @@ final class Interpreter
                         return $interpBody($funk);
                     });
 
-                case Constants::QUOTE_KEYWORD:
+                case Keywords::QUOTE_KEYWORD:
                     assert(count($ast) === 2);
                     return $k($ast[1]);
 
