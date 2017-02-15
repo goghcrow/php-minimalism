@@ -10,10 +10,29 @@ namespace Minimalism\Async;
 
 
 use Minimalism\Async\Core\AsyncTask;
+use Minimalism\Async\Core\CallCC;
 use Minimalism\Async\Core\Syscall;
 
 final class Async
 {
+    /**
+     * call/cc
+     *
+     * call-with-current-continuation
+     *
+     * @param callable $fun
+     *      $fun 参数会接收到continuation $k
+     *      $k的签名: void fun($result = null, \Exception = null)
+     *      可以抛出异常或者以同步方式返回值
+     * @return CallCC
+     *
+     * 可以使用call/cc在async环境中将任务异步接口转换为同步接口
+     */
+    public static function callcc(callable $fun)
+    {
+        return new CallCC($fun);
+    }
+
     /**
      * 执行 function() {} :\Generator 或者 \Generator
      * @param \Generator|callable $task

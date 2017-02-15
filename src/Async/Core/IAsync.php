@@ -15,9 +15,9 @@ namespace Minimalism\Async\Core;
 interface IAsync
 {
     /**
-     * 开启异步任务，立即返回，任务完成回调complete
-     * @param callable $complete
+     * 开启异步任务，立即返回，任务完成回调$continuation
+     * @param callable $continuation
      * @return void
      */
-    public function start(callable $complete);
+    public function start(callable $continuation);
 }

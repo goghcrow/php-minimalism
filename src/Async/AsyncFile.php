@@ -41,9 +41,9 @@ class AsyncFile implements IAsync
         return $this;
     }
 
-    public function start(callable $complete)
+    public function start(callable $continuation)
     {
-        $this->complete = $complete;
+        $this->complete = $continuation;
         if ($this->type === "read") {
             $this->getContents();
         } else if ($this->type === "write") {

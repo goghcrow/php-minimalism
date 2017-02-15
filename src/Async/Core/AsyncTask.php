@@ -21,11 +21,11 @@ namespace Minimalism\Async\Core;
  *
  * 说明:
  * 1. 可以通过start回调取回任务最终结果(result, exception)
- *    如果不想通过complete回调获取result与exception, 可以多嵌套一层, 作为子任务运行,
- *    在父任务try catch异常, 获取结果, 忽略父任务complete回调
- * 2. 不会因为exception导致fatal error， 通过start回调complete取回异常
- * 3. 抛出 CancelTaskException 及其子类, 不在任务间透传, 直接终止异步任务(停止迭代), 执行complete回调
- * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过complete回调参数传递
+ *    如果不想通过continuation回调获取result与exception, 可以多嵌套一层, 作为子任务运行,
+ *    在父任务try catch异常, 获取结果, 忽略父任务continuation回调
+ * 2. 不会因为exception导致fatal error， 通过start回调continuation取回异常
+ * 3. 抛出 CancelTaskException 及其子类, 不在任务间透传, 直接终止异步任务(停止迭代), 执行continuation回调
+ * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
  * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
  * 7. 递归实现, 避免循环yield, 会占用大量内存
@@ -35,7 +35,7 @@ namespace Minimalism\Async\Core;
 final class AsyncTask implements IAsync
 {
     private $generator;
-    public $complete;
+    public $continuation;
     public $context;
 
     public function __construct(\Generator $generator, \stdClass $context = null)
@@ -45,13 +45,13 @@ final class AsyncTask implements IAsync
     }
 
     /**
-     * @param callable|null $complete
+     * @param callable|null $continuation
      * 任务完成回调 complete: function($r, $ex) { }
      * @return void
      */
-    public function start(callable $complete = null)
+    public function start(callable $continuation = null)
     {
-        $this->complete = $complete;
+        $this->continuation = $continuation;
         $this->next();
     }
 
@@ -116,7 +116,7 @@ final class AsyncTask implements IAsync
             } else {
 
                 complete:
-                if ($continuation = $this->complete) {
+                if ($continuation = $this->continuation) {
                     // 传递 嵌套异步任务的返回值与异常
                     $continuation($result, $ex);
                 }

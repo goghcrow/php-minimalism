@@ -23,9 +23,9 @@ abstract class AsyncWithTimeout implements IAsync
         return $this;
     }
 
-    public function start(callable $complete)
+    public function start(callable $continuation)
     {
-        $this->complete = $this->once($complete);
+        $this->complete = $this->once($continuation);
         $this->execute();
         $this->beginTimeout();
     }
