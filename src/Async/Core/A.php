@@ -21,17 +21,6 @@ function call_cc(callable $fun)
     return new CallCC($fun);
 }
 
-function asyncSleep($ms)
-{
-    return new CallCC(function($k) use($ms) {
-        swoole_timer_after($ms, function() use($k) {
-            $k();
-        });
-    });
-}
-
-
-
 interface IAsync
 {
     public function start(callable $continuation);
@@ -163,30 +152,63 @@ class Syscall
     }
 }
 
-////////////////////////
+//-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-
-function get($host, $port = 80, $uri = "/")
+function arg2k($k, $n)
 {
-    return call_cc(function($k) use($host, $port, $uri) {
-        swoole_async_dns_lookup($host, function($host, $ip) use($k, $port, $uri) {
-            $cli = new \swoole_http_client($ip, $port);
-            $cli->on("error", function(\swoole_http_client $cli) use($k) {
-                $k(null, new \RuntimeException(socket_strerror($cli->errCode)));
-            });
-            $cli->on("close", function(\swoole_http_client $cli) { });
-            $cli->get($uri, function(\swoole_http_client $cli) use($k) {
-                $k($cli);
-                $cli->close();
-            });
-        });
+    return function() use($n, $k) {
+        return $k(func_get_arg($n));
+    };
+}
+
+function await_sleep($ms)
+{
+    return call_cc(function($k) use($ms) {
+        return swoole_timer_after($ms, $k);
     });
 }
 
+function await_dns_lookup($host)
+{
+    return call_cc(function($k) use($host) {
+        swoole_async_dns_lookup($host, arg2k($k, 1));
+    });
+}
+
+class HttpClient extends \swoole_http_client
+{
+    public function awaitGet($uri)
+    {
+        return call_cc(function($k) use($uri) {
+            return $this->get($uri, $k);
+        });
+    }
+
+    public function awaitPost($uri, $post)
+    {
+        return call_cc(function($k) use($uri, $post) {
+            return $this->post($uri, $post, $k);
+        });
+    }
+
+    public function awaitExecute($uri)
+    {
+        return call_cc(function($k) use($uri) {
+            return $this->execute($uri, $k);
+        });
+    }
+}
+
+
+
 A(function() {
-    $cli = (yield get("www.baidu.com"));
+    $ip = (yield await_dns_lookup("www.baidu.com"));
+    echo $ip, "\n";
+
+    $cli = new HttpClient($ip, 80);
+    $cli = (yield $cli->awaitGet("/"));
     echo $cli->body, "\n";
 
-    yield asyncSleep(1000);
+    yield await_sleep(1000);
     echo "sleep 1000\n";
 });

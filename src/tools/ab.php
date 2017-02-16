@@ -1,64 +1,5 @@
 #!/usr/bin/env php
 <?php
-/*
-// 1. core setHeaders
-$cli = new \swoole_http_client("10.9.6.49", 4161);
-function get() {
-    global $cli;
-    $cli->setHeaders([]);
-    $cli->get("/lookup?topic=zan_mqworker_test", __FUNCTION__);
-}
-get();exit();
-//*/
-
-/*
-// 2. zval引用计数处理错误? setCookies
-$cli = new \swoole_http_client("10.9.6.49", 4161);
-function get() {
-    global $cli;
-    static $zval = [
-        "headers" => ["Connection" => "keep-alive"],
-        "cookies" => [],
-    ];
-    echo "~";
-
-    var_dump($zval["cookies"]);
-    // ~UNKNOWN:0 // zval 的内存错误
-    $cli->setCookies($zval["cookies"]);
-    $cli->get("/lookup?topic=zan_mqworker_test", __FUNCTION__);
-}
-get();exit();
-//*/
-
-
-///*
-// 3. core setHeaders
-//// WARNING	http_client_create: Operation now in progress phase 1,or socket is closed
-//$cli = new \swoole_http_client("10.9.6.49", 4161);
-//function get() {
-//    global $cli;
-//    static $zval = [
-//        "headers" => ["Connection" => "keep-alive"],
-//        "cookies" => [],
-//    ];
-//    echo "~";
-//
-//    $cli->setHeaders($zval["headers"]);
-//    $cli->get("/lookup?topic=zan_mqworker_test", __FUNCTION__);
-//}
-//get();exit();
-//*/
-
-
-//$cli = new \swoole_http_client("117.121.49.149", 80);
-//function get() {
-//    global $cli;
-//    var_dump($cli->statusCode);
-//    echo "~\n";
-//    assert($cli->setMethod("GET"));
-//    $cli->execute("/lookup?topic=zan_mqworker_test", __FUNCTION__);
-//}
-//get();exit;
 
 
 // 使用jmeter将日志文件导出报告
@@ -73,48 +14,24 @@ get();exit();
 // 可以使用 tcp 方式测试
 
 
-// TODO 使用该接口替换函数 塞到 $conf 中
-interface test_case
-{
-    /**
-     * @param \swoole_client|\swoole_http_client $client
-     * @return mixed tcp返回二进制串N+body, http返回数组, nova返回nova二进制package(自行打包)
-     */
-    public function payload_factory($client);
-
-    /**
-     * @param \swoole_client|\swoole_http_client $client
-     * @param null|string $recv nova中自行解包
-     * @return bool
-     */
-    public function receive_assert($client, $recv = null);
-}
-
-
-
 $usage = <<<USAGE
 Usage: ab -x类型 -h主机 -p端口 -c并发数 -n请求数 -t超时 -l测试名称 
+          -x http
+          -x tcp
           -x nova -s服务 -m方法 -aJson参数
+          -x mysql -w密码 -b数据库 -r字符编码
 
-    ab -x http -h 10.9.143.96 -p 9000 -c 200 -n 200000   
+    ab -x http -h 115.239.210.27 -p 80 -c 200 -n 200000   
     ab -x tcp -h 10.9.143.96 -p 9001 -c 200 -n 200000
-    ab -x nova -h 10.9.188.33 -p 8050 -s com.youzan.material.general.service.MediaService 
-              -m getMediaList
-              -a '{"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}'
+    ab -x mysql -h 10.9.34.172 -p 3306 -u showcase -w showcase -b showcase -r utf8mb4 -c 200 -n 200000
+    ab -x nova -h 10.9.188.33 -p 8050 -s com.youzan.material.general.service.MediaService -m getMediaList -a '{"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}'
 USAGE;
 
-$opt = getopt('x:h:p:c:n:t:l:s:m:a:');
-
-//$opt = [
-//    "x" => "http",
-//    "h" => "115.239.211.112",
-//    "p" => 80,
-//    "c" => 400,
-//];
+$opt = getopt('x:h:p:c:n:t:l:s:m:a:u:w:b:r:');
 
 
 if (!is_array($opt) || !isset($opt['x']) ||
-    !in_array($type = $opt['x'], ["tcp", "http", "nova"], true)) {
+    !in_array($type = $opt['x'], ["tcp", "http", "nova", "mysql"], true)) {
     echo "\033[1m$usage\033[0m\n";
     exit(1);
 }
@@ -205,10 +122,32 @@ switch ($type) {
             return true;
         }
         break;
+
+    case "mysql":
+        $l = isset($opt['l']) ? $opt['l'] : "mysql-test";
+        $user = isset($opt['u']) ? $opt['u'] : "root";
+        $password = isset($opt['w']) ? $opt['w'] : "";
+        $database = isset($opt['b']) ? $opt['b'] : "test";
+        $charset = isset($opt['r']) ? $opt['r'] : "utf8mb4";
+
+        function payload_factory(\swoole_mysql $client) {
+            static $cache;
+            if ($cache === null) {
+//                $cache =  "select * from component_v2";
+                $cache =  "select 1";
+            }
+            return $cache;
+        }
+
+        function receive_assert(\swoole_mysql $client, $recv) {
+            //  print_r($recv); // TODO
+            return true;
+        }
+        break;
 }
 
-$h = isset($opt['h']) ? $opt['h'] : "127.0.0.1"; // ip
-$p = isset($opt['p']) ? $opt['p'] : 80; // port
+$h = $opt['h']; // ip
+$p = $opt['p']; // port
 $c = isset($opt['c']) ? $opt['c'] : 200; // Concurrency
 $n = isset($opt['n']) ? $opt['n'] : null; // requests
 $t = isset($opt['t']) ? $opt['t'] : null; // timeout, null 不设置超时
@@ -228,10 +167,9 @@ echo "proc=$proc_num, n/conn=$requests, conn/proc=$concurrency\n";
 
 $conf = [
     "ip"   => $h,
+    "host" => $h,
     "port" => $p,
 
-    "service_method" => "",
-    "service_args" => "",
     "payload_factory" => "payload_factory",
     "receive_assert" => "receive_assert",
 
@@ -257,7 +195,17 @@ if ($type === "nova") {
         ];
 }
 
+if ($type === "mysql") {
+    $conf = $conf + [
+            "user" => $user,
+            "password" => $password,
+            "database" => $database,
+            "charset" => $charset,
+        ];
+}
 
+
+fprintf(STDERR, json_encode($conf, JSON_PRETTY_PRINT) . "\n");
 ab::start($type, $conf);
 
 
@@ -313,10 +261,17 @@ class ab
                 report::start(self::$conf["label"], $report_file, $i);
 
                 for ($j = 0; $j < self::$conf["concurrency"]; $j++) {
-                    if ($type === "http") {
-                        self::$clients[] = new http_client(self::$conf);
-                    } else {
-                        self::$clients[] = new tcp_client(self::$conf);
+                    switch ($type) {
+                        case "http":
+                            self::$clients[] = new http_client(self::$conf);
+                            break;
+                        case "nova":
+                        case "tcp":
+                            self::$clients[] = new tcp_client(self::$conf);
+                            break;
+                        case "mysql":
+                            self::$clients[] = new mysql_client(self::$conf);
+                            break;
                     }
                 }
 
@@ -442,7 +397,7 @@ class tcp_client
 
         $r = $this->client->connect($this->conf["ip"], $this->conf["port"]);
         if (!$r) {
-            $this->reconnect();
+            $this->onError();
         }
     }
 
@@ -458,7 +413,7 @@ class tcp_client
         if ($len) {
             pcntl_signal_dispatch();
         } else {
-            $this->reconnect();
+            $this->onError();
         }
     }
 
@@ -473,7 +428,7 @@ class tcp_client
         $this->cancelTimer();
 
         if ($client->errCode) {
-            $this->reconnect();
+            $this->onError();
         } else {
             $this->send();
         }
@@ -485,8 +440,7 @@ class tcp_client
         $this->tickRequest();
 
         if ($client->errCode) {
-            $this->fail();
-            $this->reconnect();
+            $this->onError();
         } else {
             $this->recv = $recv;
 
@@ -509,12 +463,17 @@ class tcp_client
 
     public function onError()
     {
-        fprintf(STDERR, "error: " . socket_strerror($this->client->errCode));
+        $errno = $this->client->errCode;
+        $error = socket_strerror($this->client->errCode);
+        fprintf(STDERR, "error: [errno=$errno, errno=$error]");
         $this->reconnect();
     }
 
     public function onClose()
     {
+        $errno = $this->client->errCode;
+        $error = socket_strerror($this->client->errCode);
+        fprintf(STDERR, "close: [errno=$errno, errno=$error]");
         $this->reconnect();
     }
 
@@ -644,8 +603,8 @@ class http_client
 
         // TODO setHeaders([])  coredump
         if (!empty($payload["headers"])) {
-            // TODO 取消注释
-//            $this->client->setHeaders($payload["headers"]);
+            // TODO coredump
+            $this->client->setHeaders($payload["headers"]);
         }
         // TODO 释放了 $payload["cookies"] zval
         if (!empty($payload["cookies"])) {
@@ -662,7 +621,7 @@ class http_client
         if ($r) {
             pcntl_signal_dispatch();
         } else {
-            $this->reconnect();
+            $this->onError();
         }
     }
 
@@ -675,7 +634,7 @@ class http_client
     public function onConnect(\swoole_http_client $client)
     {
         if ($client->errCode) {
-            $this->reconnect();
+            $this->onError();
         }
     }
 
@@ -685,8 +644,7 @@ class http_client
         $this->tickRequest();
 
         if ($client->errCode) {
-            $this->fail();
-            $this->reconnect();
+            $this->onError();
         } else {
             $this->recv = $client->body;
 
@@ -714,12 +672,17 @@ class http_client
 
     public function onError()
     {
-        fprintf(STDERR, "error: " . socket_strerror($this->client->errCode));
+        $errno = $this->client->errCode;
+        $error = socket_strerror($this->client->errCode);
+        fprintf(STDERR, "error: [errno=$errno, errno=$error]");
         $this->reconnect();
     }
 
     public function onClose()
     {
+        $errno = $this->client->errCode;
+        $error = socket_strerror($this->client->errCode);
+        fprintf(STDERR, "close: [errno=$errno, errno=$error]");
         $this->reconnect();
     }
 
@@ -765,6 +728,199 @@ class http_client
         // 兼容旧版本 swoole
         $code = isset($this->client->statusCode) ? $this->client->statusCode : 500;
         report::fail($elapsed, $bytes, $sentBytes, $msg, $code);
+    }
+}
+
+class mysql_client
+{
+    /** @var \swoole_mysql */
+    public $client;
+
+    public $lastTs;
+
+    public $timer;
+
+    public $send;
+
+    public $recv;
+
+    public $conf;
+
+    public $enable;
+
+    public function __construct(array $conf)
+    {
+        $this->conf = $conf + [
+                "host" => "127.0.0.1",
+                "port" => 3306,
+                "user" => "root",
+                "password" => "",
+                "database" => "test",
+                "charset" => "utf8mb4",
+            ];
+        $this->enable = true;
+        $this->reconnect(false);
+    }
+
+    public function __call($name, $arguments)
+    {
+        $m = $this->client->$name;
+        return $m(...$arguments);
+    }
+
+    public function __get($name)
+    {
+        return $this->client->$name;
+    }
+
+    public function reconnect($fail = true)
+    {
+        $this->cancelTimer();
+
+        if ($fail) {
+            $this->fail();
+        }
+
+        if ($this->enable === false) {
+            return;
+        }
+
+        $this->client = new \swoole_mysql();
+        $this->client->on("connect", [$this, "onConnect"]);
+        $this->client->on("close", [$this, "onClose"]);
+        $this->client->on("error", [$this, "onError"]);
+        $this->addTimer($this->conf["connect_timeout"], [$this, "onTimeout"]);
+
+        // fprintf(STDERR, "CONNECT\n");
+        $r = $this->client->connect([
+            "host" => $this->conf["host"],
+            "port" => $this->conf["port"],
+            "user" => $this->conf["user"],
+            "password" => $this->conf["password"],
+            "database" => $this->conf["database"],
+            "charset" => $this->conf["charset"],
+        ]);
+
+        if (!$r) {
+            $this->onError();
+        }
+    }
+
+    public function send()
+    {
+        $createPayload = $this->conf["payload_factory"];
+        $this->send = $createPayload($this->client);
+
+        $this->lastTs = report::now();
+        $this->addTimer($this->conf["recv_timeout"], [$this, "onTimeout"]);
+
+        $r = $this->client->query($this->send, [], [$this, "onReceive"]);
+        if ($r) {
+            pcntl_signal_dispatch();
+        } else {
+            $this->onError();
+        }
+    }
+
+    public function stop()
+    {
+        $this->client->close();
+        $this->enable = false;
+    }
+
+    public function onConnect(\swoole_mysql $client)
+    {
+        // fprintf(STDERR, "onConnect\n");
+        $this->cancelTimer();
+
+        if ($client->errno) {
+            $this->onError();
+        } else {
+            $this->send();
+        }
+    }
+
+    public function onReceive(\swoole_mysql $client, $recv)
+    {
+        $this->cancelTimer();
+        $this->tickRequest();
+
+        if ($client->errno) {
+            $this->onError();
+        } else {
+            $this->recv = $recv;
+
+            $recvAssert = $this->conf["receive_assert"];
+            if ($recvAssert($client, $recv)) {
+                $this->success();
+            } else {
+                $this->fail();
+            }
+            $this->send();
+        }
+    }
+
+    public function onTimeout()
+    {
+        // fprintf(STDERR, "onTimeout\n");
+        $this->tickRequest();
+        $this->client->close();
+        $this->reconnect();
+    }
+
+    public function onError()
+    {
+        // fprintf(STDERR, "onError\n");
+        fprintf(STDERR, "errno={$this->client->errno}, error={$this->client->error}\n");
+        $this->reconnect();
+    }
+
+    public function onClose()
+    {
+        // fprintf(STDERR, "onClose\n");
+        $this->reconnect();
+    }
+
+    public function addTimer($after, $onTimeout)
+    {
+        if ($after !== null) {
+            $this->timer = swoole_timer_after($after, $onTimeout);
+        }
+    }
+
+    public function cancelTimer()
+    {
+        if ($this->timer) {
+            swoole_timer_clear($this->timer);
+            $this->timer = null;
+        }
+    }
+
+    public function tickRequest()
+    {
+        pcntl_signal_dispatch();
+
+        if ($this->conf["requests"] !== null && --$this->conf["requests"] <= 0) {
+            $this->stop();
+            posix_kill(posix_getppid(), SIGINT);
+        }
+    }
+
+    public function success()
+    {
+        $elapsed = report::now() - $this->lastTs;
+        $sentBytes = strlen($this->send);
+        $bytes = 0; // TODO $this->recv mysql query 返回值不确定
+        report::success($elapsed, $bytes, $sentBytes);
+    }
+
+    public function fail()
+    {
+        $elapsed = report::now() - $this->lastTs;
+        $sentBytes = strlen($this->send);
+        $bytes = 0; // TODO $this->recv mysql query 返回值不确定
+        $msg = str_replace(",", ";", $this->client->error);
+        report::fail($elapsed, $bytes, $sentBytes, $msg, $this->client->errno);
     }
 }
 
@@ -855,25 +1011,29 @@ class report
             $qps = intval($requests / $elapsed * 1000);
             $pid = self::$pid;
             $summary = "pid=$pid, qps=$qps, avg=$avg_res_time\n";
-            echo $summary;
+            fprintf(STDERR, $summary);
 
-            $r = [];
-            foreach (self::$report as $item) {
-                $r[] = implode(",", array_values($item));
-            }
-
-            self::$report = [];
-            self::$report_last = $now;
-            $log = implode("\n", $r) . "\n";
-
-            self::write($log, function() {
-                if (self::$enable) {
-                    self::summary();
-                } else {
-                    // 保证日志文件罗盘
-                    swoole_event_exit();
+            if (empty(self::$report)) {
+                self::summary();
+            } else {
+                $r = [];
+                foreach (self::$report as $item) {
+                    $r[] = implode(",", array_values($item));
                 }
-            });
+
+                self::$report = [];
+                self::$report_last = $now;
+                $log = implode("\n", $r) . "\n";
+
+                self::write($log, function() {
+                    if (self::$enable) {
+                        self::summary();
+                    } else {
+                        // 保证日志文件罗盘
+                        swoole_event_exit();
+                    }
+                });
+            }
         });
     }
 
