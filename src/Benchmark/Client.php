@@ -35,6 +35,8 @@ abstract class Client
 
     public $enable;
 
+    public $defaultSetting = [];
+
     public static function make(TestPlan $test, Config $conf, array $setting = [])
     {
         switch (true) {
@@ -55,7 +57,7 @@ abstract class Client
     {
         $this->test = $test;
         $this->conf = $conf;
-        $this->setting = $setting;
+        $this->setting = $setting + $this->defaultSetting;
         $this->enable = true;
         $this->reconnect(false);
     }

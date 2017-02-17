@@ -21,6 +21,10 @@ class HttpClient extends Client
      */
     public $send;
 
+    public $defaultSetting = [
+        "keep_alive" => true
+    ];
+
     /**
      * @param \swoole_http_client  $client
      */
@@ -47,12 +51,10 @@ class HttpClient extends Client
     {
         $this->client->setMethod($this->send->method);
         if (!empty($this->send->headers)) {
-            // TODO coredump
-            // $this->client->setHeaders($this->send->headers);
+            $this->client->setHeaders($this->send->headers);
         }
         if (!empty($this->send->cookies)) {
-            // TODO zval problem
-            // $this->client->setCookies($this->send->cookies);
+            $this->client->setCookies($this->send->cookies);
         }
         $this->client->setData($this->send->body);
 

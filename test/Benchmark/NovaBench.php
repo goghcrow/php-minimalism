@@ -17,7 +17,6 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 class NovaBench extends NovaTestPlan
 {
-
     /**
      * Receive Assert
      * @param \swoole_client $client
@@ -26,7 +25,8 @@ class NovaBench extends NovaTestPlan
      */
     public function assert($client, $recv)
     {
-        // TODO: Implement assert() method.
+        // print_r($recv);
+        return true;
     }
 
     /**
@@ -35,8 +35,20 @@ class NovaBench extends NovaTestPlan
      */
     public function config()
     {
-        // TODO: Implement config() method.
+        return new Config("10.9.188.33", 8050);
     }
 }
 
-Benchmark::start(new NovaBench());
+
+$service = "com.youzan.material.general.service.MediaService";
+$method = "getMediaList";
+$args = [
+    'query' => [
+        'categoryId' => 2,
+        'kdtId' => 1,
+        'pageNo' => 1,
+        'pageSize' => 5,
+    ],
+];
+
+Benchmark::start(new NovaBench($service, $method, $args));

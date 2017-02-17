@@ -17,7 +17,6 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 class TcpBench extends TcpTestPlan
 {
-
     /**
      * Payload Factory
      * @param \swoole_client $client
@@ -40,7 +39,7 @@ class TcpBench extends TcpTestPlan
      */
     function assert($client, $recv)
     {
-        // echo $recv;
+        // echo $recv, "\n\n\n";
         return true;
     }
 
@@ -50,8 +49,15 @@ class TcpBench extends TcpTestPlan
      */
     public function config()
     {
-        // TODO: Implement config() method.
+        return new Config("10.9.143.96", 9001, 1);
     }
 }
 
-Benchmark::start(new TcpBench());
+// 与 配合与server通信分包规则
+$setting = [
+    'open_length_check' => 1,
+    'package_length_type' => 'N',
+    'package_length_offset' => 0,
+    'package_body_offset' => 4,
+];
+Benchmark::start(new TcpBench(), $setting);

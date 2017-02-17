@@ -46,13 +46,18 @@ class MysqlBench extends MysqlTestPlan
     public function config()
     {
         $conf = new Config("127.0.0.1", 3306, 8, null);
-        $conf->setLabel("mysql-bench");
-        $conf->setConnTimeout(null);
-        $conf->setRecvTimeout(null);
+        $conf->label = "mysql-bench";
+        $conf->connTimeout = null;
+        $conf->recvTimeout = null;
 
         return $conf;
 
     }
 }
 
-Benchmark::start(new MysqlBench());
+$user = "root";
+$password = "";
+$database = "test";
+$charset = "utf8mb4";
+
+Benchmark::start(new MysqlBench($user, $password, $database, $charset));

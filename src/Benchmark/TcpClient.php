@@ -16,6 +16,13 @@ class TcpClient extends Client
      */
     public $client;
 
+    public $defaultSetting = [
+        "open_length_check" => 1,
+        "package_length_type" => 'N',
+        "package_length_offset" => 0,
+        "package_body_offset" => 4,
+    ];
+
     public function connect()
     {
         $this->client = new \swoole_client(SWOOLE_SOCK_TCP, SWOOLE_SOCK_ASYNC);

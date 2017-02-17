@@ -13,7 +13,7 @@ class HttpRequest
 {
     public $uri = "/";
     public $method = "GET";
-    public $headers = ["Connection" => "keep-alive"];
+    public $headers = ["Connection" => "Keep-Alive"];
     public $cookies = [];
     public $body = "";
 }
