@@ -49,11 +49,11 @@ class TcpBench extends TcpTestPlan
      */
     public function config()
     {
-        return new Config("10.9.143.96", 9001, 1);
+        return new Config("10.9.143.96", 9001);
     }
 }
 
-// 与 配合与server通信分包规则
+// 配合与server通信分包规则
 $setting = [
     'open_length_check' => 1,
     'package_length_type' => 'N',

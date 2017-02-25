@@ -69,7 +69,7 @@ class AsyncFile implements IAsync
 
         if ($r === false) {
             $cb = $this->complete;
-            $cb(null, new AsyncException("swoole_async_read fail"));
+            $cb(null, new AsyncFileException("swoole_async_read fail"));
         }
     }
 
@@ -78,7 +78,7 @@ class AsyncFile implements IAsync
         $content = substr($this->content, 0, self::MAX_CHUNK);
         if ($content === false) {
             $cb = $this->complete;
-            $cb(null, new AsyncException("putContents fail"));
+            $cb(null, new AsyncFileException("putContents fail"));
             return;
         }
 
@@ -98,7 +98,7 @@ class AsyncFile implements IAsync
 
         if ($r === false) {
             $cb = $this->complete;
-            $cb(null, new AsyncException("swoole_async_write fail"));
+            $cb(null, new AsyncFileException("swoole_async_write fail"));
         }
     }
 }

@@ -9,6 +9,7 @@
 namespace Minimalism\Async;
 
 
+use Minimalism\Async\AsyncTimeoutException;
 use Minimalism\Async\Core\IAsync;
 
 abstract class AsyncWithTimeout implements IAsync

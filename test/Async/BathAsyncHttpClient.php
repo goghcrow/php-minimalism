@@ -12,7 +12,6 @@ use Minimalism\Async\Async;
 use Minimalism\Async\AsyncDns;
 use Minimalism\Async\AsyncHttpClient;
 use Minimalism\Async\Core\AsyncTask;
-use Minimalism\Async\AsyncTimeoutException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 

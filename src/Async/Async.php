@@ -11,10 +11,37 @@ namespace Minimalism\Async;
 
 use Minimalism\Async\Core\AsyncTask;
 use Minimalism\Async\Core\CallCC;
+use Minimalism\Async\Core\CancelTaskException;
+use Minimalism\Async\Core\IAsync;
 use Minimalism\Async\Core\Syscall;
 
 final class Async
 {
+    /**
+     * 执行 function() {} :\Generator 或者 \Generator
+     * @param \Generator|callable $task
+     * @param callable|null $continuation
+     *
+     * Context 可以附加在 \Generator 对象的属性上
+     */
+    public static function exec($task, callable $continuation = null)
+    {
+        if (is_callable($task)) {
+            $task = $task();
+        }
+        assert($task instanceof \Generator);
+        (new AsyncTask($task))->start($continuation);
+    }
+
+    // php 7 可以使用立即执行函数表达式 function() {} ()
+    // for php 5.x Async::coroutine(function() {});
+    public static function coroutine(callable $task, ...$args)
+    {
+        $g = $task(...$args);
+        assert($g instanceof \Generator);
+        return $g;
+    }
+
     /**
      * call/cc
      *
@@ -24,50 +51,107 @@ final class Async
      *      $fun 参数会接收到continuation $k
      *      $k的签名: void fun($result = null, \Exception = null)
      *      可以抛出异常或者以同步方式返回值
-     * @return CallCC
+     * @param null|int $timeout
+     * @return IAsync 可以使用call/cc在async环境中将任务异步接口转换为同步接口
      *
      * 可以使用call/cc在async环境中将任务异步接口转换为同步接口
      */
-    public static function callcc(callable $fun)
+    public static function callcc(callable $fun, $timeout = 0)
     {
+        if ($timeout > 0) {
+            // return new CallCCWithTimeout($fun, $timeout);
+            // or
+            $fun = function($k) use($fun, $timeout) {
+                $k = self::once($k);
+                swoole_timer_after($timeout, function() use($k) {
+                    $k(null, new AsyncTimeoutException());
+                });
+                $fun($k);
+            };
+        }
+
         return new CallCC($fun);
     }
 
     /**
-     * 执行 function() {} :\Generator 或者 \Generator
-     * @param \Generator|callable $task
-     * @param callable|null $continuation
-     * @param \stdClass $ctx
+     * @param \Generator[] $tasks
+     * @return Syscall
      */
-    public static function exec($task, callable $continuation = null, \stdClass $ctx = null)
+    public static function awaitAll(array $tasks)
     {
-        if (is_callable($task)) {
-            $task = $task();
-        }
-        assert($task instanceof \Generator);
-        (new AsyncTask($task, $ctx ?: new \stdClass))->start($continuation);
+        return new Syscall(function(AsyncTask $task) use($tasks) {
+            if (empty($tasks)) {
+                return null;
+            } else {
+                return new All($tasks, $task);
+            }
+        });
     }
 
-    // for php 5.x
-    // php 7 function() {} ()
-    public static function coroutine(callable $task)
+    public static function once(callable $fun)
     {
-        return $task();
+        $has = false;
+        return function(...$args) use($fun, &$has) {
+            if ($has === false) {
+                $fun(...$args);
+                $has = true;
+            }
+        };
     }
 
+    public static function debug_print_backtrace()
+    {
+        return new Syscall(function(AsyncTask $task) {
+            $i = 1;
+            $bt = [];
+            do {
+                $g = $task->generator;
+                $file = isset($g->__FILE__) ? $g->__FILE__ : "unknown";
+                $line = isset($g->__LINE__) ? $g->__LINE__ : "unknown";
+                $bt[] = "#{$i} {$file}:{$line}";
+            } while ($task->parent && ($task = $task->parent) && ++$i);
+            fprintf(STDERR, implode(PHP_EOL, $bt));
+        });
+    }
+
+    /**
+     * @param string $key
+     * @param mixed $default
+     * @return Syscall
+     */
     public static function getCtx($key, $default = null)
     {
         return new Syscall(function(AsyncTask $task) use($key, $default) {
-            return isset($task->context->$key) ? $task->context->$key : $default;
+            while($task->parent && $task = $task->parent);
+            if (isset($task->generator->$key)) {
+                return $task->generator->$key;
+            } else {
+                return $default;
+            }
         });
     }
 
+    /**
+     * @param string $key
+     * @param mixed $val
+     * @return Syscall
+     */
     public static function setCtx($key, $val)
     {
         return new Syscall(function(AsyncTask $task) use($key, $val) {
-            $task->context->$key = $val;
+            while($task->parent && $task = $task->parent);
+            $task->generator->$key = $val;
         });
     }
+
+    public static function cancelTask()
+    {
+        return new Syscall(function(/*AsyncTask $task*/) {
+            throw new CancelTaskException();
+        });
+    }
+
+    // ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇ async sleep ⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇⬇
 
     public static function sleep($ms)
     {
@@ -81,12 +165,12 @@ final class Async
         return new AsyncDns($host, $timeo);
     }
 
-    public static function get($host, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+    public static function get($host, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
     {
         return self::request($host, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
     }
 
-    public static function post($ip, $port, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+    public static function post($ip, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
     {
         return self::request($ip, $port, "POST", $uri, $headers, $cookies, $body, $timeo);
     }

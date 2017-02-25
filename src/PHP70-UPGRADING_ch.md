@@ -229,7 +229,7 @@ Relevant RFC: https://wiki.php.net/phpng
 
       $i = 0781; // 8 is not a valid octal digit!
 
-  先前不合法的数字(与后继的所有合法数字)会被简单的忽略. 
+  之前不合法的数字(与后继的所有合法数字)会被简单的忽略. 
   $i 之前值是7, 因为后两位数字会被静默丢弃.
 
 * 位移负数现在会抛出ArithmeticError:

@@ -91,6 +91,7 @@ class Config
     {
         $kv = self::array2kv(self::get());
 
+        $r = [];
         foreach ($kv as $k => $v) {
             if (is_string($v)) {
                 $r[] = "$k=\"$v\"";

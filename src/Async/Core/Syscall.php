@@ -11,16 +11,16 @@ namespace Minimalism\Async\Core;
 
 class Syscall
 {
-    private $callback = null;
+    private $fun = null;
 
-    public function __construct(callable $callback)
+    public function __construct(callable $fun)
     {
-        $this->callback = $callback;
+        $this->fun = $fun;
     }
 
     public function __invoke(AsyncTask $task)
     {
-        $cb = $this->callback;
+        $cb = $this->fun;
         return $cb($task);
     }
 }

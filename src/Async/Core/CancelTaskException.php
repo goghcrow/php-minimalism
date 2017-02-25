@@ -9,7 +9,4 @@
 namespace Minimalism\Async\Core;
 
 
-class CancelTaskException extends \Exception
-{
-
-}
+class CancelTaskException extends \Exception { }

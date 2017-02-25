@@ -14,11 +14,9 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 Async::exec(function() {
     yield Async::setCtx("foo", "bar");
-
     yield Async::coroutine(function() {
-        var_dump(yield Async::getCtx("foo"));
+        assert((yield Async::getCtx("foo")) === "bar");
         yield Async::setCtx("hello", "world");
     });
-
-    var_dump(yield Async::getCtx("hello"));
+    assert((yield Async::getCtx("hello")) === "world");
 });

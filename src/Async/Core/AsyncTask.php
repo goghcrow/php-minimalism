@@ -20,10 +20,10 @@ namespace Minimalism\Async\Core;
  *
  *
  * 说明:
- * 1. 可以通过start回调取回任务最终结果(result, exception)
+ * 1. 可以通过then回调取回任务最终结果(result, exception)
  *    如果不想通过continuation回调获取result与exception, 可以多嵌套一层, 作为子任务运行,
  *    在父任务try catch异常, 获取结果, 忽略父任务continuation回调
- * 2. 不会因为exception导致fatal error， 通过start回调continuation取回异常
+ * 2. 不会因为exception导致fatal error，(swoole异步回调的内的异常必须捕获, 否则Fatal Error)， 通过then回调continuation取回异常
  * 3. 抛出 CancelTaskException 及其子类, 不在任务间透传, 直接终止异步任务(停止迭代), 执行continuation回调
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
@@ -34,14 +34,17 @@ namespace Minimalism\Async\Core;
  */
 final class AsyncTask implements IAsync
 {
-    private $generator;
-    public $continuation;
-    public $context;
+    private $isfirst = true;
+    public $generator;
 
-    public function __construct(\Generator $generator, \stdClass $context = null)
+    public $continuation;
+    public $parent;
+
+    public function __construct(\Generator $generator, AsyncTask $parent = null)
     {
-        $this->generator = new Generator($generator);
-        $this->context = $context ?: new \stdClass;
+        // $this->generator = new Generator($generator);
+        $this->generator = $generator;
+        $this->parent = $parent;
     }
 
     /**
@@ -84,10 +87,21 @@ final class AsyncTask implements IAsync
             // 从迭代器获取 1.异步任务 或者 2.primeValue, 即yield 右值 $value
             // 优先处理异常, 有ex则忽略result
             if ($ex) {
-                $value = $this->generator->throwex($ex);
+                // $value = $this->generator->throwex($ex);
+                $value = $this->generator->throw($ex);
             } else {
                 // 传递 yield `左值`r 并进行迭代: r = (yield)
-                $value = $this->generator->send($result);
+                // $value = $this->generator->send($result);
+
+                // FIX Generator Send
+                {
+                    if ($this->isfirst) {
+                        $this->isfirst = false;
+                        $value = $this->generator->current();
+                    } else {
+                        $value = $this->generator->send($result);
+                    }
+                }
             }
 
             // step2 延续执行
@@ -101,7 +115,7 @@ final class AsyncTask implements IAsync
 
                 // 返回新迭代器,需要将\Generator 转换为异步任务 (Async)
                 if ($value instanceof \Generator) {
-                    $value = new self($value, $this->context);
+                    $value = new self($value, $this);
                 }
 
                 // 从迭代器获取到了一个异步任务

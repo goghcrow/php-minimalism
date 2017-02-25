@@ -45,6 +45,13 @@ class Config
      */
     public $label = "test";
 
+    /**
+     * Config constructor.
+     * @param string $ip not support host
+     * @param int $port
+     * @param int $concurrency
+     * @param null $requests
+     */
     public function __construct($ip, $port, $concurrency = 200, $requests = null)
     {
         $this->ip = $ip;

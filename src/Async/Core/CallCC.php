@@ -8,6 +8,7 @@
 
 namespace Minimalism\Async\Core;
 
+
 class CallCC implements IAsync
 {
     public $fun;
@@ -20,6 +21,8 @@ class CallCC implements IAsync
     public function start(callable $continuation)
     {
         $fun = $this->fun;
+
+        // 不处理返回值，user-func返回值通过延续进行传递
         $fun($continuation);
     }
 }
@@ -46,7 +49,7 @@ function callcc(callable $fun)
 */
 
 
-// 可以使用call/cc轻松转换很多异步接口
+// 可以使用call/cc轻松转换异步接口
 // yield asyncSleep
 /*
 function asyncSleep($ms)
@@ -57,4 +60,11 @@ function asyncSleep($ms)
         });
     });
 }
+
+$result = (yield callcc(function($k) {
+    doSomethingAsync(function($result) use($k) {
+        // 通过延续把异步结果返回给yield表达式左值
+        $k($result);
+    });
+}));
 */

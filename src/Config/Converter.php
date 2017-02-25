@@ -50,7 +50,7 @@ final class Converter
     public function scanDir($dir)
     {
         $dir = realpath($dir);
-        $files = $this->scan($dir, '/.*\.php/');
+        $files = $this->scan($dir, '/.*\.php$/');
         foreach ($files as $file) {
             $this->scanFile($file);
         }

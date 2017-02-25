@@ -38,9 +38,12 @@ class Benchmark
         $conf = $test->config();
         fprintf(STDERR, $conf->__toString() . "\n");
 
+        $testLabel = $conf->label;
+        Qps::init();
+
         for ($i = 0; $i < $conf->procNum; $i++) {
 
-            $report_file = "{$conf->label}_{$i}.jtl";
+            $report_file = "{$testLabel}_{$i}.jtl";
 
             $pid = pcntl_fork();
             if ($pid < 0) {
@@ -76,7 +79,6 @@ class Benchmark
                 exit(0);
             }
 
-
             self::$pids[] = $pid;
             self::$reports[] = $report_file;
         }
@@ -89,6 +91,8 @@ class Benchmark
         });
 
         self::$enable = true;
+
+
         self::loop();
 
         self::merge(self::$final_file);
@@ -96,9 +100,13 @@ class Benchmark
 
     public static function loop()
     {
+
         while (self::$enable) {
-            usleep(200 * 1000);
+            Qps::summary();
+            // usleep(200 * 1000);
+            sleep(1);
             pcntl_signal_dispatch();
+
         }
 
         foreach (self::$pids as $pid) {

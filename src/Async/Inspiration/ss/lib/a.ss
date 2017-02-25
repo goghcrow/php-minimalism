@@ -1,5 +1,0 @@
-(library (lib a)
-	(export x)
-	(import (rnrs)
-			(lib b))
-	(define x y))

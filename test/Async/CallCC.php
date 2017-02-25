@@ -9,9 +9,46 @@
 namespace Minimalism\Test\AsyncTask;
 
 use Minimalism\Async\Async;
+use Minimalism\Async\AsyncTimeoutException;
 use Minimalism\Async\Core\CallCC;
 
 require __DIR__ . "/../../vendor/autoload.php";
+
+
+Async::exec(function() {
+    $ex = null;
+    try {
+        $r = (yield Async::callcc(function($k) {
+            swoole_async_dns_lookup("www.baidu.com", function($host, $ip) use($k) {
+                $k($ip);
+            });
+        }, 1));
+
+        assert(false);
+    } catch (\Exception $ex) {
+
+    }
+    assert($ex);
+}, function($r, $e) {
+    static $once = true;
+    if ($once) {
+        $once = false;
+    } else {
+        assert(false);
+    }
+});
+
+
+
+function u(array $symbol)
+{
+    $args = func_get_args();
+    $fun = array_pop($args);
+    return function() use($symbol, $fun, $args) {
+        extract($symbol);
+        return $fun(...$args);
+    };
+}
 
 
 Async::exec(function() {

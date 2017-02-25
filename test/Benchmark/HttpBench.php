@@ -56,7 +56,7 @@ class HttpBench extends HttpTestPlan
      */
     public function assert($client, $recv)
     {
-        // echo $client->statusCode";
+        // echo $client->statusCode, "\n";
         // echo $recv, "\n";
         return parent::assert($client, $recv);
     }

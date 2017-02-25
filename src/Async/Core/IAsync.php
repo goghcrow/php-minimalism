@@ -9,7 +9,7 @@
 namespace Minimalism\Async\Core;
 
 /**
- * Interface IAsync
+ * CPS: Interface IAsync
  * @package Minimalism\Async\Core
  */
 interface IAsync
@@ -17,6 +17,7 @@ interface IAsync
     /**
      * 开启异步任务，立即返回，任务完成回调$continuation
      * @param callable $continuation
+     *      void(mixed $result = null, \Exception $ex = null)
      * @return void
      */
     public function start(callable $continuation);

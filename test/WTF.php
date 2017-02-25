@@ -2,3 +2,37 @@
 
 $obj = new \__PHP_Incomplete_Class();
 assert(is_object($obj) === false);
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+class Call
+{
+    public static function __callStatic($name, $arguments)
+    {
+        var_dump($name);
+    }
+}
+
+call_user_func([Call::class, "method\0trunked"]);
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+class A
+{
+
+}
+
+class B extends A {
+    public $public = 1;
+    protected $protected = 2;
+    private $private = 3;
+}
+
+$c = function() {
+    $this->public;
+    $this->protected; // 可以访问 protected
+    // $this->private;
+};
+
+$c = $c->bindTo(new B, A::class);
+$c();

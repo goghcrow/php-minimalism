@@ -51,15 +51,15 @@ class AsyncTcpClient extends AsyncWithTimeout
         $this->k = [$this, "doConnect"];
     }
 
+    public function __get($name)
+    {
+        return $this->client->$name;
+    }
+
     public function __call($name, $arguments)
     {
         $m = $this->client->$name;
         return $m(...$arguments);
-    }
-
-    public function __get($name)
-    {
-        return $this->client->$name;
     }
 
     public function connect($ip, $port, $timeout = 1000)

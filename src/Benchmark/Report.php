@@ -26,6 +26,7 @@ class Report
         self::$pid = posix_getpid();
         self::$report_last = self::now();
         self::$enable = true;
+
         self::summary();
     }
 
@@ -54,6 +55,8 @@ class Report
             'IdleTime' => 0,
             'Connect' => 0,
         ];
+
+        Qps::success();
     }
 
     public static function fail($elapsed, $bytes, $sentBytes, $msg, $code = 0)
@@ -76,51 +79,38 @@ class Report
             'IdleTime' => 0,
             'Connect' => 0,
         ];
+
+        Qps::fail();
     }
 
+    /**
+     * 单进程数据
+     */
     private static function summary()
     {
         swoole_timer_after(2000, function() {
-
-
             $now = self::now();
             $elapsed = $now - self::$report_last;
-            $requests = count(self::$report);
-            if ($requests === 0) {
-                $avg_res_time = 0;
-            } else {
-                $avg_res_time = number_format($elapsed / $requests, 2);
-            }
-            $qps = intval($requests / $elapsed * 1000);
-            $pid = self::$pid;
-            $summary = "pid=$pid, qps=$qps, avg=$avg_res_time\n";
-            fprintf(STDERR, $summary);
-
-
+            Qps::computation("pid=" . self::$pid, count(self::$report), $elapsed);
 
             if (empty(self::$report)) {
                 self::summary();
             } else {
-
-
                 $r = [];
                 foreach (self::$report as $item) {
                     $r[] = implode(",", array_values($item));
                 }
-
                 self::$report = [];
                 self::$report_last = $now;
                 $log = implode("\n", $r) . "\n";
-
                 self::write($log, function() {
                     if (self::$enable) {
                         self::summary();
                     } else {
-                        // 保证日志文件罗盘
+                        // 保证日志文件落盘
                         swoole_event_exit();
                     }
                 });
-
             }
         });
     }

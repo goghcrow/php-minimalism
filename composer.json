@@ -14,6 +14,8 @@
             "Minimalism\\Test\\": "test"
         },
         "files": [
+            "src/Async/Core/functions.php",
+            "src/Async/Koa/functions.php"
         ]
     }
 }

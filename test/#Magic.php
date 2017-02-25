@@ -11,10 +11,10 @@
  */
 function get_variable_name(&$var, array $scope = NULL) {
     $scope = $scope ?: $GLOBALS;
-    $tmp = $var;
+    $bak = $var;
     $var = uniqid(time()); // 给变量唯一值
     $name = array_search($var, $scope, true);
-    $var = $tmp;
+    $var = $bak;
     return $name;
 }
 
@@ -22,6 +22,15 @@ function get_variable_name(&$var, array $scope = NULL) {
 $varName = null;
 assert(get_variable_name($varName) === "varName");
 
+
+
+function f()
+{
+    $localVar = null;
+    $name = get_variable_name($localVar, get_defined_vars());
+    assert($name === "localVar");
+}
+f();
 
 
 // chrome DEBUGGER

@@ -35,6 +35,11 @@ class AsyncHttpClient extends AsyncWithTimeout
         $this->cli = new \swoole_http_client($this->ip, $this->port);
     }
 
+    public function __get($name)
+    {
+        return $this->cli->$name;
+    }
+
     public function __call($name, $arguments)
     {
         $this->cli->$name(...$arguments);

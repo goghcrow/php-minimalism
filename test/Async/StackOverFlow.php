@@ -8,6 +8,10 @@
 
 namespace Minimalism\Test\AsyncTask;
 
+ini_set("xdebug.max_nesting_level", PHP_INT_MAX);
+function r(){$self = __FUNCTION__;$self();}r();
+exit;
+
 use Minimalism\Async\Async;
 
 require __DIR__ . "/../../vendor/autoload.php";
