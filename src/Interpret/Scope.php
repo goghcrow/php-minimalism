@@ -6,7 +6,7 @@
  * Time: 下午10:18
  */
 
-namespace Minimalism\Async\Interpret;
+namespace Minimalism\A\Interpret;
 
 
 final class Scope implements \ArrayAccess

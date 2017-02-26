@@ -8,9 +8,9 @@
 
 namespace Minimalism\Test;
 
-use Minimalism\Async\Async;
-use Minimalism\Async\AsyncHttpClient;
-use Minimalism\Async\Core\AsyncTask;
+use Minimalism\A\Async;
+use Minimalism\A\AsyncHttpClient;
+use Minimalism\A\Core\AsyncTask;
 use Minimalism\Autoload;
 
 require __DIR__ . "/../src/Autoload.php";

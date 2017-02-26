@@ -6,7 +6,7 @@
  * Time: 下午7:57
  */
 
-namespace Minimalism\Async\Interpret;
+namespace Minimalism\A\Interpret;
 
 
 // 2. TODO 程序主体 与 body 添加seq关键词
@@ -26,7 +26,7 @@ namespace Minimalism\Async\Interpret;
 
 /**
  * Class Interpreter
- * @package Minimalism\Async\Interpret
+ * @package Minimalism\A\Interpret
  *
  * 词法作用域
  * Lambda 抽象

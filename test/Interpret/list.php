@@ -10,7 +10,7 @@ namespace Minimalism\Test\Interpret;
 
 
 
-use Minimalism\Async\Interpret\Interpreter;
+use Minimalism\A\Interpret\Interpreter;
 
 require __DIR__ . "/../../src/Interpret/Keywords.php";
 require __DIR__ . "/../../src/Interpret/Scope.php";

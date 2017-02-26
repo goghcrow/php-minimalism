@@ -1,5 +1,18 @@
 <?php
 
+
+function λ()
+{
+
+}
+
+function β()
+{
+
+}
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
 $obj = new \__PHP_Incomplete_Class();
 assert(is_object($obj) === false);
 
@@ -36,3 +49,11 @@ $c = function() {
 
 $c = $c->bindTo(new B, A::class);
 $c();
+
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+// ini_set("xdebug.max_nesting_level", PHP_INT_MAX);
+// function r(){$self = __FUNCTION__;$self();}r();
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
