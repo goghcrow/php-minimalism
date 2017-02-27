@@ -9,36 +9,63 @@
 namespace Minimalism\A\Server\Http;
 
 
-class Request extends \swoole_http_request
+/**
+ * Class Request
+ * @package Minimalism\A\Server\Http
+ * @property array $request
+ * @property array $cookie
+ * @property array $header
+ * @property array $server
+ * @property string $file
+ * @property mixed $post
+ * @property int $fd
+ * @method string rawcontent()
+ *
+ */
+class Request
 {
     /** @var Application */
     public $app;
-    /** @var Request */
+
+    /** @var \swoole_http_request */
     public $req;
-    /** @var Response */
+
+    /** @var \swoole_http_response */
     public $res;
+
     /** @var Context */
     public $ctx;
 
-    public $swHttpReq;
+    /** @var Response */
+    public $response;
 
-    public function __construct(\swoole_http_request $swHttpReq)
+    /** @var string */
+    public $originalUrl;
+
+    /** @var string */
+    public $ip;
+
+    public function __construct(Application $app, Context $ctx,
+                                \swoole_http_request $req, \swoole_http_response $res)
     {
-        $this->swHttpReq = $swHttpReq;
+        $this->app = $app;
+        $this->ctx = $ctx;
+        $this->req = $req;
+        $this->res = $res;
     }
 
     public function __call($name, $arguments)
     {
-        return call_user_func_array([$this->swHttpReq, $name], $arguments);
+        return call_user_func_array([$this->req, $name], $arguments);
     }
 
     public function __get($name)
     {
-        return $this->swHttpReq->$name;
+        return $this->req->$name;
     }
 
     public function __set($name, $value)
     {
-        $this->swHttpReq->$name = $value;
+        $this->req->$name = $value;
     }
 }

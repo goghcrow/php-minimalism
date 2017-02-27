@@ -9,42 +9,59 @@
 namespace Minimalism\A\Server\Http;
 
 
-class Response extends \swoole_http_response
+/**
+ * Class Response
+ * @package Minimalism\A\Server\Http
+ * @property array $cookie
+ * @property array $header
+ * @property int $fd
+ * @method bool cookie(string $name, string $value = null, int $expires = null, string $path = null, string $domain = null, bool $secure = null, bool $httponly = null)
+ * @method bool rawcookie(string $name, string $value = null, int $expires = null, string $path = null, string $domain = null, bool $secure = null, bool $httponly = null)
+ * @method bool status(int $http_code)
+ * @method bool gzip(int $compress_level = null)
+ * @method bool header(string $key, string $value)
+ * @method bool write(string $content)
+ * @method bool end(string $content = null)
+ * @method bool sendfile(string $filename, int $offset = null)
+ */
+class Response
 {
     /* @var Application */
     public $app;
 
-    /** @var Request */
+    /** @var \swoole_http_request */
     public $req;
 
-    /** @var Response */
+    /** @var \swoole_http_response */
     public $res;
 
     /** @var Context */
     public $ctx;
 
-    public $header;
-    public $body;
+    /** @var Request */
+    public $request;
 
-    public $swHttpRes;
-
-    public function __construct(\swoole_http_response $swHttpRes)
+    public function __construct(Application $app, Context $ctx,
+                                \swoole_http_request $req, \swoole_http_response $res)
     {
-        $this->swHttpRes = $swHttpRes;
+        $this->app = $app;
+        $this->ctx = $ctx;
+        $this->req = $req;
+        $this->res = $res;
     }
 
     public function __call($name, $arguments)
     {
-        return call_user_func_array([$this->swHttpReq, $name], $arguments);
+        return call_user_func_array([$this->req, $name], $arguments);
     }
 
     public function __get($name)
     {
-        return $this->swHttpReq->$name;
+        return $this->req->$name;
     }
 
     public function __set($name, $value)
     {
-        $this->swHttpReq->$name = $value;
+        $this->req->$name = $value;
     }
 }

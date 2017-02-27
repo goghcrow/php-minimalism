@@ -23,22 +23,22 @@ function compose(array $middleware)
             $next = noop();
         }
 
-        /**
-         * $middleware : f1, f2, f3, ... fn
-         *
-         */
         $i = count($middleware);
         while ($i--) {
-            assert($middleware[$i] instanceof \Closure); // TypeError
-            // scope 绑定Context, 似的\Closure中可以访问Context子类的protected修饰符
-            $curr = $middleware[$i]->bindTo($ctx, Context::class);
-            $next = $curr($next);
-            assert($next instanceof \Generator);  // TypeError
+            if ($middleware[$i] instanceof \Closure) {
+                // scope 绑定Context, 似的\Closure中可以访问Context子类的protected修饰符
+                $curr = $middleware[$i]->bindTo($ctx, Context::class);
+            } else {
+                $curr = $middleware[$i];
+            }
+            assert(is_callable($curr));
+            $next = $curr($ctx, $next);
         }
 
         yield $next;
     };
 }
+
 
 
 function noop()
@@ -47,11 +47,14 @@ function noop()
 }
 
 function sys_echo($context) {
+    // $_SERVER 会被swoole setglobal 清空, 这里用 $_ENV
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : -1;
     $time = date("Y-m-d H:i:s", time());
-    echo "[$time] $context\n";
+    echo "[$time #$workerId] $context\n";
 }
 
 function sys_error($context) {
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : -1;
     $time = date("Y-m-d H:i:s", time());
-    fprintf(STDERR, "[$time] $context\n");
+    fprintf(STDERR, "[$time #$workerId] $context\n");
 }
