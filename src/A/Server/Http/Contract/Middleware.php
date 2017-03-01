@@ -6,8 +6,10 @@
  * Time: 上午2:37
  */
 
-namespace Minimalism\A\Server\Http;
+namespace Minimalism\A\Server\Http\Contract;
 
+
+use Minimalism\A\Server\Http\Context;
 
 interface Middleware
 {

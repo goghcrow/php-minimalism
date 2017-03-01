@@ -12,9 +12,16 @@ namespace Minimalism\A\Server\Http;
 /**
  * Class Response
  * @package Minimalism\A\Server\Http
- * @property array $cookie
- * @property array $header
- * @property int $fd
+ *
+ * getter @property array $cookie
+ * getter @property array $header
+ * getter @property int $fd
+ *
+ * setter @property string $type
+ * setter @property int $lastModified
+ * setter @property string $etag
+ * setter @property int $length
+ *
  * @method bool cookie(string $name, string $value = null, int $expires = null, string $path = null, string $domain = null, bool $secure = null, bool $httponly = null)
  * @method bool rawcookie(string $name, string $value = null, int $expires = null, string $path = null, string $domain = null, bool $secure = null, bool $httponly = null)
  * @method bool status(int $http_code)
@@ -52,16 +59,39 @@ class Response
 
     public function __call($name, $arguments)
     {
-        return call_user_func_array([$this->req, $name], $arguments);
+        /** @var $fn callable */
+        $fn = [$this->res, $name];
+        return $fn(...$arguments);
     }
 
     public function __get($name)
     {
-        return $this->req->$name;
+        return $this->res->$name;
     }
 
     public function __set($name, $value)
     {
-        $this->req->$name = $value;
+        switch ($name) {
+            case "type":
+                return $this->res->header("Content-Type", $value);
+            case "lastModified":
+                return $this->res->header("Last-Modified", $value);
+            case "etag":
+                return $this->res->header("ETag", $value);
+            case "length":
+                return $this->res->header("Content-Length", $value);
+
+            default:
+                $this->res->$name = $value;
+                return true;
+        }
+    }
+
+    public function redirect($url, $status = 302)
+    {
+        $this->res->header("Location", $url);
+        $this->res->header("Content-Type", "text/plain; charset=utf-8");
+        $this->ctx->status = $status;
+        $this->ctx->body = "Redirecting to $url.";
     }
 }

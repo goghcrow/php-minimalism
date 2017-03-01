@@ -12,7 +12,6 @@ namespace Minimalism\A\Server\Http;
 use function Minimalism\A\Core\async;
 use function Minimalism\A\Core\setCtx;
 
-
 /**
  * Class Application
  * @package Minimalism\A\Server\Http
@@ -65,7 +64,8 @@ class Application
     }
 
     /**
-     * @param Middleware|\Closure|callable $fn
+     * @param \Closure|callable $fn
+     *      public function __invoke(Context $ctx, $next);
      * @return $this
      */
     public function uze(callable $fn)
@@ -150,47 +150,53 @@ class Application
         yield setCtx("ctx", $ctx);
         $res->status(404);
         $fn = $this->fn;
-        yield $fn($ctx);
-        yield $ctx;
+
+        // 异常处理有问题
+        try {
+            yield $fn($ctx);
+        } catch (\Exception $ex) {
+            yield $this->handleError($ctx, $ex);
+        } finally {
+            yield $ctx;
+        }
     }
 
+    /**
+     * @param Context|null $ctx
+     * @param \Exception|null $ex
+     */
     public function handleResponse(Context $ctx, \Exception $ex = null)
     {
         if ($ex) {
-            $this->handleError($ctx, $ex);
+            assert(false);
         } else {
+            assert($ctx instanceof Context);
             $this->respond($ctx);
         }
     }
 
     public function handleError(Context $ctx, \Exception $ex = null)
     {
-        sys_echo($ex);
-        if ($onerror = $ctx->onerror) $onerror($ex);
+        sys_error($ex);
+        // $ctx->status = 500;
+        if ($onerror = $ctx->onerror) {
+            try { yield $onerror($ex); } catch (\Exception $ex) { sys_error($ex); }
+        }
     }
 
     public function respond(Context $ctx)
     {
         if ($ctx->respond === false) return;
 
-        $res = $ctx->res;
-        $body = $ctx->body;
-        $code = $ctx->status;
-
-        // TODO Status::empty($code) ...
-
-        if ($code !== null) {
-            $res->status($code);
+        if ($ctx->status !== null) {
+            $ctx->res->status($ctx->status);
         }
 
-        if ($body !== null) {
-            if (is_array($body)) {
-                $body = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $res->header("Content-Type", "application/json");
-            }
-            $res->write($body);
+        if ($ctx->body !== null) {
+            $ctx->res->write($ctx->body);
         }
-        $res->end();
+
+        $ctx->res->end();
     }
 
     private function createContext(\swoole_http_request $req, \swoole_http_response $res)

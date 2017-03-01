@@ -39,8 +39,6 @@ function compose(array $middleware)
     };
 }
 
-
-
 function noop()
 {
     yield;
@@ -48,13 +46,13 @@ function noop()
 
 function sys_echo($context) {
     // $_SERVER 会被swoole setglobal 清空, 这里用 $_ENV
-    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : -1;
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : "";
     $time = date("Y-m-d H:i:s", time());
     echo "[$time #$workerId] $context\n";
 }
 
 function sys_error($context) {
-    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : -1;
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : "";
     $time = date("Y-m-d H:i:s", time());
     fprintf(STDERR, "[$time #$workerId] $context\n");
 }
