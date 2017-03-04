@@ -47,6 +47,7 @@ namespace Minimalism\A\Server\Http;
  * @method bool write(string $content)
  * @method bool end(string $content = null)
  * @method bool sendfile(string $filename, int $offset = null)
+ * @method bool render(string $file)
  *
  * @method void redirect(string $url, int $status = 302)
  */
@@ -69,9 +70,6 @@ class Context
 
     // TODO
     public $state = [];
-
-    /** @var callable onerror(\Exception $ex) */
-    public $onerror;
 
     /** @var bool */
     public $respond = true;

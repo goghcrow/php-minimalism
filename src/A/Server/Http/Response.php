@@ -7,6 +7,8 @@
  */
 
 namespace Minimalism\A\Server\Http;
+use function Minimalism\A\Client\async_read;
+use Minimalism\A\Server\Http\Tool\Template;
 
 
 /**
@@ -93,5 +95,10 @@ class Response
         $this->res->header("Content-Type", "text/plain; charset=utf-8");
         $this->ctx->status = $status;
         $this->ctx->body = "Redirecting to $url.";
+    }
+
+    public function render($file)
+    {
+        $this->ctx->body = (yield Template::render($file, $this->ctx->state));
     }
 }

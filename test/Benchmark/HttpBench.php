@@ -27,7 +27,8 @@ class HttpBench extends HttpTestPlan
     {
         $req = new HttpRequest();
         $req->method = "GET";
-        $req->uri = "/lookup?topic=zan_mqworker_test";
+         $req->uri = "/lookup?topic=zan_mqworker_test";
+//        $req->uri = "/";
         // $req->headers = [];
         return $req;
     }
@@ -38,7 +39,8 @@ class HttpBench extends HttpTestPlan
      */
     public function config()
     {
-        $conf = new Config("10.9.6.49", 4161);
+        // $conf = new Config("10.9.6.49", 4161);
+        $conf = new Config("127.0.0.1", 3000);
         $conf->concurrency = 200;
         $conf->requests = null;
         $conf->label = "http-bench";

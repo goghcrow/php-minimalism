@@ -74,7 +74,6 @@ async(function() {
 }, null, ["hello" => "world"]);
 
 
-
 // example
 async(function() {
     yield await(function() {

@@ -26,7 +26,9 @@ class Application
      * @var \swoole_http_server
      */
     public $httpServer;
+
     public $context;
+
     public $middleware = [];
 
     public $fn;
@@ -76,31 +78,32 @@ class Application
 
     public function listen($port = 8000, array $config = [])
     {
-        $config = ['port' => $port] + $config + $this->defaultConfig();
+        $this->fn = compose($this->middleware);
 
+        $config = ['port' => $port] + $config + $this->defaultConfig();
         $flag = $config['ssl'] ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;
         $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, $flag);
         $this->httpServer->set($config);
         $this->httpServer->setglobal(HTTP_GLOBAL_ALL, HTTP_GLOBAL_GET | HTTP_GLOBAL_POST | HTTP_GLOBAL_COOKIE);
+        $this->bindEvent();
+        $this->httpServer->start();
+    }
 
+    protected function bindEvent()
+    {
         $this->httpServer->on('start', [$this, 'onStart']);
         $this->httpServer->on('shutdown', [$this, 'onShutdown']);
+        $this->httpServer->on('connect', [$this, 'onConnect']);
+        $this->httpServer->on('close', [$this, 'onClose']);
 
         $this->httpServer->on('workerStart', [$this, 'onWorkerStart']);
         $this->httpServer->on('workerStop', [$this, 'onWorkerStop']);
         $this->httpServer->on('workerError', [$this, 'onWorkerError']);
-
-        $this->httpServer->on('connect', [$this, 'onConnect']);
         $this->httpServer->on('request', [$this, 'onRequest']);
-        $this->httpServer->on('close', [$this, 'onClose']);
 
-        $sock = $this->httpServer->getSocket();
-        if (!socket_set_option($sock, SOL_SOCKET, SO_REUSEADDR, 1)) {
-            sys_error("Unable to set option on socket: " . socket_strerror(socket_last_error()));
-        }
-
-        $this->fn = compose($this->middleware);
-        $this->httpServer->start();
+        // output buffer overflow, reactor will block, dont wait
+        \swoole_async_set(["socket_dontwait" => 1]);
+        socket_set_option($this->httpServer->getSocket(), SOL_SOCKET, SO_REUSEADDR, 1);
     }
 
     public function onConnect(\swoole_http_server $httpServer)
@@ -141,52 +144,36 @@ class Application
 
     public function onRequest(\swoole_http_request $req, \swoole_http_response $res)
     {
-        async($this->handleRequest($req, $res), [$this, 'handleResponse']);
-    }
-
-    public function handleRequest(\swoole_http_request $req, \swoole_http_response $res)
-    {
         $ctx = $this->createContext($req, $res);
-        yield setCtx("ctx", $ctx);
-        $res->status(404);
-        $fn = $this->fn;
+        $reqHandler = $this->makeRequestHandler($ctx);
+        $resHandler = $this->makeResponseHandler($ctx);
+        async($reqHandler, $resHandler);
+    }
 
-        // 异常处理有问题
-        try {
+    protected function makeRequestHandler(Context $ctx)
+    {
+        return function() use($ctx) {
+            yield setCtx("ctx", $ctx);
+            $ctx->res->status(404);
+            $fn = $this->fn;
             yield $fn($ctx);
-        } catch (\Exception $ex) {
-            yield $this->handleError($ctx, $ex);
-        } finally {
-            yield $ctx;
-        }
+        };
     }
 
-    /**
-     * @param Context|null $ctx
-     * @param \Exception|null $ex
-     */
-    public function handleResponse(Context $ctx, \Exception $ex = null)
+    protected function makeResponseHandler(Context $ctx)
     {
-        if ($ex) {
-            assert(false);
-        } else {
-            assert($ctx instanceof Context);
-            $this->respond($ctx);
-        }
+        return function($r = null, \Exception $ex = null) use($ctx) {
+            if ($ex) {
+                $this->handleError($ctx, $ex);
+            } else {
+                $this->respond($ctx);
+            }
+        };
     }
 
-    public function handleError(Context $ctx, \Exception $ex = null)
+    protected function respond(Context $ctx)
     {
-        sys_error($ex);
-        // $ctx->status = 500;
-        if ($onerror = $ctx->onerror) {
-            try { yield $onerror($ex); } catch (\Exception $ex) { sys_error($ex); }
-        }
-    }
-
-    public function respond(Context $ctx)
-    {
-        if ($ctx->respond === false) return;
+        if ($ctx->respond === false) return; // for hacker
 
         if ($ctx->status !== null) {
             $ctx->res->status($ctx->status);
@@ -199,7 +186,15 @@ class Application
         $ctx->res->end();
     }
 
-    private function createContext(\swoole_http_request $req, \swoole_http_response $res)
+    protected function handleError(Context $ctx, \Exception $ex)
+    {
+        // sys_error($ex); 默认输出异常 自行添加 ExceptionHandler middleware
+        $ctx->res->status(500);
+        $ctx->res->write("<pre>" . $ex->__toString() . "</pre>");
+        $ctx->res->end();
+    }
+
+    protected function createContext(\swoole_http_request $req, \swoole_http_response $res)
     {
         // 可以在Context挂其他组件 $app->com = ; $app->listen();
         $context = clone $this->context;

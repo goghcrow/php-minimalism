@@ -15,6 +15,11 @@ namespace Minimalism\A\Server\Http;
  */
 function compose(array $middleware)
 {
+    /**
+     * @param Context $ctx
+     * @param \Generator $next
+     * @return \Generator
+     */
     return function(Context $ctx = null, $next = null) use($middleware) {
         if ($ctx === null) {
             $ctx = new Context();
@@ -32,6 +37,7 @@ function compose(array $middleware)
                 $curr = $middleware[$i];
             }
             assert(is_callable($curr));
+
             $next = $curr($ctx, $next);
         }
 

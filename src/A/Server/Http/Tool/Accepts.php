@@ -18,9 +18,9 @@ class Accepts
 
     public function type(...$types)
     {
-        "accept";
-        "accept_encoding";
-        "accept_language";
+//        "accept";
+//        "accept_encoding";
+//        "accept_language";
     }
 
     public function encoding()

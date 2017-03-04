@@ -15,23 +15,13 @@ use Minimalism\A\Core\Exception\CancelTaskException;
 /**
  * \Generator 执行器
  * 执行 function() {} :\Generator 或者 \Generator
- * @param \Generator|callable $task
+ * @param mixed $task
  * @param callable|null $continuation
  * @param array $ctx Context 可以附加在 \Generator 对象的属性上
  */
 function async($task, callable $continuation = null, array $ctx = [])
 {
-    if (is_callable($task)) {
-        $task = $task();
-    }
-    assert($task instanceof \Generator);
-
-    if ($ctx) {
-        foreach ($ctx as $k => $v) {
-            $task->$k = $v;
-        }
-    }
-    (new AsyncTask($task))->start($continuation);
+    (new AsyncTask($task))->start($continuation, $ctx);
 }
 
 /**

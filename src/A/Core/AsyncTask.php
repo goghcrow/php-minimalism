@@ -12,6 +12,7 @@ use Minimalism\A\Core\Exception\CancelTaskException;
 
 /**
  * Class AsyncTask
+ * yield实现的半协程递归调度器
  *
  * @author xiaofeng
  *
@@ -36,24 +37,52 @@ use Minimalism\A\Core\Exception\CancelTaskException;
 final class AsyncTask implements IAsync
 {
     private $isfirst = true;
+
     public $generator;
+    public $args;
 
     public $continuation;
     public $parent;
 
-    public function __construct(\Generator $generator, AsyncTask $parent = null)
+    /**
+     * AsyncTask constructor.
+     * @param mixed $generator
+     * @param AsyncTask|null $parent
+     * @param array $args
+     */
+    public function __construct($generator, AsyncTask $parent = null, ...$args)
     {
         $this->generator = $generator;
+        $this->args = $args;
         $this->parent = $parent;
     }
 
     /**
      * @param callable|null $continuation function($r, \Throwable|\Exception $ex) { }
+     * @param array $ctx
      */
-    public function start(callable $continuation = null)
+    public function start(callable $continuation = null, array $ctx = [])
     {
-        $this->continuation = $continuation;
-        $this->next();
+        if (is_callable($this->generator)) {
+            $gen = $this->generator;
+            try {
+                $this->generator = $gen(...$this->args);
+            } catch (\Exception $ex) {
+                $continuation(null, $ex);
+                return;
+            }
+        }
+
+        if ($this->generator instanceof \Generator) {
+            foreach ($ctx as $k => $v) {
+                $this->generator->$k = $v;
+            }
+
+            $this->continuation = $continuation;
+            $this->next();
+        } else {
+            $continuation($this->generator, null);
+        }
     }
 
     /**
@@ -70,6 +99,7 @@ final class AsyncTask implements IAsync
         try {
             if ($ex) {
                 $value = $this->generator->throw($ex);
+                $ex = null;
             } else {
                 if ($this->isfirst) {
                     $this->isfirst = false;

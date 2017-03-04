@@ -31,7 +31,16 @@ class Favicon implements Middleware
                 $ctx->header('Allow', 'GET, HEAD, OPTIONS');
             } else {
                 $ctx->status = 200;
-                $ctx->body = new StaticFile($ctx, $this->path, "image/x-icon");
+                $ctx->type = "image/x-icon"; // swoole sendfile 必须手动指定 content-type
+                $ctx->header("Cache-Control", "public, max-age=86400000");
+                if (is_readable($this->path)) {
+                    $ctx->status = 200;
+                    $ctx->sendfile($this->path);
+                } else {
+                    $ctx->status = 404;
+                }
+                $ctx->body = null;
+                // $ctx->body = new StaticFile($ctx, $this->path, "image/x-icon");
             }
         } else {
             yield $next;
