@@ -37,7 +37,7 @@ class ExceptionHandler implements Middleware
                 $ctx->status = 200;
                 $ctx->body = [
                     "code" => $code,
-                    "msg" => $msg === null ? "网络错误" : $msg,
+                    "msg" => $msg === null ? "Internal Error" : $msg,
                 ];
             } else {
                 $ctx->status = $code;

@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 
-use function Minimalism\A\Client\async_dns_loohup;
+use function Minimalism\A\Client\async_dns_lookup;
 use Minimalism\A\Client\AsyncTcpClient;
 use function Minimalism\A\Core\async;
 
@@ -20,7 +20,7 @@ async(function() {
     start:
     try {
         $cli = new AsyncTcpClient();
-        $ip = (yield async_dns_loohup("www.baidu.com"));
+        $ip = (yield async_dns_lookup("www.baidu.com"));
         yield $cli->connect($ip, 80);
 
         loop:

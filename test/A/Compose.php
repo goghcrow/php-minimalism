@@ -10,6 +10,7 @@ use function Minimalism\A\Core\async;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Server\Http\compose;
 use Minimalism\A\Server\Http\Context;
+use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -40,17 +41,30 @@ async(function() {
 });
 
 
+
 echo "\n";
 
+
+class MockRes
+{
+    public function render() {
+        // var_dump(func_get_args());
+    }
+}
+
+$ctx = new Context();
+$ctx->response = new MockRes();
+
 // 异常透传, 终止执行
-async(function() {
+async(function()  use($ctx) {
+
     yield await(compose([
         function($ctx, $next) {
             echo "{ ";
             yield $next;
             echo " }";
         },
-        new \Minimalism\A\Server\Http\Middleware\ExceptionHandler(function($ex) {}),
+        new ExceptionHandler(function($ex) {}),
         function($ctx, $next) {
             echo "[ ";
             yield $next;
@@ -62,15 +76,14 @@ async(function() {
             yield $next;
             echo ") ";
         }
-    ]));
+    ]), $ctx);
 });
-
 
 echo "\n";
 
 // 可通过try catch 保证某个过滤器一下的异常不会继续向上透传
 // 异常截获
-async(function() {
+async(function() use($ctx) {
     yield await(compose([
         function($ctx, $next) {
             echo "{ ";
@@ -92,5 +105,5 @@ async(function() {
             yield $next;
             echo ") ";
         }
-    ]));
+    ]), $ctx);
 });

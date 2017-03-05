@@ -11,36 +11,134 @@ namespace Minimalism\A\Core;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
-
-/**
- * \Generator 执行器
- * 执行 function() {} :\Generator 或者 \Generator
- * @param mixed $task
- * @param callable|null $continuation
- * @param array $ctx Context 可以附加在 \Generator 对象的属性上
- */
-function async($task, callable $continuation = null, array $ctx = [])
+function noop()
 {
-    (new AsyncTask($task))->start($continuation, $ctx);
+
 }
 
 /**
- * php 7 可以使用立即执行函数表达式 function() {} ()
- * for php 5.x coroutine(function() {});
+ * 执行异步任务
  *
- * @param callable $task
- * @param array ...$args
- * @return mixed
+ * @param \Generator|callable|mixed $task
+ * @param callable $continuation function($r = null, $ex = null) {}
+ * @param AsyncTask $parent
+ * @param array $ctx Context可以附加在 \Generator 对象的属性上
+ *
+ * 说明:
+ *  第一个参数为task
+ *  对于其余参数
+ *      如果参数类型 callable 则参数被设置为 Continuation
+ *      如果参数类型 AsyncTask 则参数被设置为 ParentTask
+ *      如果参数类型 array 则参数被设置为 Context
+ *
+ *      由于先检查 callable 再检查 is_array, 所以如果 continuation 以 array 形式传递,
+ *      且同时传递了 array 类型的 ctx, 则 continuation 参数顺序要前置于 ctx 参数
+ *      array 类型的 ctx 不能构成 callable
+ *
+ * @example
+ *
+ * async($task); // 只传递 task, task instanceof \Generator
+ * async(function() { yield; }); // 只传递 task, task = call(callable)
+ * async(mixed); // 只传递 task
+ *
+ * async(mixed $task, callable $continuation) // 传递 continuation
+ * async(mixed $task, AsyncTask $parent) // 传递 parentTask
+ * async(mixed $task, array $ctx) // 传递 context
+ *
+ * async(mixed $task, callable $continuation, AsyncTask $parent) // 同时传递 continuation 与 parentTask
+ * async(mixed $task, AsyncTask $parent, callable $continuation) // 同时传递 continuation 与 parentTask
+ *
+ * async(mixed $task, AsyncTask $parent, array $ctx) // 同时传递 parentTask 与 ctx
+ * async(mixed $task, array $ctx, AsyncTask $parent) // 同时传递 parentTask 与 ctx
+ *
+ * async(mixed $task, callable $continuation,, array $ctx) // 同时传递 continuation 与 ctx
+ *
+ * async(mixed $task, callable $continuation, AsyncTask $parent, array $ctx) // 同时传递
+ * async(mixed $task, callable $continuation, array $ctx, AsyncTask $parent) // 同时传递
+ * async(mixed $task, AsyncTask $parent, callable $continuation, array $ctx) // 同时传递
  */
-function await(callable $task, ...$args)
+function async()
 {
-    $g = $task(...$args);
-    assert($g instanceof \Generator);
-    return $g;
+    $n = func_num_args();
+    if ($n === 0) {
+        return;
+    }
+
+    // 1. 匹配参数类型, 兼容参数传递顺序
+
+    $task = func_get_arg(0);
+    $continuation = __NAMESPACE__ . "\\noop";
+    $parent = null;
+    $ctx = [];
+
+    for ($i = 1; $i < $n; $i++) {
+        $arg = func_get_arg($i);
+        if (is_callable($arg)) {
+            $continuation = $arg;
+        } else if ($arg instanceof AsyncTask) {
+            $parent = $arg;
+        } else if (is_array($arg)) {
+            $ctx = $arg;
+        } else {
+            // ignore
+        }
+    }
+
+    // 2. 兼容 task 类型
+
+    // 如果为callable, 则直接执行, 发生异常 通过 continuation 传递出去
+    if (is_callable($task)) {
+        try {
+            // 为了参数传递方便, 牺牲了对 task 是 callable 的args支持
+            $task = $task(/* ...$args*/);
+        } catch (\Exception $ex) {
+            $continuation(null, $ex);
+            return;
+        }
+    }
+
+    // 如果为\Generator, 添加ctx, 转为异步执行执行
+    if ($task instanceof \Generator) {
+        foreach ($ctx as $k => $v) {
+            $task->$k = $v;
+        }
+        (new AsyncTask($task, $parent))->start($continuation);
+    } else {
+        // 如果为其余类型, 直接通过 Continuation 返回
+        $continuation($task, null);
+    }
 }
 
+
+
 /**
- * call/cc
+ * @param callable|IAsync|\Generator $task
+ * @param array ...$args
+ * @return \Generator
+ *
+ * 1. convert callable to \Generator
+ * 2. convert IAsync to \Generator
+ */
+function await($task, ...$args)
+{
+    if ($task instanceof IAsync) {
+        $async = $task;
+        $task = function() use($async) {
+            yield $async;
+        };
+    }
+
+    if (is_callable($task)) {
+        $task = $task(...$args);
+    }
+
+    return $task;
+}
+
+
+
+/**
+ * 仅能够处理半协程的 call/cc
  *
  * call-with-current-continuation
  *
@@ -73,6 +171,9 @@ function await(callable $task, ...$args)
  *      });
  * }));
  * ```
+ *
+ * 超时其实可以去掉
+ * 用race可以更干净的实现超时
  */
 function callcc(callable $fun, $timeout = 0)
 {
@@ -81,6 +182,8 @@ function callcc(callable $fun, $timeout = 0)
     }
     return new CallCC($fun);
 }
+
+
 
 /**
  * 取消任务
@@ -93,8 +196,10 @@ function cancelTask()
     });
 }
 
+
+
 /**
- * 设置上下文
+ * 跨父子AsyncTask设置上下文
  * @param string $key
  * @param mixed $default
  * @return Syscall
@@ -111,8 +216,10 @@ function getCtx($key, $default = null)
     });
 }
 
+
+
 /**
- * 获取上下文
+ * 跨父子AsyncTask获取上下文
  * @param string $key
  * @param mixed $val
  * @return Syscall
@@ -126,28 +233,67 @@ function setCtx($key, $val)
 }
 
 /**
- * 并行任务
+ * Promise.all, parallel
  * @param \Generator[] $tasks
  * @return Syscall
- *
- * @example
  */
 function awaitAll(array $tasks)
 {
+    foreach ($tasks as &$task) {
+        $task = await($task);
+    }
+    unset($task);
+
     return new Syscall(function(AsyncTask $parent) use($tasks) {
         if (empty($tasks)) {
             return null;
         } else {
-            foreach ($tasks as &$task) {
-                if (is_callable($task)) {
-                    $task = $task();
-                }
-                assert($task instanceof \Generator);
-            }
-            unset($task);
             return new All($tasks, $parent);
         }
     });
+}
+
+/**
+ * Promise.race, any
+ * @param array $tasks
+ * @return Syscall
+ */
+function awaitAny(array $tasks)
+{
+    foreach ($tasks as &$task) {
+        $task = await($task);
+    }
+    unset($task);
+
+    return new Syscall(function(AsyncTask $parent) use($tasks) {
+        if (empty($tasks)) {
+            return null;
+        } else {
+            return new Any($tasks, $parent);
+        }
+    });
+}
+
+
+/**
+ * Promise.all
+ * @param array $tasks
+ * @return Syscall
+ */
+function all(array $tasks)
+{
+    return awaitAll($tasks);
+}
+
+
+/**
+ * Promise.race
+ * @param array $tasks
+ * @return Syscall
+ */
+function race(array $tasks)
+{
+    return awaitAny($tasks);
 }
 
 /**
@@ -179,7 +325,6 @@ function thunkify(callable $fun, ...$args)
         return $fun(...$args);
     };
 }
-
 
 /**
  * @internal
@@ -213,20 +358,3 @@ function _timeout(callable $fun, $timeout)
         });
     };
 }
-
-/**
- * @internal
- * @param $k
- * @param $n
- * @return \Closure
- */
-//function _kargn($k, $n = -1)
-//{
-//    return function() use($n, $k) {
-//        if ($n === -1) {
-//            return $k();
-//        } else {
-//            return $k(func_get_arg($n));
-//        }
-//    };
-//}

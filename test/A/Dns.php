@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 
-use function Minimalism\A\Client\async_dns_loohup;
+use function Minimalism\A\Client\async_dns_lookup;
 use function Minimalism\A\Core\async;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 
@@ -17,13 +17,12 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 async(function() {
     try {
-        yield async_dns_loohup("www.baidu.com", 1);
+        yield async_dns_lookup("www.baidu.com", 1);
     } catch (AsyncTimeoutException $e) {
-        echo $e;
     }
+    assert($e instanceof  AsyncTimeoutException);
 
-    echo "\n";
-    $ip = (yield async_dns_loohup("www.baidu.com", 100));
-    echo $ip;
+    $ip = (yield async_dns_lookup("www.baidu.com", 100));
+    assert(ip2long($ip));
 });
 

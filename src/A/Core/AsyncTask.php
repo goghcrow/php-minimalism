@@ -30,59 +30,35 @@ use Minimalism\A\Core\Exception\CancelTaskException;
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
  * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
- * 7. 递归实现, 避免循环yield, 会占用大量内存
- *    其实 \SplStack 实现也无法避免该问题, 某些情况 \SplStack 同样会膨胀
- *    因为 stack 都在堆上~ 最后都会导致 Fatal error: Allowed memory size ...
+ * 7. 递归实现, 避免在大循环内部yield, 会占用大量内存
+ *    \SplStack 实际上也无法避免该为题, 无非一个内存暂用发生在zend vm栈上, 一个发生在\SplStack上
  */
 final class AsyncTask implements IAsync
 {
     private $isfirst = true;
 
-    public $generator;
-    public $args;
-
-    public $continuation;
     public $parent;
+    public $generator;
+    public $continuation;
 
     /**
      * AsyncTask constructor.
-     * @param mixed $generator
+     * @param \Generator $generator
      * @param AsyncTask|null $parent
-     * @param array $args
      */
-    public function __construct($generator, AsyncTask $parent = null, ...$args)
+    public function __construct(\Generator $generator, AsyncTask $parent = null)
     {
         $this->generator = $generator;
-        $this->args = $args;
         $this->parent = $parent;
     }
 
     /**
-     * @param callable|null $continuation function($r, \Throwable|\Exception $ex) { }
-     * @param array $ctx
+     * @param callable|null $continuation function($r, $ex = null) { }
      */
-    public function start(callable $continuation = null, array $ctx = [])
+    public function start(callable $continuation = null)
     {
-        if (is_callable($this->generator)) {
-            $gen = $this->generator;
-            try {
-                $this->generator = $gen(...$this->args);
-            } catch (\Exception $ex) {
-                $continuation(null, $ex);
-                return;
-            }
-        }
-
-        if ($this->generator instanceof \Generator) {
-            foreach ($ctx as $k => $v) {
-                $this->generator->$k = $v;
-            }
-
-            $this->continuation = $continuation;
-            $this->next();
-        } else {
-            $continuation($this->generator, null);
-        }
+        $this->continuation = $continuation;
+        $this->next();
     }
 
     /**

@@ -8,10 +8,15 @@
 
 namespace Minimalism\A\Server\Http\Tool;
 
-
-//var_dump(token_name(314));exit;
 use function Minimalism\A\Client\async_read;
 
+/**
+ * Class Template
+ * @package Minimalism\A\Server\Http\Tool
+ *
+ * 重写代码, 使用eval执行
+ * 适用于swoole 长生命周期模板渲染工具
+ */
 class Template
 {
     public $file;
@@ -53,6 +58,7 @@ class Template
         }
 
         extract($ctx, EXTR_SKIP);
+        // TODO eval 安全性与错误处理
         yield eval($this->code);
     }
 
@@ -62,9 +68,11 @@ class Template
      */
     public static function compile($source)
     {
-        // TODO 处理
+        // TODO 处理更多T_*
+        // TODO 检查危险函数调用token
 
         $code = "ob_start();";
+
         // @see http://php.net/manual/en/function.token-get-all.php
         // Each individual token identifier is either a single character (i.e.: ;, ., >, !, etc...),
         // or a three element array containing the token index in element 0,

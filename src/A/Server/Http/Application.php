@@ -11,6 +11,7 @@ namespace Minimalism\A\Server\Http;
 
 use function Minimalism\A\Core\async;
 use function Minimalism\A\Core\setCtx;
+use Minimalism\Event\EventEmitter;
 
 /**
  * Class Application
@@ -19,8 +20,13 @@ use function Minimalism\A\Core\setCtx;
  * @see http://koajs.com/
  * A Koa application is an object containing an array of middleware functions
  * which are composed and executed in a stack-like manner upon request.
+ *
+ * TODO 斟酌是否继承 EventEmitter
+ * TODO 梳理错误处理
+ * TODO onFinish
+ * TODO Timeout Middleware
  */
-class Application
+class Application extends EventEmitter
 {
     /**
      * @var \swoole_http_server
@@ -69,8 +75,11 @@ class Application
      * @param \Closure|callable $fn
      *      public function __invoke(Context $ctx, $next);
      * @return $this
+     *
+     * Keywords can be used as name since php7
+     * υ Greek alphabet
      */
-    public function uze(callable $fn)
+    public function υse(callable $fn)
     {
         $this->middleware[] = $fn;
         return $this;
@@ -84,7 +93,7 @@ class Application
         $flag = $config['ssl'] ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;
         $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, $flag);
         $this->httpServer->set($config);
-        $this->httpServer->setglobal(HTTP_GLOBAL_ALL, HTTP_GLOBAL_GET | HTTP_GLOBAL_POST | HTTP_GLOBAL_COOKIE);
+        // $this->httpServer->setglobal(HTTP_GLOBAL_ALL, HTTP_GLOBAL_GET | HTTP_GLOBAL_POST | HTTP_GLOBAL_COOKIE);
         $this->bindEvent();
         $this->httpServer->start();
     }
@@ -164,7 +173,9 @@ class Application
     {
         return function($r = null, \Exception $ex = null) use($ctx) {
             if ($ex) {
-                $this->handleError($ctx, $ex);
+                if ($onError = $ctx->onError) {
+                    $onError($ctx, $ex);
+                }
             } else {
                 $this->respond($ctx);
             }
@@ -186,12 +197,15 @@ class Application
         $ctx->res->end();
     }
 
-    protected function handleError(Context $ctx, \Exception $ex)
+    /**
+     * default exception Handler
+     *  可自行添加 ExceptionHandler middleware
+     * @param Context $ctx
+     * @param \Exception $ex
+     */
+    public function handleError(Context $ctx, \Exception $ex)
     {
-        // sys_error($ex); 默认输出异常 自行添加 ExceptionHandler middleware
-        $ctx->res->status(500);
-        $ctx->res->write("<pre>" . $ex->__toString() . "</pre>");
-        $ctx->res->end();
+        sys_error($ex);
     }
 
     protected function createContext(\swoole_http_request $req, \swoole_http_response $res)

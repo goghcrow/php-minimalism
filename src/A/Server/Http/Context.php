@@ -68,6 +68,11 @@ class Context
     /** @var \swoole_http_response */
     public $res;
 
+    /**
+     * @var callable onError(\Exception $ex)
+     */
+    public $onError;
+
     // TODO
     public $state = [];
 
@@ -84,6 +89,11 @@ class Context
     public $status;
 
     // todo public $headers ; set() ; append(); response 中一次性设置所有headers
+
+    public function __construct()
+    {
+        $this->onError = $this->getDefaultErrorHandler();
+    }
 
     public function accept(...$types)
     {
@@ -106,5 +116,38 @@ class Context
     public function __set($name, $value)
     {
         $this->response->$name = $value;
+    }
+
+    /**
+     * php7以前关键词不能用作名字
+     * thr[ο]w ο 为希腊字母 Ομικρον
+     * @see https://zh.wikipedia.org/wiki/%E5%B8%8C%E8%85%8A%E5%AD%97%E6%AF%8D
+     * @param \Exception $ex
+     */
+    public function thrοw(\Exception $ex)
+    {
+        $this->app->handleError($this, $ex);
+    }
+
+    private function getDefaultErrorHandler()
+    {
+        return function(\Exception $ex = null) {
+            if ($ex === null) {
+                return;
+            }
+
+            $this->app->handleError($this, $ex);
+
+            $code = $ex->getCode() ?: 500;
+            $this->res->status($code);
+            $this->type = "text";
+
+            // TODO
+
+            if ($code !== 404) {
+                $this->res->write("Internal Error");
+            }
+            $this->res->end();
+        };
     }
 }

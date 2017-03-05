@@ -4,64 +4,10 @@ namespace Minimalism\Test\A;
 
 use Minimalism\A\Client\AsyncSleep;
 use Minimalism\A\Core\AsyncTask;
+use function Minimalism\A\Core\await;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
 require __DIR__ . "/../../vendor/autoload.php";
-
-
-function testCtorArgs()
-{
-    $task = new AsyncTask(function($foo, $bar) {
-        return "$foo $bar";
-    }, null, "foo", "bar");
-
-    $task->start(function($r, $ex = null) {
-        assert($r === "foo bar");
-        assert($ex === null);
-    });
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    $task = new AsyncTask(function($foo, $bar) {
-        throw new \Exception("test ex");
-    }, null, "foo", "bar");
-
-    $task->start(function($r, $ex) {
-        assert($r === null);
-        assert($ex instanceof \Exception && $ex->getMessage() === "test ex");
-    });
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    $task = new AsyncTask(1);
-    $task->start(function($r, $ex = null) {
-        assert($r === 1);
-        assert($ex === null);
-    });
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    $task = new AsyncTask(function() {
-        yield M_PI;
-    });
-    $task->start(function($r, $ex = null) {
-        assert($r === M_PI);
-        assert($ex === null);
-    });
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    $task = new AsyncTask(function() {
-        yield M_PI;
-        throw new \Exception("test ex");
-    });
-    $task->start(function($r, $ex = null) {
-        assert($r === null);
-        assert($ex instanceof \Exception && $ex->getMessage() === "test ex");
-    });
-}
-testCtorArgs();
-
 
 
 ob_start();

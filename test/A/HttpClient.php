@@ -149,7 +149,7 @@ function batchTest()
     {
         async(function() {
             try {
-                $ip = (yield \Minimalism\A\Client\async_dns_loohup("www.baidu.com"));
+                $ip = (yield \Minimalism\A\Client\async_dns_lookup("www.baidu.com"));
                 $r = (yield (new AsyncHttpClient($ip, 80))
                     ->setMethod("GET")
                     ->setUri("/")

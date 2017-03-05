@@ -6,7 +6,7 @@ class EventEmitter
 {
     const ADD = "\0newListener";
     const REMOVE = "\0removeListener";
-    const ERROR = "\0error";
+    const ERROR = "error";
 
     protected $eventHandlers = [];
 

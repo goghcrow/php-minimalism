@@ -2,28 +2,24 @@
 /**
  * Created by IntelliJ IDEA.
  * User: chuxiaofeng
- * Date: 17/2/18
- * Time: 下午3:57
+ * Date: 17/3/5
+ * Time: 下午4:04
  */
 
 namespace Minimalism\A\Core;
 
 
 /**
- * Class All
- * parallel tasks
+ * Class Any
  * @package Minimalism\A\Core
  *
- * 等待所有完成（或第一个失败）
+ * 任何一个完成或失败
  */
-class All implements IAsync
+class Any implements IAsync
 {
     public $parent;
     public $tasks;
     public $continuation;
-
-    public $n;
-    public $results;
     public $done;
 
     /**
@@ -35,16 +31,17 @@ class All implements IAsync
     {
         $this->tasks = $tasks;
         $this->parent = $parent;
-        $this->n = count($tasks);
-        assert($this->n > 0);
-        $this->results = [];
+        assert(!empty($tasks));
+        $this->done = false;
     }
 
     /**
+     * 开启异步任务，立即返回，任务完成回调$continuation
      * @param callable $continuation
+     *      void(mixed $result = null, \Throwable|\Exception $ex = null)
      * @return void
      */
-    public function start(callable $continuation = null)
+    public function start(callable $continuation)
     {
         $this->continuation = $continuation;
         foreach ($this->tasks as $id => $task) {
@@ -58,21 +55,10 @@ class All implements IAsync
             if ($this->done) {
                 return;
             }
-
-            if ($ex) {
-                $this->done = true;
+            $this->done = true;
+            if ($this->continuation) {
                 $k = $this->continuation;
-                $k(null, $ex);
-                return;
-            }
-
-            $this->results[$id] = $r;
-            if (--$this->n === 0) {
-                $this->done = true;
-                if ($this->continuation) {
-                    $k = $this->continuation;
-                    $k($this->results);
-                }
+                $k($r, $ex);
             }
         };
     }

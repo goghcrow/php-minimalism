@@ -32,7 +32,7 @@ function async_sleep($ms)
     });
 }
 
-function async_dns_loohup($host, $timeo = 100)
+function async_dns_lookup($host, $timeo = 100)
 {
     return callcc(function($k) use($host) {
         $r = swoole_async_dns_lookup($host, function($host, $ip) use($k) {
@@ -44,22 +44,22 @@ function async_dns_loohup($host, $timeo = 100)
     }, $timeo);
 }
 
-function async_get($host, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+function async_curl_get($host, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
 {
-    return async_request($host, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
+    yield async_curl_request($host, $port, "GET", $uri, $headers, $cookies, $body, $timeo);
 }
 
-function async_post($ip, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+function async_curl_post($host, $port = 80, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
 {
-    return async_request($ip, $port, "POST", $uri, $headers, $cookies, $body, $timeo);
+    yield async_curl_request($host, $port, "POST", $uri, $headers, $cookies, $body, $timeo);
 }
 
-function async_request($ip, $port, $method, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
+function async_curl_request($host, $port, $method, $uri = "/", array $headers = [], array $cookies = [], $body = "", $timeo = 1000)
 {
-    return (new AsyncHttpClient($ip, $port))
+    yield (new AsyncHttpClient((yield async_dns_lookup($host)), $port))
         ->setMethod($method)
         ->setUri($uri)
-        ->setHeaders($headers)
+        ->setHeaders($headers + ["Host" => $host])
         ->setCookies($cookies)
         ->setData($body)
         ->setTimeout($timeo);

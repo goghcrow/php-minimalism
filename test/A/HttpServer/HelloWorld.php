@@ -69,7 +69,7 @@ exit;
 
 
 $app = new Application();
-$app->uze(function(Context $ctx) {
+$app->υse(function(Context $ctx) {
     $ctx->body = "Hello World";
 });
 $app->listen(3000);

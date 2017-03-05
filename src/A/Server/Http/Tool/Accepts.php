@@ -9,6 +9,11 @@
 namespace Minimalism\A\Server\Http\Tool;
 
 
+/**
+ * Class Accepts
+ * @package Minimalism\A\Server\Http\Tool
+ * 处理Http Accept
+ */
 class Accepts
 {
     public function __construct()

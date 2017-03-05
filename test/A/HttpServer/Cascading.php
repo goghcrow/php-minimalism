@@ -20,18 +20,24 @@ use function Minimalism\A\Server\Http\sys_error;
 require __DIR__ . "/../../../vendor/autoload.php";
 
 
+
+function υse()
+{
+
+}
+
+
 // TODO 实现一个超时 middleware
 
 $app = new Application();
+$app->υse(new Logger());
+$app->υse(new ResponseTime());
+$app->υse(new Favicon(__DIR__ . "/favicon.iRco"));
+$app->υse(new BodyBaking()); // 输出特定格式body
+$app->υse(new ExceptionHandler()); // 处理异常
+$app->υse(new NotFound()); // 处理404
 
-$app->uze(new Logger());
-$app->uze(new ResponseTime());
-$app->uze(new Favicon(__DIR__ . "/favicon.iRco"));
-$app->uze(new BodyBaking()); // 输出特定格式body
-$app->uze(new ExceptionHandler()); // 处理异常
-$app->uze(new NotFound()); // 处理404
-
-//$app->uze(function($ctx, $next) {
+//$app->υse(function($ctx, $next) {
 //    echo "before ex\n";
 //    throw new \Exception();
 //    // yield $next;
@@ -39,7 +45,7 @@ $app->uze(new NotFound()); // 处理404
 //    yield $next;
 //});
 
-$app->uze(function(Context $ctx) {
+$app->υse(function(Context $ctx) {
     $ctx->status = 200;
     $ctx->state["title"] = "HELLO WORLD";
     $ctx->state["time"] = date("Y-m-d H:i:s", time());;
