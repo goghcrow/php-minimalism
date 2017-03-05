@@ -8,7 +8,9 @@
 
 namespace Minimalism\A\Client;
 
+use function Minimalism\A\Core\await;
 use function Minimalism\A\Core\callcc;
+use function Minimalism\A\Core\race;
 
 /*
 function async_sleep($ms)
@@ -22,14 +24,36 @@ function async_dns($host, $timeo = 100)
 }
 */
 
+function defer(callable $fn)
+{
+    return swoole_event_defer($fn);
+}
 
 function async_sleep($ms)
 {
     return callcc(function($k) use($ms) {
         swoole_timer_after($ms, function() use($k) {
-            $k();
+            $k(null);
         });
     });
+}
+
+function async_timeout($task, $ms, \Exception $ex = null)
+{
+    $timerId = null;
+    yield race([
+        callcc(function($k) use($ms, $ex, &$timerId) {
+            $timerId = swoole_timer_after($ms, function() use($k, $ex) {
+                $k(null, $ex);
+            });
+        }),
+        function() use (&$timerId, $task){
+            yield await($task);
+            if (swoole_timer_exists($timerId)) {
+                swoole_timer_clear($timerId);
+            }
+        },
+    ]);
 }
 
 function async_dns_lookup($host, $timeo = 100)

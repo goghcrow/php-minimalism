@@ -6,7 +6,7 @@
  * Time: 下午10:15
  */
 
-namespace Minimalism\A\Server\Http\Tool;
+namespace Minimalism\A\Server\Http\Util;
 
 
 use Minimalism\A\Server\Http\Context;

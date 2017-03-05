@@ -56,6 +56,7 @@ class Any implements IAsync
                 return;
             }
             $this->done = true;
+
             if ($this->continuation) {
                 $k = $this->continuation;
                 $k($r, $ex);

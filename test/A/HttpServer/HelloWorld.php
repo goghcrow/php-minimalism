@@ -6,12 +6,101 @@
  * Time: 上午1:17
  */
 
+namespace Minimalism\Test\A\HttpServer;
+
+
 use Minimalism\A\Server\Http\Application;
 use Minimalism\A\Server\Http\Context;
 
 require __DIR__ . "/../../../vendor/autoload.php";
 
 
+//function car($pair)
+//{
+//    return $pair("car");
+//}
+//
+//function cdr($pair)
+//{
+//    return $pair("cdr");
+//}
+//
+//function cons($first, $rest)
+//{
+//    return function($cmd) use($first, $rest) {
+//        if ($cmd === "car") {
+//            return $first;
+//        } else if ($cmd === "cdr") {
+//            return $rest;
+//        }
+//        throw new \Exception();
+//    };
+//}
+//
+//
+//
+//class Pair
+//{
+//    private $a;
+//    private $b;
+//
+//    public function __construct($a, $b)
+//    {
+//        $this->a = $a;
+//        $this->b = $b;
+//    }
+//}
+//
+//
+//$list = new Pair(1, new Pair(2, new Pair(3, new Pair(4, new Pair(5, null)))));
+//function len($list)
+//{
+//    if($list->b == null){
+//        return 1;
+//    }
+//    return 1+len($list->b);
+//}
+
+//function cons($a, $b) {
+//    return [$a, $b];
+//}
+//
+//function car($pair) {
+//    return $pair[0];
+//}
+//
+//function cdr($pair) {
+//    return $pair[1];
+//}
+
+
+// $pair = cons(1, 2);
+// echo car($pair); // 1
+// echo cdr($pair); // 2
+
+
+
+//ADT;
+//interface;
+
+// 1,2,3,4,5
+//$list = cons(1, cons(2, cons(3, cons(4, cons(5, null)))));
+
+//function len($list)
+//{
+//    if (cdr($list) === null) {
+//        return 1;
+//    }
+//    return 1 + len(cdr($list));
+//}
+//
+//function at($n) {
+//
+//}
+//
+//var_dump(len($list));
+
+//exit;
 
 
 function compose(...$funs)

@@ -13,6 +13,37 @@ function β()
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
+class Proto
+{
+    public $prop;
+
+    public function __construct($prop)
+    {
+        $this->prop = $prop;
+    }
+
+    public function getClosure()
+    {
+        return function() {
+            return $this->prop;
+        };
+    }
+}
+
+$prop = new Proto("hello");
+$closure = $prop->getClosure();
+echo $closure(), "\n";
+$prop->prop = "world";
+echo $closure(), "\n";
+
+$clone = clone $prop;
+$clone->prop = "abc";
+$closure = $closure->bindTo($clone, Proto::class);
+echo $closure(), "\n";
+
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
 $obj = new \__PHP_Incomplete_Class();
 assert(is_object($obj) === false);
 

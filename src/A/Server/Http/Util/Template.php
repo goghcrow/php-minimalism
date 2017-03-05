@@ -6,13 +6,13 @@
  * Time: 下午11:35
  */
 
-namespace Minimalism\A\Server\Http\Tool;
+namespace Minimalism\A\Server\Http\Util;
 
 use function Minimalism\A\Client\async_read;
 
 /**
  * Class Template
- * @package Minimalism\A\Server\Http\Tool
+ * @package Minimalism\A\Server\Http\Util
  *
  * 重写代码, 使用eval执行
  * 适用于swoole 长生命周期模板渲染工具
@@ -25,7 +25,7 @@ class Template
 
     public static $cache;
 
-    public static function render($file, array $ctx)
+    public static function render($file, array $ctx = [])
     {
         if (!isset(static::$cache[$file])) {
             static::$cache[$file] = new static($file);

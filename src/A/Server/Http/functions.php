@@ -50,11 +50,6 @@ function noop()
     yield;
 }
 
-function defer(callable $fn)
-{
-    return swoole_event_defer($fn);
-}
-
 function sys_echo($context) {
     // $_SERVER 会被swoole setglobal 清空, 这里用 $_ENV
     $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : "";

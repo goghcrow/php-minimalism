@@ -20,11 +20,6 @@ use Minimalism\Event\EventEmitter;
  * @see http://koajs.com/
  * A Koa application is an object containing an array of middleware functions
  * which are composed and executed in a stack-like manner upon request.
- *
- * TODO 斟酌是否继承 EventEmitter
- * TODO 梳理错误处理
- * TODO onFinish
- * TODO Timeout Middleware
  */
 class Application extends EventEmitter
 {
@@ -33,11 +28,17 @@ class Application extends EventEmitter
      */
     public $httpServer;
 
+    /**
+     * proto context
+     * @var Context
+     */
     public $context;
 
     public $middleware = [];
 
     public $fn;
+
+    public $silent = true;
 
     public function __construct()
     {
@@ -109,6 +110,7 @@ class Application extends EventEmitter
         $this->httpServer->on('workerStop', [$this, 'onWorkerStop']);
         $this->httpServer->on('workerError', [$this, 'onWorkerError']);
         $this->httpServer->on('request', [$this, 'onRequest']);
+        $this->on("error", [$this, "onError"]);
 
         // output buffer overflow, reactor will block, dont wait
         \swoole_async_set(["socket_dontwait" => 1]);
@@ -151,6 +153,15 @@ class Application extends EventEmitter
         sys_error("worker error happen [workerId=$workerId, workerPid=$workerPid, exitCode=$exitCode, signalNo=$sigNo]");
     }
 
+    public function onError(Context $ctx, \Exception $ex = null)
+    {
+        if ($ex && $ex->getCode() === 404 || $this->silent) {
+            return;
+        }
+        sys_error($ctx);
+        sys_error($ex);
+    }
+
     public function onRequest(\swoole_http_request $req, \swoole_http_response $res)
     {
         $ctx = $this->createContext($req, $res);
@@ -174,7 +185,8 @@ class Application extends EventEmitter
         return function($r = null, \Exception $ex = null) use($ctx) {
             if ($ex) {
                 if ($onError = $ctx->onError) {
-                    $onError($ctx, $ex);
+                    $onError = $onError->bindTo($ctx, Context::class);
+                    $onError($ex);
                 }
             } else {
                 $this->respond($ctx);
@@ -195,17 +207,6 @@ class Application extends EventEmitter
         }
 
         $ctx->res->end();
-    }
-
-    /**
-     * default exception Handler
-     *  可自行添加 ExceptionHandler middleware
-     * @param Context $ctx
-     * @param \Exception $ex
-     */
-    public function handleError(Context $ctx, \Exception $ex)
-    {
-        sys_error($ex);
     }
 
     protected function createContext(\swoole_http_request $req, \swoole_http_response $res)

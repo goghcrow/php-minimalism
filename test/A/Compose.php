@@ -6,6 +6,8 @@
  * Time: 上午12:30
  */
 
+namespace Minimalism\Test\A;
+
 use function Minimalism\A\Core\async;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Server\Http\compose;

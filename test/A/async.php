@@ -14,15 +14,44 @@ use function Minimalism\A\Client\async_dns_lookup;
 use function Minimalism\A\Client\async_curl_get;
 use function Minimalism\A\Client\async_curl_post;
 use function Minimalism\A\Client\async_curl_request;
+use function Minimalism\A\Client\async_timeout;
+use function Minimalism\A\Client\async_timeout_clear;
 use function Minimalism\A\Core\async;
 use Minimalism\A\Core\AsyncTask;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Core\cancelTask;
 use function Minimalism\A\Core\getCtx;
+use function Minimalism\A\Core\race;
 use function Minimalism\A\Core\setCtx;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
 require __DIR__ . "/../../vendor/autoload.php";
+
+
+
+function testAsyncTimeout()
+{
+    async(function() {
+        $ex = null;
+        try {
+            yield async_timeout(function() {
+                yield async_sleep(200);
+            }, 100, new \Exception("timeout"));
+        } catch (\Exception $ex) {
+
+        }
+        assert($ex instanceof \Exception && $ex->getMessage() === "timeout");
+
+        $ex = null;
+        try {
+            yield async_timeout(function() {
+                yield async_sleep(100);
+            }, 200, new \Exception("timeout"));
+        } catch (\Exception $ex) { }
+        assert($ex === null);
+    });
+}
+testAsyncTimeout();
 
 
 function testCtorArgs()

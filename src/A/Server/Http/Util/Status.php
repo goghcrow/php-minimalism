@@ -6,7 +6,7 @@
  * Time => 下午12 =>40
  */
 
-namespace Minimalism\A\Server\Http\Tool;
+namespace Minimalism\A\Server\Http\Util;
 
 
 class Status

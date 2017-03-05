@@ -6,7 +6,7 @@
  * Time: 下午9:25
  */
 
-namespace Minimalism\A\Server\Http\Tool;
+namespace Minimalism\A\Server\Http\Util;
 
 
 /**
