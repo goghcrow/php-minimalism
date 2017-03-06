@@ -9,7 +9,7 @@
 namespace Minimalism\A\Core;
 
 
-class CallCC implements IAsync
+class CallCC implements Async
 {
     public $fun;
 

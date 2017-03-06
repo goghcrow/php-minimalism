@@ -16,7 +16,7 @@ namespace Minimalism\A\Core;
  *
  * 等待所有完成（或第一个失败）
  */
-class All implements IAsync
+class All implements Async
 {
     public $parent;
     public $tasks;

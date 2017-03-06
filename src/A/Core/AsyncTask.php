@@ -33,7 +33,7 @@ use Minimalism\A\Core\Exception\CancelTaskException;
  * 7. 递归实现, 避免在大循环内部yield, 会占用大量内存
  *    \SplStack 实际上也无法避免该为题, 无非一个内存暂用发生在zend vm栈上, 一个发生在\SplStack上
  */
-final class AsyncTask implements IAsync
+final class AsyncTask implements Async
 {
     private $isfirst = true;
 
@@ -94,7 +94,7 @@ final class AsyncTask implements IAsync
                     $value = new self($value, $this);
                 }
 
-                if ($value instanceof IAsync) {
+                if ($value instanceof Async) {
                     $value->start([$this, "next"]);
                 } else {
                     $this->next($value, null);

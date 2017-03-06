@@ -3,6 +3,7 @@ namespace Minimalism\Test\A;
 
 
 use Minimalism\A\Client\AsyncSleep;
+use function Minimalism\A\Core\async;
 use Minimalism\A\Core\AsyncTask;
 use function Minimalism\A\Core\await;
 use Minimalism\A\Core\Exception\CancelTaskException;

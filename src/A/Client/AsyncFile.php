@@ -10,9 +10,9 @@ namespace Minimalism\A\Client;
 
 
 use Minimalism\A\Client\Exception\AsyncFileException;
-use Minimalism\A\Core\IAsync;
+use Minimalism\A\Core\Async;
 
-class AsyncFile implements IAsync
+class AsyncFile implements Async
 {
     public $complete;
 

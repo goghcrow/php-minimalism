@@ -15,7 +15,7 @@ namespace Minimalism\A\Core;
  *
  * 任何一个完成或失败
  */
-class Any implements IAsync
+class Any implements Async
 {
     public $parent;
     public $tasks;

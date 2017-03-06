@@ -9,9 +9,9 @@
 namespace Minimalism\A\Client;
 
 
-use Minimalism\A\Core\IAsync;
+use Minimalism\A\Core\Async;
 
-class AsyncSleep implements IAsync
+class AsyncSleep implements Async
 {
     public $sleep;
     public $complete;

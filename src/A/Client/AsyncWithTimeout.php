@@ -10,9 +10,9 @@ namespace Minimalism\A\Client;
 
 
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
-use Minimalism\A\Core\IAsync;
+use Minimalism\A\Core\Async;
 
-abstract class AsyncWithTimeout implements IAsync
+abstract class AsyncWithTimeout implements Async
 {
     public $complete;
     public $timeout = 1000;

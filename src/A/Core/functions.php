@@ -112,7 +112,7 @@ function async()
 
 
 /**
- * @param callable|IAsync|\Generator $task
+ * @param callable|Async|\Generator $task
  * @param array ...$args
  * @return \Generator
  *
@@ -121,7 +121,7 @@ function async()
  */
 function await($task, ...$args)
 {
-    if ($task instanceof IAsync) {
+    if ($task instanceof Async) {
         $async = $task;
         $task = function() use($async) {
             yield $async;
@@ -138,16 +138,16 @@ function await($task, ...$args)
 
 
 /**
- * 仅能够处理半协程的 call/cc
- *
  * call-with-current-continuation
+ *
+ * 仅能够处理半协程的 call/cc, 比如将k本身传递出去, 没有意义, 无法任意跳转
  *
  * @param callable $fun
  *      $fun 参数会接收到continuation $k
  *      $k的签名: void fun($result = null, \Exception = null)
  *      可以抛出异常或者以同步方式返回值
  * @param null|int $timeout
- * @return IAsync 可以使用call/cc在async环境中将任务异步接口转换为同步接口
+ * @return Async 可以使用call/cc在async环境中将任务异步接口转换为同步接口
  * @example
  * 可以使用call/cc在async环境中将任务异步接口转换为同步接口
  *

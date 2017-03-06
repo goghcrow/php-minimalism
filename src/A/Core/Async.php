@@ -12,7 +12,7 @@ namespace Minimalism\A\Core;
  * CPS: Interface IAsync
  * @package Minimalism\A\Core
  */
-interface IAsync
+interface Async
 {
     /**
      * 开启异步任务，立即返回，任务完成回调$continuation
