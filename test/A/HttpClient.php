@@ -27,7 +27,7 @@ function simpleGet()
     };
 
     $task = new AsyncTask($t());
-    $task->start(function($r, $e) {
+    $task->begin(function($r, $e) {
         if ($e) {
             assert(false);
         }
@@ -55,7 +55,7 @@ function buildReq()
     };
 
     $task = new AsyncTask($buildTask());
-    $task->start(function($r, $e) {
+    $task->begin(function($r, $e) {
         if ($e) {
             assert(false);
         }
@@ -85,7 +85,7 @@ function seqReq()
     };
 
     $task = new AsyncTask($t());
-    $task->start(function($r, $e) {
+    $task->begin(function($r, $e) {
         if ($e) {
             assert(false);
             echo $e;
@@ -109,7 +109,7 @@ function testTimeout1()
     };
 
     $task = new AsyncTask($t());
-    $task->start(function($r, $e) {
+    $task->begin(function($r, $e) {
         assert($e instanceof \Exception);
     });
 }
@@ -135,7 +135,7 @@ function testTimeout2()
     };
 
     $task = new AsyncTask($t());
-    $task->start();
+    $task->begin();
 }
 
 testTimeout2();

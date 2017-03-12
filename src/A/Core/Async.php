@@ -9,7 +9,7 @@
 namespace Minimalism\A\Core;
 
 /**
- * CPS: Interface IAsync
+ * CPS: Interface Async
  * @package Minimalism\A\Core
  */
 interface Async
@@ -20,5 +20,5 @@ interface Async
      *      void(mixed $result = null, \Throwable|\Exception $ex = null)
      * @return void
      */
-    public function start(callable $continuation);
+    public function begin(callable $continuation);
 }

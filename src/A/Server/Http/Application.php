@@ -11,7 +11,7 @@ namespace Minimalism\A\Server\Http;
 
 use function Minimalism\A\Core\async;
 use function Minimalism\A\Core\setCtx;
-use Minimalism\Event\EventEmitter;
+use Minimalism\A\Server\Http\Exception\HttpException;
 
 /**
  * Class Application
@@ -21,7 +21,7 @@ use Minimalism\Event\EventEmitter;
  * A Koa application is an object containing an array of middleware functions
  * which are composed and executed in a stack-like manner upon request.
  */
-class Application extends EventEmitter
+class Application
 {
     /**
      * @var \swoole_http_server
@@ -29,7 +29,7 @@ class Application extends EventEmitter
     public $httpServer;
 
     /**
-     * proto context
+     * Prototype Context
      * @var Context
      */
     public $context;
@@ -49,20 +49,12 @@ class Application extends EventEmitter
     public function defaultConfig()
     {
         return [
-            "host" => "0.0.0.0",
-            "ssl" => false,
-            // 'ssl_cert_file' => 'path/to/server.crt',
-            // 'ssl_key_file' => 'path/to/server.key',
-
-            // 'enable_port_reuse' => true,
-
             // 'log_file' => __DIR__.'/swoole.log',
             // "user" => "www-data",
             // "group" => "www-data",
-
+            "host" => "0.0.0.0",
             "max_connection" => 10240,
             'max_request' => 100000,
-
             'dispatch_mode' => 3,
             "open_tcp_nodelay" => 1,
             "open_cpu_affinity" => 1,
@@ -88,13 +80,15 @@ class Application extends EventEmitter
 
     public function listen($port = 8000, array $config = [])
     {
-        $this->fn = compose($this->middleware);
+        $this->fn = compose(...$this->middleware);
 
         $config = ['port' => $port] + $config + $this->defaultConfig();
         $flag = $config['ssl'] ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;
+
         $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, $flag);
         $this->httpServer->set($config);
         // $this->httpServer->setglobal(HTTP_GLOBAL_ALL, HTTP_GLOBAL_GET | HTTP_GLOBAL_POST | HTTP_GLOBAL_COOKIE);
+
         $this->bindEvent();
         $this->httpServer->start();
     }
@@ -110,11 +104,9 @@ class Application extends EventEmitter
         $this->httpServer->on('workerStop', [$this, 'onWorkerStop']);
         $this->httpServer->on('workerError', [$this, 'onWorkerError']);
         $this->httpServer->on('request', [$this, 'onRequest']);
-        $this->on("error", [$this, "onError"]);
 
         // output buffer overflow, reactor will block, dont wait
         \swoole_async_set(["socket_dontwait" => 1]);
-        socket_set_option($this->httpServer->getSocket(), SOL_SOCKET, SO_REUSEADDR, 1);
     }
 
     public function onConnect(\swoole_http_server $httpServer)
@@ -153,20 +145,12 @@ class Application extends EventEmitter
         sys_error("worker error happen [workerId=$workerId, workerPid=$workerPid, exitCode=$exitCode, signalNo=$sigNo]");
     }
 
-    public function onError(Context $ctx, \Exception $ex = null)
-    {
-        if ($ex && $ex->getCode() === 404 || $this->silent) {
-            return;
-        }
-        sys_error($ctx);
-        sys_error($ex);
-    }
-
     public function onRequest(\swoole_http_request $req, \swoole_http_response $res)
     {
         $ctx = $this->createContext($req, $res);
         $reqHandler = $this->makeRequestHandler($ctx);
         $resHandler = $this->makeResponseHandler($ctx);
+        // TODO: onFinish : defer
         async($reqHandler, $resHandler);
     }
 
@@ -184,26 +168,57 @@ class Application extends EventEmitter
     {
         return function($r = null, \Exception $ex = null) use($ctx) {
             if ($ex) {
-                if ($onError = $ctx->onError) {
-                    $onError = $onError->bindTo($ctx, Context::class);
-                    $onError($ex);
-                }
+                $this->handleError($ctx, $ex);
             } else {
                 $this->respond($ctx);
             }
         };
     }
 
-    protected function respond(Context $ctx)
+    protected function handleError(Context $ctx, \Exception $ex = null)
     {
-        if ($ctx->respond === false) return; // for hacker
-
-        if ($ctx->status !== null) {
-            $ctx->res->status($ctx->status);
+        if ($ex === null) {
+            return;
         }
 
-        if ($ctx->body !== null) {
-            $ctx->res->write($ctx->body);
+        if ($ex && $ex->getCode() !== 404 && !$this->silent) {
+            sys_error($ctx);
+            sys_error($ex);
+        }
+
+        // 非 Http异常, 统一500 status, 对外显示异常code
+        // Http 异常, 自定义status, 自定义是否暴露Msg
+        $msg = $ex->getCode();
+        if ($ex instanceof HttpException) {
+            $status = $ex->status ?: 500;
+            $ctx->res->status($status);
+            if ($ex->expose) {
+                $msg = $ex->getMessage();
+            }
+        } else {
+            $ctx->res->status(500);
+        }
+
+        // force text/plain
+        $ctx->res->header("Content-Type", "text"); // TODO accepts
+        $ctx->res->write($msg);
+        $ctx->res->end();
+    }
+
+    protected function respond(Context $ctx)
+    {
+        if ($ctx->respond === false) return; // allow bypassing koa
+
+        $body = $ctx->body;
+        $code = $ctx->status;
+
+        if ($code !== null) {
+            $ctx->res->status($code);
+        }
+        // status.empty() $ctx->body = null; res->end()
+
+        if ($body !== null) {
+            $ctx->res->write($body);
         }
 
         $ctx->res->end();
@@ -211,7 +226,7 @@ class Application extends EventEmitter
 
     protected function createContext(\swoole_http_request $req, \swoole_http_response $res)
     {
-        // 可以在Context挂其他组件 $app->com = ; $app->listen();
+        // 可以在Context挂其他组件 $app->foo = bar; $app->listen();
         $context = clone $this->context;
 
         $request = $context->request = new Request($this, $context, $req, $res);

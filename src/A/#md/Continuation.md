@@ -48,4 +48,3 @@
 
 
 `yield 内部会保存vm stack`
-

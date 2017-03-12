@@ -12,12 +12,13 @@ use function Minimalism\A\Client\async_sleep;
 use Minimalism\A\Server\Http\Application;
 use Minimalism\A\Server\Http\Context;
 use Minimalism\A\Server\Http\Exception\HttpException;
-use Minimalism\A\Server\Http\Middleware\BodyBaking;
+use Minimalism\A\Server\Http\Middleware\BodyDetecter;
 use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
 use Minimalism\A\Server\Http\Middleware\Favicon;
 use Minimalism\A\Server\Http\Middleware\Logger;
 use Minimalism\A\Server\Http\Middleware\NotFound;
 use Minimalism\A\Server\Http\Middleware\ResponseTime;
+use Minimalism\A\Server\Http\Middleware\Router;
 use Minimalism\A\Server\Http\Middleware\Timeout;
 use function Minimalism\A\Server\Http\sys_echo;
 use function Minimalism\A\Server\Http\sys_error;
@@ -35,7 +36,7 @@ $app->on("error", function(Context $ctx, \Exception $ex) {
 $app->υse(new Logger());
 $app->υse(new ResponseTime());
 $app->υse(new Favicon(__DIR__ . "/favicon.iRco"));
-$app->υse(new BodyBaking()); // 输出特定格式body
+$app->υse(new BodyDetecter()); // 输出特定格式body
 $app->υse(new ExceptionHandler()); // 处理异常
 $app->υse(new NotFound()); // 处理404
 $app->υse(new Timeout(200)); // 处理请求超时, 会抛出HttpException
@@ -47,6 +48,13 @@ $app->υse(new Timeout(200)); // 处理请求超时, 会抛出HttpException
 //    echo "after ex\n";
 //    yield $next;
 //});
+
+$router = new Router();
+$router->get('/user/{id:\d+}', function(Context $ctx, $next, $vars) {
+    $ctx->body = "user={$vars['id']}";
+});
+$app->υse($router->routes());
+
 
 $app->υse(function(Context $ctx) {
 

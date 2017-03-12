@@ -41,11 +41,11 @@ class Any implements Async
      *      void(mixed $result = null, \Throwable|\Exception $ex = null)
      * @return void
      */
-    public function start(callable $continuation)
+    public function begin(callable $continuation)
     {
         $this->continuation = $continuation;
         foreach ($this->tasks as $id => $task) {
-            (new AsyncTask($task, $this->parent))->start($this->continuation($id));
+            (new AsyncTask($task, $this->parent))->begin($this->continuation($id));
         };
     }
 

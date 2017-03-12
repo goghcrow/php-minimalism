@@ -70,12 +70,6 @@ class Context
     public $res;
 
     /**
-     * allow overwrite
-     * @var callable onError(\Exception $ex)
-     */
-    public $onError;
-
-    /**
      * allow user data
      * @var array
      */
@@ -94,11 +88,6 @@ class Context
     public $status;
 
     // todo public $headers ; set() ; append(); response 中一次性设置所有headers
-
-    public function __construct()
-    {
-        $this->onError = $this->errorHandler();
-    }
 
     public function accept(...$types)
     {
@@ -141,38 +130,6 @@ class Context
         } else {
             throw new HttpException($status, $message);
         }
-    }
-
-    private function errorHandler()
-    {
-        return function(\Exception $ex = null) {
-            if ($ex === null) {
-                return;
-            }
-
-            // delegate
-            $this->app->emit("error", $this, $ex);
-
-            // TODO accepts
-            $this->type = "text"; // force text/plain
-
-            // 非 Http异常, 统一500 status, 对外显示异常code
-            // Http 异常, 自定义status, 自定义是否暴露Msg
-            $msg = $ex->getCode();
-
-            if ($ex instanceof HttpException) {
-                $status = $ex->status ?: 500;
-                $this->res->status($status);
-                if ($ex->expose) {
-                    $msg = $ex->getMessage();
-                }
-            } else {
-                $this->res->status(500);
-            }
-
-            $this->res->write($msg);
-            $this->res->end();
-        };
     }
 
     public function __toString()

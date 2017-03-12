@@ -15,7 +15,6 @@ use Minimalism\A\Server\Http\Contract\Middleware;
 
 class ResponseTime implements Middleware
 {
-
     public function __invoke(Context $ctx, $next)
     {
         $start = microtime(true);

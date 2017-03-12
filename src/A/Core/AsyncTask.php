@@ -31,7 +31,6 @@ use Minimalism\A\Core\Exception\CancelTaskException;
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
  * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
  * 7. 递归实现, 避免在大循环内部yield, 会占用大量内存
- *    \SplStack 实际上也无法避免该为题, 无非一个内存暂用发生在zend vm栈上, 一个发生在\SplStack上
  */
 final class AsyncTask implements Async
 {
@@ -55,7 +54,7 @@ final class AsyncTask implements Async
     /**
      * @param callable|null $continuation function($r, $ex = null) { }
      */
-    public function start(callable $continuation = null)
+    public function begin(callable $continuation = null)
     {
         $this->continuation = $continuation;
         $this->next();
@@ -95,7 +94,7 @@ final class AsyncTask implements Async
                 }
 
                 if ($value instanceof Async) {
-                    $value->start([$this, "next"]);
+                    $value->begin([$this, "next"]);
                 } else {
                     $this->next($value, null);
                 }

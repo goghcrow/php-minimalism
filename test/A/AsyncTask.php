@@ -34,7 +34,7 @@ function testCatchGeneralException()
     };
 
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) {
+    $atask->begin(function($r, $ex) {
         assert($r === 2);
         assert($ex === null);
         if ($ex instanceof \Exception) {
@@ -60,7 +60,7 @@ function testGeneralException()
     };
 
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) {
+    $atask->begin(function($r, $ex) {
         // 普通异常仍然会调用complete
         assert($r === null);
         assert($ex instanceof \Exception && $ex->getMessage() === "general exception");
@@ -83,7 +83,7 @@ function testCancelException()
     };
 
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) {
+    $atask->begin(function($r, $ex) {
         assert($ex instanceof CancelTaskException);
         assert($r === null);
         echo "testCancelException\tDONE\n";
@@ -115,7 +115,7 @@ function testCatchCancelException()
     };
 
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) {
+    $atask->begin(function($r, $ex) {
         assert($ex instanceof CancelTaskException);
         assert($r === null);
         echo "testCatchCancelException\tDONE\n";
@@ -145,7 +145,7 @@ function nestedTask()
 
 
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) use($nestedR) {
+    $atask->begin(function($r, $ex) use($nestedR) {
         assert($r === $nestedR);
         assert($ex === null);
         echo "nestedTask\tDONE\n";
@@ -171,7 +171,7 @@ function nestedAsyncTask()
         assert($r === $nestedR);
     };
     $atask = new AsyncTask($task());
-    $atask->start(function($r, $ex) use($nestedR) {
+    $atask->begin(function($r, $ex) use($nestedR) {
         assert($r === $nestedR);
         assert($ex === null);
         echo "nestedAsyncTask\tDONE\n";
@@ -225,6 +225,6 @@ function nestedTask2()
         // echo "nestedTask2\tDONE\n";
     };
     $task = new AsyncTask(t3());
-    $task->start($cb);
+    $task->begin($cb);
 }
 nestedTask2();

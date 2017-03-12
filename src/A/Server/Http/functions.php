@@ -13,7 +13,7 @@ namespace Minimalism\A\Server\Http;
  * @param \Closure[] ...$middleware
  * @return \Closure
  */
-function compose(array $middleware)
+function compose(...$middleware)
 {
     /**
      * @param Context $ctx

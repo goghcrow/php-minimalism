@@ -44,11 +44,11 @@ class All implements Async
      * @param callable $continuation
      * @return void
      */
-    public function start(callable $continuation = null)
+    public function begin(callable $continuation = null)
     {
         $this->continuation = $continuation;
         foreach ($this->tasks as $id => $task) {
-            (new AsyncTask($task, $this->parent))->start($this->continuation($id));
+            (new AsyncTask($task, $this->parent))->begin($this->continuation($id));
         };
     }
 

@@ -52,7 +52,7 @@ function loop()
 {
 
     $task = new AsyncTask(request());
-    $task->start(function($r, $e) {
+    $task->begin(function($r, $e) {
         // echo "r: $r\n";
         if ($e instanceof \Exception) {
             echo $e->getMessage(), "\n";

@@ -12,7 +12,7 @@ namespace Minimalism\A\Server\Http\Middleware;
 use Minimalism\A\Server\Http\Context;
 use Minimalism\A\Server\Http\Contract\Middleware;
 
-class BodyBaking implements Middleware
+class BodyDetecter implements Middleware
 {
     public function __invoke(Context $ctx, $next)
     {

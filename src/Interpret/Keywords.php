@@ -11,7 +11,7 @@ namespace Minimalism\A\Interpret;
 
 class Keywords
 {
-    const SEQ_KEYWORD = "seq";
+    const SEQ_KEYWORD = "seq"; // begin
     const FUN_KEYWORD = "fun";
     const IF_KEYWORD = "if";
     const DEF_KEYWORD = "define";

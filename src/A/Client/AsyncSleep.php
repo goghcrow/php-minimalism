@@ -21,7 +21,7 @@ class AsyncSleep implements Async
         $this->sleep = $sleep;
     }
 
-    public function start(callable $continuation)
+    public function begin(callable $continuation)
     {
         $this->complete = $continuation;
         swoole_timer_after($this->sleep, function() {

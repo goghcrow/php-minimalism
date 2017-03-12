@@ -22,7 +22,6 @@ use Minimalism\A\Server\Http\Contract\Middleware;
  */
 class NotFound implements Middleware
 {
-
     public function __invoke(Context $ctx, $next)
     {
         yield $next;

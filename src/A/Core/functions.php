@@ -102,7 +102,7 @@ function async()
         foreach ($ctx as $k => $v) {
             $task->$k = $v;
         }
-        (new AsyncTask($task, $parent))->start($continuation);
+        (new AsyncTask($task, $parent))->begin($continuation);
     } else {
         // 如果为其余类型, 直接通过 Continuation 返回
         $continuation($task, null);

@@ -8,6 +8,7 @@
 
 namespace Minimalism\A\Interpret;
 
+require_once __DIR__ . "/functions.php";
 
 // 2. TODO 程序主体 与 body 添加seq关键词
 // 3. TODO 理解call/ccc
@@ -84,12 +85,12 @@ final class Interpreter
     {
         set_error_handler(function($errno, $errstr, $errfile, $errline/*, $errcontext*/) {
             echo "[$errfile:$errline]::$errstr\n\n";
-            debug_print_backtrace();
+            debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
             exit($errno);
         });
 
         $id = function() {
-            assert(func_num_args() === 1);
+            abort(func_num_args() === 1, func_get_args());
             return func_get_arg(0);
         };
 
@@ -100,96 +101,105 @@ final class Interpreter
     /**
      * cps interp
      * @param $ast
-     * @param Scope $env
-     * @param callable $k k is the continuation
+     * @param Scope $env 数据上下文
+     * @param callable $ctx 控制流上下文 ctx is the continuation
      * @return mixed
      */
-    public function interp1($ast, Scope $env, $k)
+    public function interp1($ast, Scope $env, $ctx)
     {
         if (is_array($ast)) {
             if (empty($ast)) {
-                return $k(null);
+                return $ctx(null);
             }
 
             switch ($ast[0]) {
                 // seq 非必须，可以作为函数存在
                 case Keywords::SEQ_KEYWORD:
-                    assert(count($ast) > 1);
+                    abort(count($ast) > 1, $ast);
+                    // 多条statements, 独立作用域
                     $statements = array_slice($ast, 1);
                     $env1 = new Scope($env);
-                    return $this->interpArgs($statements, $env1, function($results) use($k) {
-                        return $k(end($results));
+                    return $this->interpArgs($statements, $env1, function($results) use($ctx) {
+                        // 返回最后一条statement值
+                        if (empty($results)) {
+                            return $ctx(null);
+                        } else {
+                            return $ctx(end($results));
+                        }
                     });
 
-                // define 也非必须，语法糖
+                // define 也非必须，语法糖, 可通λ参数进行bind
                 case Keywords::DEF_KEYWORD:
-                    assert(count($ast) === 3);
+                    abort(count($ast) === 3, $ast);
                     list(, $name, $value) = $ast;
-                    assert(is_string($name));
-                    return $this->interp1($value, $env, function($v) use($k, $name, $env) {
+                    abort(is_string($name), $name);
+                    return $this->interp1($value, $env, function($v) use($ctx, $name, $env) {
                         $env[$name] = $v;
-                        return $k(null);
+                        // define 无返回值
+                        return $ctx(null);
                     });
 
                 case Keywords::FUN_KEYWORD:
-                    assert(count($ast) === 3);
+                    abort(count($ast) === 3, $ast);
                     list(, $params, $body) = $ast;
                     if ($body === null) {
                         $body = [];
                     }
-                    return $this->interpDefun($params, $body, $env, $k);
+                    return $this->interpDefun($params, $body, $env, $ctx);
 
                 case Keywords::IF_KEYWORD:
-                    assert(count($ast) === 4);
+                    abort(count($ast) === 4, $ast);
                     list(, $test, $then, $else) = $ast;
-                    return $this->interp1($test, $env, function($v) use($then, $else, $k, $env) {
+                    return $this->interp1($test, $env, function($v) use($then, $else, $ctx, $env) {
                         if ($v) {
-                            return $this->interp1($then, $env, $k);
+                            return $this->interp1($then, $env, $ctx);
                         } else {
-                            return $this->interp1($else, $env, $k);
+                            return $this->interp1($else, $env, $ctx);
                         }
                     });
 
                 case Keywords::CALLCC_KEYWORD:
-                    assert(count($ast) === 2);
-                    $lambda = $ast[1];
-                    return $this->interp1($lambda, $env, function($fun) use($k) {
-                        // 注释
-                        $funk = function() use($k) {
-                            return function($v) use($k) {
-                                return $k($v);
+                    abort(count($ast) === 2, $ast);
+                    return $this->interp1($ast[1], $env, function($fun) use($ctx) {
+                        $fctx = function() use($ctx) {
+                            return function($v) use($ctx) {
+                                return $ctx($v);
                             };
                         };
-                        $interpBody = $fun($funk);
-                        return $interpBody($funk);
+                        // 对应函数定义, 先传递ctx
+                        $interpBody = $fun($fctx);
+                        // 执行函数, call/cc的参数是continuation
+                        return $interpBody($fctx);
                     });
 
                 case Keywords::QUOTE_KEYWORD:
-                    assert(count($ast) === 2);
-                    return $k($ast[1]);
+                    abort(count($ast) === 2, $ast);
+                    return $ctx($ast[1]);
 
                 // call
                 default:
-                    assert(count($ast) > 0);
+                    abort(count($ast) > 0, $ast);
                     $fun = $ast[0];
                     $args = array_slice($ast, 1);
-                    return $this->interpCall($fun, $args, $env, $k);
+                    return $this->interpCall($fun, $args, $env, $ctx);
 
             }
         } else if (is_string($ast)) {
             $name = $ast;
-            return $k($env[$name]);
+            // symbol lookup
+            return $ctx($env[$name]);
         } else {
-            return $k($ast);
+            return $ctx($ast);
         }
     }
 
-    private function interpDefun($params, $body, $env, $k)
+    private function interpDefun($params, $body, $env, $ctx)
     {
         // fun 在 call时候才会接收到continuation $k, 对应 $callee = $callee($k);
-        return $k(function($k) use($params, $body, $env) {
-            return function(...$args) use($params, $body, $env, $k) {
-                // call
+        return $ctx(function($ctx) use($params, $body, $env) {
+            // 函数定义实际使用了宿主语言php的函数
+            return function(...$args) use($params, $body, $env, $ctx) {
+                // call, 函数调用在独立的作用域
                 $env1 = new Scope($env);
                 if (count($args) < count($params)) {
                     // 参数不足 curry
@@ -198,24 +208,24 @@ final class Interpreter
                         $env1[$params[$pos]] = $arg;
                     }
                     $params = array_values(array_slice($params, $pos + 1));
-                    return $this->interpDefun($params, $body, $env1, $k);
+                    return $this->interpDefun($params, $body, $env1, $ctx);
                 } else {
                     foreach ($params as $pos => $param) {
                         $env1[$param] = $args[$pos];
                     }
-                    return $this->interp1($body, $env1, $k);
+                    return $this->interp1($body, $env1, $ctx);
                 }
             };
         });
     }
 
-    private function interpCall($closure, $args, $env, $k)
+    private function interpCall($closure, $args, $env, $ctx)
     {
-        return $this->interp1($closure, $env, function($callee) use($env, $k, $args) {
-            assert(is_callable($callee));
-            return $this->interpArgs($args, $env, function($args) use($k, $callee) {
+        return $this->interp1($closure, $env, function($callee) use($env, $ctx, $args) {
+            abort(is_callable($callee), $callee);
+            return $this->interpArgs($args, $env, function($args) use($ctx, $callee) {
                 // 接受延续，使用闭包保存
-                $callee = $callee($k);
+                $callee = $callee($ctx);
                 if ($args === null) {
                     return $callee();
                 } else {
@@ -225,20 +235,20 @@ final class Interpreter
         });
     }
 
-    private function interpArgs(array $args, $env, $k)
+    private function interpArgs(array $args, $env, $ctx)
     {
         if (empty($args)) {
-            return $k(null);
+            return $ctx([]);
         } else {
             $arg0 = $args[0];
             $args = array_slice($args, 1);
-            return $this->interp1($arg0, $env, function($arg0) use($args, $env, $k) {
+            return $this->interp1($arg0, $env, function($arg0) use($args, $env, $ctx) {
                 if (empty($args)) {
-                    return $k([$arg0]);
+                    return $ctx([$arg0]);
                 } else {
-                    return $this->interpArgs($args, $env, function($args) use($arg0, $k) {
+                    return $this->interpArgs($args, $env, function($args) use($arg0, $ctx) {
                         array_unshift($args, $arg0);
-                        return $k($args);
+                        return $ctx($args);
                     });
                 }
             });
@@ -257,7 +267,7 @@ final class Interpreter
             return function(...$args) use($f, $k,$arity) {
                 if ($arity !== -1) {
                     // 兼容php默认参数，允许多传递参数
-                    assert(count($args) >= $arity);
+                    abort(count($args) >= $arity, [$arity, $args]);
                 }
                 return $k($f(...$args));
             };

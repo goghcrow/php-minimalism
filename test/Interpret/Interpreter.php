@@ -16,7 +16,6 @@ require __DIR__ . "/../../src/Interpret/Keywords.php";
 require __DIR__ . "/../../src/Interpret/Scope.php";
 require __DIR__ . "/../../src/Interpret/Interpreter.php";
 
-
 function interp($ast)
 {
     return (new Interpreter())->interp($ast);
@@ -273,6 +272,38 @@ testClosure();
 
 
 
+function yinyang() {
+    $yin = ["fun", ["cc"],
+        ["seq", ["echo", ["quote", "@"]], "cc"]];
+
+    $yang = ["fun", ["cc"],
+        ["seq", ["echo", ["quote", "*"]], "cc"]];
+
+    $makecc = ["call/cc", ["fun", ["cc"], ["cc", "cc"]]];
+
+// let
+    $ast =[
+        ["fun", ["yin", "yang"], ["yin", "yang"]],
+        [$yin, $makecc],
+        [$yang, $makecc]
+    ];
+
+    interp($ast);
+}
+
+yinyang();
+exit;
+
+
+// 死循环
+//interp(["seq",
+//    ["define", "k",
+//        ["call/cc", ["fun", ["cc"], ["cc", "cc"]]]],
+//    ["echo", ["quote", "~"]],
+//    ["k", "k"]
+//]);
+
+
 /*
 $ast = [
     "seq",
@@ -288,3 +319,48 @@ $ast = [
 
 interp($ast);
 */
+
+
+//$source = <<<'SRC'
+//<?php
+//callcc(function($k) {
+//    echo 1;
+//    $k(2);
+//    echo 3;
+//});
+//SRC;
+//
+//
+//// 函数定义
+//// 函数调用
+//
+//function t($source, $node = null)
+//{
+//    $tokens = token_get_all($source);
+//    $l = count($tokens);
+//    for ($i = 0; $i < $l;) {
+//        $curr = $tokens[$i];
+//        if (is_array($curr)) {
+//            list($id, $token, $line) = $curr;
+//            switch ($token) {
+//                case T_OPEN_TAG:
+//                    break;
+//                case T_STRING:
+//                    $call = [$token, [], ['seq', ]];
+//                    if ($tokens[$i] === "(") {
+//                        $i++;
+//                    }
+//                    break;
+//                case T_VARIABLE:
+//                    if ($tokens[$i] === "(") {
+//                        $i++;
+//                    }
+//                    break;
+//            }
+//        } else {
+//
+//        }
+//    }
+//
+//}
+//exit;
