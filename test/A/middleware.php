@@ -22,28 +22,27 @@ require __DIR__ . "/../../vendor/autoload.php";
 async(function() {
     $ex = null;
     try {
-        yield await(compose([
+        yield await(compose(
             new Timeout(100, new \Exception("timeout")),
             function($ctx, $next) {
                 yield $next;
                 yield async_sleep(200);
-            },
-        ]));
+            }
+        ));
     } catch (\Exception $ex) {
 
     }
     assert($ex instanceof \Exception && $ex->getMessage() === "timeout");
 
-
     $ex = null;
     try {
-        yield await(compose([
+        yield await(compose(
             new Timeout(200, new \Exception("timeout")),
             function($ctx, $next) {
                 yield $next;
                 yield async_sleep(100);
-            },
-        ]));
+            }
+        ));
     } catch (\Exception $ex) {
 
     }

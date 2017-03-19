@@ -17,56 +17,6 @@ use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
 require __DIR__ . "/../../vendor/autoload.php";
 
 
-
-
-
-function m1($next)
-{
-    return function() use($next) {
-        echo "before m1","\n";
-        $next();
-        echo "after m1","\n";
-    };
-}
-
-function m2($next)
-{
-    return function() use($next) {
-        echo "before m2", "\n";
-        $next();
-        echo "after m2", "\n";
-    };
-}
-
-function m3($next)
-{
-    return function() use($next) {
-        echo "before m3", "\n";
-        $next();
-        echo "after m3", "\n";
-    };
-}
-
-function compose1(...$fns)
-{
-    $next = function() { echo "core\n"; };
-    $i = count($fns);
-    while ($i--) {
-        $next = $fns[$i]($next);
-    }
-    return $next;
-}
-
-$ns = __NAMESPACE__;
-$fn  = compose1("$ns\\m1", "$ns\\m2", "$ns\\m3");
-$fn();
-
-
-
-
-
-
-
 async(function() {
     $task = compose(function(Context $ctx, $next) {
         echo 1;

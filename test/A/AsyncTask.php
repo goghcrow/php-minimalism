@@ -1,4 +1,5 @@
 <?php
+
 namespace Minimalism\Test\A;
 
 
@@ -9,6 +10,29 @@ use function Minimalism\A\Core\await;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
 require __DIR__ . "/../../vendor/autoload.php";
+
+function testLastExpEx()
+{
+    $task = function() {
+        yield 1;
+        throw new \Exception("ex");
+    };
+
+    $atask = new AsyncTask($task());
+    $atask->begin(function($r, $ex) {});
+}
+testLastExpEx();
+
+
+//function testCCEx()
+//{
+//    $task = function() { yield; };
+//    $atask = new AsyncTask($task());
+//    $atask->begin(function($r, $ex) {
+//        throw new \Exception();
+//    });
+//}
+//testCCEx();
 
 
 ob_start();

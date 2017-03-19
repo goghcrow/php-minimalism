@@ -215,6 +215,31 @@ final class Socket
     }
 
     /**
+     * @param $res
+     *
+     * fd2Resource -> resource2Sock
+     * @return resource|void
+     *
+     * socket_set_option($sock, SOL_SOCKET, SO_SNDTIMEO, [
+     * "sec" => 0,
+     * "usec" => 100000, // 0.1s
+     * ]);
+     * socket_set_option($sock, SOL_SOCKET, SO_RCVTIMEO, [
+     * "sec" => 0,
+     * "usec" => 100000, // 0.1s
+     * ]);
+     */
+    public static function resource2Sock($res)
+    {
+        assert(is_resource($res));
+        $sock = socket_import_stream($res);
+        if (!$sock) {
+            throw new SocketException("fail to convert resource to socket", 500);
+        }
+        return $sock;
+    }
+
+    /**
      * @param resource $socket
      * @param array $name
      * @param \resource[] ...$sockets

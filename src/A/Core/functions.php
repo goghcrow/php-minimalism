@@ -16,6 +16,15 @@ function noop()
 
 }
 
+function trampoline(callable $f)
+{
+    $fn = $f;
+    while ($fn instanceof Trampoline) {
+        $fn = $fn();
+    }
+    return $fn;
+}
+
 /**
  * 执行异步任务
  *
@@ -109,7 +118,19 @@ function async()
     }
 }
 
+function go()
+{
+    async(...func_get_args());
+}
 
+function chan($n = 0)
+{
+    if ($n === 0) {
+        return new Channel();
+    } else {
+        return new BufferChannel($n);
+    }
+}
 
 /**
  * @param callable|Async|\Generator $task

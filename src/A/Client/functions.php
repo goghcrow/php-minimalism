@@ -26,7 +26,10 @@ function async_dns($host, $timeo = 100)
 
 function defer(callable $fn)
 {
-    return swoole_event_defer($fn);
+    // https://github.com/swoole/swoole-src/issues/600
+    // swoole_event_defer 在没有 IO 时会卡住 !!!
+    // return swoole_event_defer($fn);
+    return swoole_timer_after(1, $fn);
 }
 
 function async_sleep($ms)

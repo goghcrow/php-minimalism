@@ -22,6 +22,37 @@ https://zhuanlan.zhihu.com/p/24444262
 
 
 
+IO是相比CPU内存是最慢的，Web开发中，高性能Server最重要的处理好IO，
+IO模型与编程模型息息相关,
+""coroutine 实现的核心问题是控制流转换，""
+我们可以相对容易的实现一个半协程，归功于
+zend vm中保存stack与execute_data的工作已经由Generator实现了
+
+
+
+
+PHP没有原生的异步语义支持,
+C#很早就支持了async/await
+同步方式书写异步逻辑只能借助Coroutine
+
+coroutine如果从流程上理解是一种特殊的控制流,
+caller 
+callee 出让控制流
+call/cc
+
+
+fork()
+
+协程管理器;
+
+all
+* 多协程的调度机制
+* 协程间通信机制
+
+
+
+
+
 ### yield 可以理解成为CPS变换语法糖 !!!!!
 `任何异步编程模型，最终都是基于异步回调的`
 `异步回调本质上是 Continuation`
@@ -179,17 +210,10 @@ interface Async
 
 
 
-50行代码实现半协程调度器,特性...
-抽象AsyncTask
-代码
 
 测试
-
 compose 函数
-
 Application 函数
-
-
 级联
 
 
@@ -250,107 +274,41 @@ callback 形式异步编程模型
 
 
 
+下面让我们一步一步实现一个全功能的异步任务执行器，或者更高大尚的名字协程调度器；
+
+
+首先, 我们来分析co的接口
+
 
 ```php
 <?php
-/**
- * CPS: Interface Async
- * @package Minimalism\A\Core
- */
-interface Async
-{
-    /**
-     * 开启异步任务，立即返回，任务完成回调$continuation
-     * @param callable $continuation
-     *      void(mixed $result = null, \Throwable|\Exception $ex = null)
-     * @return void
-     */
-    public function start(callable $continuation);
-}
+co(function() {
+    yield get("http://www.google.com");
+});
 ```
 
 ```php
 <?php
-final class AsyncTask implements Async
-{
-    private $isfirst = true;
 
-    public $parent;
-    public $generator;
-    public $continuation;
-
-    /**
-     * AsyncTask constructor.
-     * @param \Generator $generator
-     * @param AsyncTask|null $parent
-     */
-    public function __construct(\Generator $generator, AsyncTask $parent = null)
-    {
-        $this->generator = $generator;
-        $this->parent = $parent;
-    }
-
-    /**
-     * @param callable|null $continuation function($r, $ex = null) { }
-     */
-    public function start(callable $continuation = null)
-    {
-        $this->continuation = $continuation;
-        $this->next();
-    }
-
-    /**
-     * @param mixed|null $result
-     * @param \Throwable|\Exception|null $ex
-     * @internal
-     */
-    public function next($result = null, $ex = null)
-    {
-        if ($ex instanceof CancelTaskException || !$this->generator->valid()) {
-            goto continuation;
-        }
-
-        try {
-            if ($ex) {
-                $value = $this->generator->throw($ex);
-                $ex = null;
-            } else {
-                if ($this->isfirst) {
-                    $this->isfirst = false;
-                    $value = $this->generator->current();
-                } else {
-                    $value = $this->generator->send($result);
-                }
-            }
-
-            if ($this->generator->valid()) {
-                if ($value instanceof Syscall) {
-                    $value = $value($this);
-                }
-
-                if ($value instanceof \Generator) {
-                    $value = new self($value, $this);
-                }
-
-                if ($value instanceof Async) {
-                    $value->begin([$this, "next"]);
-                } else {
-                    $this->next($value, null);
-                }
-            } else {
-                continuation:
-                if ($continuation = $this->continuation) {
-                    $continuation($result, $ex);
-                }
-            }
-        } catch (\Throwable $t) {
-            $this->next(null, $t);
-        } catch (\Exception $ex) {
-            $this->next(null, $ex);
-        }
-    }
-}
 ```
+
+首先, 因为我们的对\Generator进行异步迭代
+ 自身也是异步执行, 需要实现Async
+语义上接近 简陋的版本 Promise.then 与 Promise.catch
+
+
+
+首先让我们实现\Generator自动执行，我知道foreach可以，但我们需要更精确地控制
+
+
+
+
+
+TODO 修改
+所谓 Thunk 化就是将多参数函数，将其替换成单参数只接受回调函数作为唯一参数的版本 
+
+
+
 
 TODO 示例代码
 修改图 ...
@@ -392,32 +350,6 @@ B middleware1 结束
 
 
 
-
-
-koa readme !!!
-
-koa是中间件框架,中间件可以用callable与Generator表示
-参数约定 ctx, next
-
-
-+The `Context` object also provides shortcuts for methods on its `request` and `response`.  In the prior
-+examples,  `ctx.type` can be used instead of `ctx.request.type` and `ctx.accepts` can be used
-+instead of `ctx.request.accepts`.
-
-
-+Each middleware receives a Koa `Context` object that encapsulates an incoming
-+http message and the corresponding response to that message.  `ctx` is often used
-+as the parameter name for the context object.
-
-
-
-## Koa Application
-+
-+The object created when executing `new Koa()` is known as the Koa application object.
-+
-+The application object is Koa's interface with node's http server and handles the registration
-+of middleware, dispatching to the middleware from http, default error handling, as well as
-+configuration of the context, request and response objects.
 
 
 
@@ -487,3 +419,39 @@ $fn();
 ```
 
 https://llh911001.gitbooks.io/mostly-adequate-guide-chinese/content/ch5.html#函数饲养
+
+
+---------------------------------------
+
+
+关于中间件
+
+Rails 中使用的 rack middleware stack:
+cd to/your/rails/project/path
+rake middleware
+得到的内容如下:
+
+use Rack::Sendfile
+use ActionDispatch::Static
+use Rack::Lock
+use #<ActiveSupport::Cache::Strategy::LocalCache::Middleware:0x000000029a0838>
+use Rack::Runtime
+use Rack::MethodOverride
+use ActionDispatch::RequestId
+use Rails::Rack::Logger
+use ActionDispatch::ShowExceptions
+use ActionDispatch::DebugExceptions
+use ActionDispatch::RemoteIp
+use ActionDispatch::Reloader
+use ActionDispatch::Callbacks
+use ActiveRecord::Migration::CheckPending
+use ActiveRecord::ConnectionAdapters::ConnectionManagement
+use ActiveRecord::QueryCache
+use ActionDispatch::Cookies
+use ActionDispatch::Session::CookieStore
+use ActionDispatch::Flash
+use ActionDispatch::ParamsParser
+use Rack::Head
+use Rack::ConditionalGet
+use Rack::ETag
+run Rails.application.routes

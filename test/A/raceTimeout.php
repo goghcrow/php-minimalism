@@ -63,7 +63,7 @@ async(function() {
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    $timeout = timeout(100);
+    $timeout = timeoutWrapper(100);
     $dnslookup = dnslookup("www.baidu.com");
     $r = (yield race([
         $timeout,
@@ -75,7 +75,7 @@ async(function() {
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    $timeout = timeout(1);
+    $timeout = timeoutWrapper(1);
     $dnslookup = dnslookup("www.so.com");
 
     $ex = null;

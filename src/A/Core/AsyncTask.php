@@ -10,6 +10,8 @@ namespace Minimalism\A\Core;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
 
+// TODO trampoline
+
 /**
  * Class AsyncTask
  * yield实现的半协程递归调度器
@@ -26,6 +28,7 @@ use Minimalism\A\Core\Exception\CancelTaskException;
  *    如果不想通过continuation回调获取result与exception, 可以多嵌套一层, 作为子任务运行,
  *    在父任务try catch异常, 获取结果, 忽略父任务continuation回调
  * 2. 不会因为exception导致fatal error，(swoole异步回调的内的异常必须捕获, 否则Fatal Error)， 通过then回调continuation取回异常
+ * 2. continuation 中不能抛出异常 !!!
  * 3. 抛出 CancelTaskException 及其子类, 不在任务间透传, 直接终止异步任务(停止迭代), 执行continuation回调
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
@@ -51,6 +54,90 @@ final class AsyncTask implements Async
         $this->parent = $parent;
     }
 
+    // TODO 修改为trampoline实现之后，所有Async接口都需要显示return
+
+//    /**
+//     * @param callable|null $continuation function($r, $ex = null) { }
+//     */
+//    public function begin(callable $continuation = null)
+//    {
+//        $this->continuation = $continuation;
+//        $next = trampoline($this->next());
+//        if (is_callable($next)) {
+//            $next();
+//        }
+////        return $next();
+//    }
+//
+//    /**
+//     * @param mixed|null $result
+//     * @param \Throwable|\Exception|null $ex
+//     * @return Trampoline
+//     */
+//    public function next($result = null, $ex = null)
+//    {
+//        if ($ex instanceof CancelTaskException) {
+//            if ($continuation = $this->continuation) {
+//                return new Trampoline(function() use($continuation, $ex) {
+//                    return $continuation(null, $ex);
+//                });
+//            }
+//            return null; // for ide
+//        }
+//
+//        try {
+//            if ($ex) {
+//                $value = $this->generator->throw($ex);
+//            } else {
+//                if ($this->isfirst) {
+//                    $this->isfirst = false;
+//                    $value = $this->generator->current();
+//                } else {
+//                    $value = $this->generator->send($result);
+//                }
+//            }
+//
+//            if ($this->generator->valid()) {
+//                if ($value instanceof Syscall) {
+//                    $value = $value($this);
+//                }
+//
+//                if ($value instanceof \Generator) {
+//                    $value = new self($value, $this);
+//                }
+//
+//                if ($value instanceof Async) {
+//                    return new Trampoline(function() use($value) {
+//                        return $value->begin([$this, "next"]);
+//                    });
+//                } else {
+//                    return new Trampoline(function() use($value) {
+//                        return $this->next($value, null);
+//                    });
+//                }
+//            } else {
+//                if ($continuation = $this->continuation) {
+//                    return new Trampoline(function() use($continuation, $result) {
+//                        return $continuation($result, null);
+//                    });
+//                }
+//            }
+//        } catch (\Exception $ex) {
+//            if ($this->generator->valid()) {
+//                return new Trampoline(function() use($ex) {
+//                    return $this->next(null, $ex);
+//                });
+//            } else {
+//                if ($continuation = $this->continuation) {
+//                    return new Trampoline(function() use($continuation, $ex) {
+//                        return $continuation(null, $ex);
+//                    });
+//                }
+//            }
+//        }
+//        return null; // for ide
+//    }
+
     /**
      * @param callable|null $continuation function($r, $ex = null) { }
      */
@@ -67,14 +154,16 @@ final class AsyncTask implements Async
      */
     public function next($result = null, $ex = null)
     {
-        if ($ex instanceof CancelTaskException || !$this->generator->valid()) {
-            goto continuation;
+        if ($ex instanceof CancelTaskException) {
+            if ($continuation = $this->continuation) {
+                $continuation(null, $ex);
+            }
+            return;
         }
 
         try {
             if ($ex) {
                 $value = $this->generator->throw($ex);
-                $ex = null;
             } else {
                 if ($this->isfirst) {
                     $this->isfirst = false;
@@ -99,15 +188,18 @@ final class AsyncTask implements Async
                     $this->next($value, null);
                 }
             } else {
-                continuation:
                 if ($continuation = $this->continuation) {
-                    $continuation($result, $ex);
+                    $continuation($result, null);
                 }
             }
-        } catch (\Throwable $t) {
-            $this->next(null, $t);
         } catch (\Exception $ex) {
-            $this->next(null, $ex);
+            if ($this->generator->valid()) {
+                $this->next(null, $ex);
+            } else {
+                if ($continuation = $this->continuation) {
+                    $continuation(null, $ex);
+                }
+            }
         }
     }
 }

@@ -11,7 +11,7 @@ namespace Minimalism\A\Core;
 
 class Syscall
 {
-    private $fun = null;
+    private $fun;
 
     public function __construct(callable $fun)
     {

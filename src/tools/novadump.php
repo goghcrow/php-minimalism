@@ -9,12 +9,39 @@
 
 use Terminal as T;
 
+
+// TODO 抓mysql包
+
 // 实时解码tcpdump -w pcap流: pcap -> linux sll -> ip -> tcp -> nova -> thrfit
+
+$usage = <<<USAGE
+Usage: 
+    novadump --app=<应用名称> --path=<项目根路径> --filter=<tcpdump过滤表达式>
+             -s=<servicePattern> -m=<methodPattern>
+   
+    全部参数可选
+    建议 --app= 与 --path= 否则不予解开thrift包
+    -s -m 过滤函数为fnmatch
+    
+    example:
+    
+    novadump
+    novadump --app=pf-api --path=/home/www/pf-api
+    novadump --filter='tcp and host 127.0.0.1 and port 8000'
+    novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
+    novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
+             -s=com.youzan.service.* -m=getBy*
+USAGE;
 
 $self = __FILE__;
 if (isset($argv[1]) && $argv[1] === "install") {
     `chmod +x $self && cp $self /usr/local/bin/novadump`;
     exit();
+}
+
+if (isset($argv[1]) && in_array($argv[1], ["help", "-h", "--help"], true)) {
+    echo "\033[1m$usage\033[0m\n";
+    exit(1);
 }
 
 if (trim(`whoami`) !== "root") {
@@ -24,89 +51,140 @@ if (PHP_OS === "Darwin") {
     sys_abort("暂时只支持Linux");
 }
 
-$usage = <<<USAGE
-Usage: 
-    novadump --app=<应用名称> --path=<项目根路径> --filter=<tcpdump过滤表达式>
-    
-    novadump --app=pf-api --path=/home/www/pf-api
-    novadump --filter='tcp and host 127.0.0.1 and port 8000'
-    novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
-USAGE;
 
 
-$a = getopt("", ["app:", "path:", "filter:"]);
-$ok = false;
+$a = getopt("s:m:", ["app:", "path:", "filter:"]);
 if (isset($a["app"]) && isset($a["path"])) {
     $appName = $a["app"];
     $path = $a["path"];
     NovaApp::init($appName, $path);
-    $ok = true;
 }
+
+$tcpFilter = "";
+$servicePattern = null;
+$methodPattern = null;
 
 if (isset($a["filter"])) {
     // $filter = preg_split('#\s+#', $a["filter"]);
-    $filter = $a["filter"];
-    $ok = true;
+    $tcpFilter = $a["filter"];
 } else {
-    $filter = "";
+    $tcpFilter = "tcp";
 }
 
-if (!$ok) {
-    echo "\033[1m$usage\033[0m\n";
-    exit(1);
+if (isset($a["s"])) {
+    $servicePattern = $a["s"];
 }
+
+if (isset($a["m"])) {
+    $methodPattern = $a["m"];
+}
+
 
 `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
-$novadump = new NovaDump("handleNovaPacket");
-$fd = $novadump->tcpdump($filter);
+
+
+
+$filter = new NovaPacketFilter($servicePattern, $methodPattern);
+$handler = new NovaPacketHandler($filter);
+$novadump = new NovaDump($handler);
+$fd = $novadump->tcpdump($tcpFilter);
 $novadump->readLoop($fd);
 
 
-
-
-function handleNovaPacket($service, $method, $ip, $port, $seq, $attach, $thriftBin,
-                          $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr)
+class NovaPacketFilter
 {
-    $isHeartbeat = $service === "com.youzan.service.test" && ($method === "ping" || $method === "pong");
+    public $servicePattern;
+    public $methodPattern;
 
-    if ($isHeartbeat && NovaDump::$filterHeartbeat) {
-        return;
+    public function __construct($servicePattern = "", $methodPattern = "")
+    {
+        $this->servicePattern = strtolower($servicePattern);
+        $this->methodPattern = strtolower($methodPattern);
     }
 
-    $srcIp = $ip_hdr["source_ip"];
-    $dstIp = $ip_hdr["destination_ip"];
-    $srcPort = $tcp_hdr["source_port"];
-    $dstPort = $tcp_hdr["destination_port"];
-
-    $_ip = T::format($ip, T::BRIGHT);
-    $_port = T::format($port, T::BRIGHT);
-    $_seq = T::format($seq, T::BRIGHT);
-    $_service = T::format($service, T::FG_GREEN);
-    $_method = T::format($method, T::FG_GREEN);
-    $_attach = T::format($attach, T::DIM);
-
-    sys_echo("$srcIp:$srcPort > $dstIp:$dstPort, nova_ip $_ip, nova_port $_port, nova_seq $_seq");
-    sys_echo("service $_service, method $_method");
-    if ($attach) {
-        sys_echo("attach $_attach");
+    public function matchService($service)
+    {
+        return fnmatch($this->servicePattern, strtolower($service));
     }
 
-    if (!$isHeartbeat) {
-        if (NovaApp::$enable) {
-            try {
-                $args = NovaApp::decodeServiceArgs($service, $method, $thriftBin);
-                sys_echo("args " . T::format(json_encode($args), T::DIM));
-            } catch (\Exception $ex) {
-                echo $ex, "\n";
-                sys_abort("nova_decode args fail");
-            }
+    public function matchMethod($method)
+    {
+        return fnmatch($this->methodPattern, strtolower($method));
+    }
+
+    public static function isHeartbeat($service, $method)
+    {
+        return $service === "com.youzan.service.test" && ($method === "ping" || $method === "pong");
+    }
+
+    public function __invoke($service, $method)
+    {
+        $serviceMatched = $this->matchService($service);
+        $methodMatched = $this->matchMethod($method);
+
+        if ($this->servicePattern && $this->methodPattern) {
+            return $serviceMatched && $methodMatched;
+        } else if ($this->servicePattern && !$this->methodPattern) {
+            return $serviceMatched;
+        } else if (!$this->servicePattern && $this->methodPattern) {
+            return $methodMatched;
         } else {
-            Hex::dump($thriftBin, "vvv/8/6");
+            return true;
         }
     }
-    echo "\n";
 }
 
+
+class NovaPacketHandler
+{
+    public $filter;
+
+    public function __construct(callable $filter = null)
+    {
+        $this->filter = $filter;
+    }
+
+    public function __invoke($service, $method, $ip, $port, $seq, $attach, $thriftBin,
+                           $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr)
+    {
+        if ($filter = $this->filter) {
+            if ($filter($service, $method) === false) {
+                return;
+            }
+        }
+
+        $isHeartbeat = NovaPacketFilter::isHeartbeat($service, $method);
+
+        $srcIp = $ip_hdr["source_ip"];
+        $dstIp = $ip_hdr["destination_ip"];
+        $srcPort = $tcp_hdr["source_port"];
+        $dstPort = $tcp_hdr["destination_port"];
+
+        $_ip = T::format($ip, T::BRIGHT);
+        $_port = T::format($port, T::BRIGHT);
+        $_seq = T::format($seq, T::BRIGHT);
+        $_service = T::format($service, T::FG_GREEN);
+        $_method = T::format($method, T::FG_GREEN);
+        $_attach = T::format($attach, T::DIM);
+
+        sys_echo("$srcIp:$srcPort > $dstIp:$dstPort, nova_ip $_ip, nova_port $_port, nova_seq $_seq");
+        sys_echo("service $_service, method $_method");
+
+        if ($attach && $attach !== "{}") {
+            sys_echo("attach $_attach");
+        }
+
+        if (!$isHeartbeat) {
+            if (NovaApp::$enable) {
+                NovaApp::dumpThrift($service, $method, $thriftBin);
+            } else {
+                Hex::dump($thriftBin, "vvv/8/6");
+            }
+        }
+
+        echo "\n";
+    }
+}
 
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -119,8 +197,6 @@ class NovaDump
     /** @var \swoole_process  */
     public $proc;
     public $pid;
-
-    public static $filterHeartbeat = false;
 
     public function __construct(callable $novaPacketHandler)
     {
@@ -193,10 +269,56 @@ class NovaApp
         new static($appName, $appPath);
     }
 
+    public static function dumpThrift($service, $method, $thriftBin)
+    {
+        $ver = unpack('N', substr($thriftBin, 0, 4))[1];
+        $type = $ver & 0x000000ff;
+
+        // THRIFT MESSAGE TYPE
+        // CALL  = 1; REPLY = 2; EXCEPTION = 3; ONEWAY = 4;
+        if ($type === 1) {
+            try {
+                sys_echo(T::format("CALL", T::FG_YELLOW, T::BRIGHT));
+                $args = self::decodeServiceArgs($service, $method, $thriftBin);
+                sys_echo(T::format(json_encode($args), T::DIM));
+            } catch (\Exception $ex) {
+                // Hex::dump($thriftBin, "vvv/8/6");
+                // sys_error("decode thrift CALL fail");
+                sys_error($ex->getMessage());
+            }
+        } else {
+            try {
+                sys_echo(T::format("REPLY", T::FG_YELLOW, T::BRIGHT));
+                $resp = self::decodeResponse($service, $method, $thriftBin);
+                sys_echo(T::format(json_encode($resp), T::DIM));
+            } catch (\Exception $ex) {
+                // Hex::dump($thriftBin, "vvv/8/6");
+                // sys_error("decode thrift REPLY fail");
+                sys_error($ex->getMessage());
+            }
+        }
+    }
+
     public static function decodeServiceArgs($service, $method, $thriftBin)
     {
         $service = str_replace('.', '\\', ucwords($service, '.'));
         return \Kdt\Iron\Nova\Nova::decodeServiceArgs($service, $method, $thriftBin);
+    }
+
+    public static function decodeResponse($service, $method, $thriftBin)
+    {
+        $service = str_replace('.', '\\', ucwords($service, '.'));
+        if (class_exists($service)) {
+            $serv = new $service();
+            $outspec = $serv->getOutputStructSpec($method);
+            $exspec = $serv->getExceptionStructSpec($method);
+            $packer = \Kdt\Iron\Nova\Protocol\Packer::getInstance();
+            return $packer->decode($thriftBin, $packer->struct($outspec, $exspec), 0);
+        } else {
+            sys_error("$service class not found");
+            Hex::dump($thriftBin, "vvv/8/6");
+        }
+
     }
 
     private function __construct($appName, $appPath)
@@ -207,18 +329,57 @@ class NovaApp
         static::$enable = true;
     }
 
+    public function loadNovaService($novaServicePath)
+    {
+        $scanner = \Kdt\Iron\Nova\Service\Scanner::getInstance();
+        $scanSpec = new \ReflectionMethod(\Kdt\Iron\Nova\Service\Scanner::class, "scanSpec");
+        $scanSpec->setAccessible(true);
+
+        foreach (new DirectoryIterator($novaServicePath) as $fileInfo) {
+            if($fileInfo->isDot()) continue;
+            if (!$fileInfo->isDir()) continue;
+
+            $composerJson = $fileInfo->getRealPath() . "/composer.json";
+            if (!is_readable($composerJson)) continue;
+
+            $composer = json_decode(file_get_contents($composerJson), true);
+            if (!isset($composer["autoload"]["psr-4"])) continue;
+
+            foreach ($composer["autoload"]["psr-4"] as $ns => $path) {
+                if ($path === "Framework/Generic") continue; // TODO
+
+                if (!is_readable($fileInfo->getRealPath() . "/$path")) continue;
+
+                $path = $fileInfo->getRealPath() . "/$path/";
+                // scanSpec($appName, $domain, $path, $baseNamespace)
+                $scanSpec->invoke($scanner, "_", "com.youzan.service", $path, $ns);
+
+                break;
+            }
+
+        }
+    }
+
     public function scanSpec()
     {
         $env = getenv('KDT_RUN_MODE') ?: get_cfg_var('kdt.RUN_MODE') ?: "online";
         $autoload = "$this->appPath/vendor/autoload.php";
-        $novaPath = "$this->appPath/resource/config/$env/nova.php";
         if (!is_readable($autoload)) {
             sys_abort("$autoload is not readable");
         }
+        require $autoload;
+
+
+        $novaService = $this->appPath . "/vendor/nova-service";
+        $this->loadNovaService($novaService);
+        return;
+
+        /*
+        $novaPath = "$this->appPath/resource/config/$env/nova.php";
         if (!is_readable($novaPath)) {
             sys_abort("$novaPath is not readable");
         }
-        require $autoload;
+
         $novaConf = require $novaPath;
 
         $path = new \ReflectionClass(\Zan\Framework\Foundation\Core\Path::class);
@@ -226,9 +387,18 @@ class NovaApp
         $propPath->setAccessible(true);
         $propPath->setValue($this->appPath . "/");
 
-        \Kdt\Iron\Nova\Nova::init($this->parserNovaConfig($novaConf["novaApi"]));
+
+        if (isset($novaConf["novaApi"]) && is_array($novaConf["novaApi"])) {
+            $novaApi = $novaConf["novaApi"];
+            \Kdt\Iron\Nova\Nova::init($this->parserNovaConfig($novaApi));
+        } else {
+            $novaService = $this->appPath . "/vendor/nova-service";
+            $this->loadNovaService($novaService);
+        }
+        */
     }
 
+    /*
     public function parserNovaConfig(array $novaApi)
     {
         $rootPath = "$this->appPath/";
@@ -254,6 +424,7 @@ class NovaApp
         unset($item);
         return $novaApi;
     }
+    */
 }
 
 
@@ -1321,6 +1492,12 @@ function sys_echo($s) {
     echo "$time $s\n";
 }
 
+function sys_error($s) {
+    $time = date("H:i:s", time());
+    $s = T::format($s, T::FG_RED);
+    fprintf(STDERR, "$time $s\n");
+}
+
 function sys_abort($s)
 {
     Terminal::error($s, Terminal::FG_RED, Terminal::BRIGHT);
@@ -1334,7 +1511,6 @@ function is_big_endian()
     // L ulong 32，machine byte order
     return ord(pack("H2", bin2hex(pack("L", 0x12345678)))) === 0x12;
 }
-
 
 // for ide helper
 if (!function_exists("nova_decode")) {
@@ -1356,15 +1532,16 @@ if (!function_exists("nova_decode")) {
     function nova_decode($buf, &$service_name, &$method_name, &$ip, &$port, &$seq_no, &$attach, &$data) { return false; }
 }
 
-// 参考资料:
-// 1. pcap文件格式: https://wiki.wireshark.org/Development/LibpcapFileFormat
-// 2. pcap文件格式: https://www.zybuluo.com/natsumi/note/80231
-// 3. 以太网帧格式: http://www.ituring.com.cn/article/42619
-// 4. http://www.10tiao.com/html/254/201612/2648945706/1.html
-// 5. linktypes: http://www.tcpdump.org/linktypes.html
-// 6. 113-special Linux “cooked” capture: http://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html
-// 7. man tcpdump @ map
 /*
+参考资料:
+1. pcap文件格式: https://wiki.wireshark.org/Development/LibpcapFileFormat
+2. pcap文件格式: https://www.zybuluo.com/natsumi/note/80231
+3. 以太网帧格式: http://www.ituring.com.cn/article/42619
+4. http://www.10tiao.com/html/254/201612/2648945706/1.html
+5. linktypes: http://www.tcpdump.org/linktypes.html
+6. 113-special Linux “cooked” capture: http://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html
+7. man tcpdump @ map
+
 Capturing TCP packets with particular flag combinations (SYN-ACK, URG-ACK, etc.)
 
        There are 8 bits in the control bits section of the TCP header:
@@ -1493,3 +1670,4 @@ Capturing TCP packets with particular flag combinations (SYN-ACK, URG-ACK, etc.)
 
        Note that you should use single quotes or a backslash in the expression to hide the AND ('&') special character from the shell.
 */
+function λ() {} // for IDE合并注释

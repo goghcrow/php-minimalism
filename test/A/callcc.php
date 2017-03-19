@@ -64,9 +64,10 @@ async(function() {
 
 // test timeout
 async(function() {
+    $ex = null;
     try {
         $r = (yield callcc(function($k) {
-            swoole_async_dns_lookup("www.baidu.com", function($host, $ip) use($k) {
+            swoole_async_dns_lookup("www.baidusas.com", function($host, $ip) use($k) {
                 $k($ip);
             });
         }, 1));
