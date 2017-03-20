@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_sleep;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Server\Http\compose;
 use Minimalism\A\Server\Http\Middleware\Timeout;
@@ -19,7 +19,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 
 
-async(function() {
+spawn(function() {
     $ex = null;
     try {
         yield await(compose(

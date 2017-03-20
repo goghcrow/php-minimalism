@@ -16,22 +16,13 @@ function noop()
 
 }
 
-function trampoline(callable $f)
-{
-    $fn = $f;
-    while ($fn instanceof Trampoline) {
-        $fn = $fn();
-    }
-    return $fn;
-}
-
 /**
  * 执行异步任务
  *
- * @param \Generator|callable|mixed $task
- * @param callable $continuation function($r = null, $ex = null) {}
- * @param AsyncTask $parent
- * @param array $ctx Context可以附加在 \Generator 对象的属性上
+ * @internal param callable|\Generator|mixed $task
+ * @internal param callable $continuation function($r = null, $ex = null) {}
+ * @internal param AsyncTask $parent
+ * @internal param array $ctx Context可以附加在 \Generator 对象的属性上
  *
  * 说明:
  *  第一个参数为task
@@ -46,27 +37,27 @@ function trampoline(callable $f)
  *
  * @example
  *
- * async($task); // 只传递 task, task instanceof \Generator
- * async(function() { yield; }); // 只传递 task, task = call(callable)
- * async(mixed); // 只传递 task
+ * spawn($task); // 只传递 task, task instanceof \Generator
+ * spawn(function() { yield; }); // 只传递 task, task = call(callable)
+ * spawn(mixed); // 只传递 task
  *
- * async(mixed $task, callable $continuation) // 传递 continuation
- * async(mixed $task, AsyncTask $parent) // 传递 parentTask
- * async(mixed $task, array $ctx) // 传递 context
+ * spawn(mixed $task, callable $continuation) // 传递 continuation
+ * spawn(mixed $task, AsyncTask $parent) // 传递 parentTask
+ * spawn(mixed $task, array $ctx) // 传递 context
  *
- * async(mixed $task, callable $continuation, AsyncTask $parent) // 同时传递 continuation 与 parentTask
- * async(mixed $task, AsyncTask $parent, callable $continuation) // 同时传递 continuation 与 parentTask
+ * spawn(mixed $task, callable $continuation, AsyncTask $parent) // 同时传递 continuation 与 parentTask
+ * spawn(mixed $task, AsyncTask $parent, callable $continuation) // 同时传递 continuation 与 parentTask
  *
- * async(mixed $task, AsyncTask $parent, array $ctx) // 同时传递 parentTask 与 ctx
- * async(mixed $task, array $ctx, AsyncTask $parent) // 同时传递 parentTask 与 ctx
+ * spawn(mixed $task, AsyncTask $parent, array $ctx) // 同时传递 parentTask 与 ctx
+ * spawn(mixed $task, array $ctx, AsyncTask $parent) // 同时传递 parentTask 与 ctx
  *
- * async(mixed $task, callable $continuation,, array $ctx) // 同时传递 continuation 与 ctx
+ * spawn(mixed $task, callable $continuation,, array $ctx) // 同时传递 continuation 与 ctx
  *
- * async(mixed $task, callable $continuation, AsyncTask $parent, array $ctx) // 同时传递
- * async(mixed $task, callable $continuation, array $ctx, AsyncTask $parent) // 同时传递
- * async(mixed $task, AsyncTask $parent, callable $continuation, array $ctx) // 同时传递
+ * spawn(mixed $task, callable $continuation, AsyncTask $parent, array $ctx) // 同时传递
+ * spawn(mixed $task, callable $continuation, array $ctx, AsyncTask $parent) // 同时传递
+ * spawn(mixed $task, AsyncTask $parent, callable $continuation, array $ctx) // 同时传递
  */
-function async()
+function spawn()
 {
     $n = func_num_args();
     if ($n === 0) {
@@ -120,7 +111,7 @@ function async()
 
 function go()
 {
-    async(...func_get_args());
+    spawn(...func_get_args());
 }
 
 function chan($n = 0)
@@ -330,7 +321,7 @@ function race(array $tasks)
  *      });
  * }
  *
- * async(function() {
+ * spawn(function() {
  *      // 转换为thunk
  *      $dns = thunkify(__NAMESPACE__ . "\\dns");
  *      // thunk -> IAsync

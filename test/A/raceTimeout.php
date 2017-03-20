@@ -10,7 +10,7 @@ namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_dns_lookup;
 use function Minimalism\A\Client\async_sleep;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\callcc;
 use function Minimalism\A\Core\race;
 
@@ -18,7 +18,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 
 // 一个race处理超时的示例
-async(function() {
+spawn(function() {
 
     function dnslookup($host) {
         return callcc(function($k) use($host) {

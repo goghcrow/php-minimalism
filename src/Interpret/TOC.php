@@ -54,11 +54,11 @@ function sum($n, $m = 0)
 //echo sum(1000);exit;
 
 
-$sum = new TOC(function($n, $m = 0) {
+$sum = new TOC(function($n, $m = 0) use(&$sum) {
     if ($n === 0) {
         return $m;
     } else {
-        return $this($n - 1, $m + $n);
+        return $sum($n - 1, $m + $n);
     }
 });
 

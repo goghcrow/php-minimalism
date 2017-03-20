@@ -12,11 +12,11 @@ namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_dns_lookup;
 use Minimalism\A\Client\SwooleHttpClient;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-async(function() {
+spawn(function() {
     try {
         $ip = (yield async_dns_lookup("www.baidu.com"));
         $cli = new SwooleHttpClient($ip, 80);

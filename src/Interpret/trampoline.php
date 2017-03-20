@@ -1,44 +1,61 @@
 <?php
+/**
+ * Created by IntelliJ IDEA.
+ * User: chuxiaofeng
+ * Date: 17/3/19
+ * Time: 下午2:25
+ */
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-function fac1($n, $s = 1)
+
+class Trampoline
 {
-    if ($n <= 1) {
-        return $s;
-    } else {
-        return fac1($n - 1, $s * $n);
+    public $fn;
+
+    public function __construct(callable $fn)
+    {
+        $this->fn = $fn;
+    }
+
+    public function __invoke()
+    {
+        $fn = $this->fn;
+        return $fn();
     }
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-// Function<R, T>
 function trampoline(callable $f)
 {
-    $func = $f;
-    while (is_callable($func)) {
-        $func = $func();
+    $fn = $f;
+    while ($fn instanceof Trampoline) {
+        $fn = $fn();
     }
-    return $func;
+    return $fn;
 }
 
-function tail_fac($n, $s)
+
+
+function sum1($n, $acc = 0)
 {
-    if ($n <= 1) {
-        return $s;
+    if ($n === 0) {
+        return $acc;
     } else {
-        return function() use($n, $s) {
-            return tail_fac($n - 1, $s * $n);
-        };
+        return sum1($n - 1, $acc + $n);
     }
 }
 
-function fac2($n)
+
+function sum($n, $acc = 0)
 {
-    return trampoline(tail_fac($n, 1));
+    if ($n === 0) {
+        return $acc;
+    } else {
+        return new Trampoline(function() use($n, $acc) {
+            return sum($n - 1, $acc + $n);
+        });
+    }
 }
 
-
-//echo fac1(10000000), "\n";
-echo fac2(10000000), "\n";
+$sum = trampoline(sum(10000));
+var_dump($sum);

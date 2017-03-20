@@ -16,7 +16,7 @@ use function Minimalism\A\Client\async_curl_post;
 use function Minimalism\A\Client\async_curl_request;
 use function Minimalism\A\Client\async_timeout;
 use function Minimalism\A\Client\async_timeout_clear;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use Minimalism\A\Core\AsyncTask;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Core\cancelTask;
@@ -31,7 +31,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 function testAsyncTimeout()
 {
-    async(function() {
+    spawn(function() {
         $ex = null;
         try {
             yield async_timeout(function() {
@@ -61,7 +61,7 @@ function testCtorArgs()
         assert($ex === null);
     };
 
-    async(function() {
+    spawn(function() {
         return "async";
     }, $k);
 
@@ -72,7 +72,7 @@ function testCtorArgs()
         assert($ex instanceof \Exception && $ex->getMessage() === "test ex");
     };
 
-    async(function() {
+    spawn(function() {
         throw new \Exception("test ex");
     }, $k);
 
@@ -82,7 +82,7 @@ function testCtorArgs()
         assert($r === 1);
         assert($ex === null);
     };
-    async(1, $k);
+    spawn(1, $k);
 
     // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -90,7 +90,7 @@ function testCtorArgs()
         assert($r === M_PI);
         assert($ex === null);
     };
-    async(function() {
+    spawn(function() {
         yield M_PI;
     }, $k);
 
@@ -100,7 +100,7 @@ function testCtorArgs()
         assert($r === null);
         assert($ex instanceof \Exception && $ex->getMessage() === "test ex");
     };
-    async(function() {
+    spawn(function() {
         yield M_PI;
         throw new \Exception("test ex");
     }, $k);
@@ -111,7 +111,7 @@ testCtorArgs();
 function testIAsync()
 {
     // AsyncTask 自身实现 IAsync
-    async(function() {
+    spawn(function() {
         $say = "";
         yield new AsyncTask(await(function() use(&$say) {
             $say .= "Hello ";
@@ -125,7 +125,7 @@ testIAsync();
 
 
 // 子任务
-async(function() {
+spawn(function() {
     $r = (yield await(function() {
         $r1 = (yield async_dns_lookup("www.baidu.com"));
         $r2 = (yield async_dns_lookup("www.baidu.com"));
@@ -140,14 +140,14 @@ async(function() {
 
 
 // 取消任务 1. yield cancelTask()
-async(function() {
+spawn(function() {
     yield cancelTask();
     echo "unreached\n";
     assert(false);
 });
 
 // 取消任务 2. 抛出CancelTaskException
-async(function() {
+spawn(function() {
     yield;
     throw new CancelTaskException();
     echo "unreached\n";
@@ -156,7 +156,7 @@ async(function() {
 
 
 // 上下文1
-async(function() {
+spawn(function() {
     yield setCtx("foo", "bar");
     yield await(function() {
         assert((yield getCtx("foo")) === "bar");
@@ -166,7 +166,7 @@ async(function() {
 });
 
 // 上下文2
-async(function() {
+spawn(function() {
     yield await(function() {
         $v = (yield getCtx("hello"));
         assert($v === "world");
@@ -175,7 +175,7 @@ async(function() {
 
 
 // example
-async(function() {
+spawn(function() {
     yield await(function() {
         $r = (yield async_curl_get("www.baidu.com", 80));
         assert($r->statusCode === 200);

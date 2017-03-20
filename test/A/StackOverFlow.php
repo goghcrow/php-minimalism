@@ -10,12 +10,12 @@ namespace Minimalism\Test\A;
 
 
 
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
 
-//async(function () {
+//spawn(function () {
 //   while (true) {
 //       yield 1;
 //   }
@@ -30,4 +30,4 @@ $stackoverflow = function($n) {
     }
 };
 // Fatal error: Maximum function nesting level of '256' reached, aborting!
-// async($stackoverflow(256));
+// spawn($stackoverflow(256));

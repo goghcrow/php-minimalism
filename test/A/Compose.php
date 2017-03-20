@@ -8,7 +8,7 @@
 
 namespace Minimalism\Test\A;
 
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Server\Http\compose;
 use Minimalism\A\Server\Http\Context;
@@ -17,7 +17,7 @@ use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
 require __DIR__ . "/../../vendor/autoload.php";
 
 
-async(function() {
+spawn(function() {
     $task = compose(function(Context $ctx, $next) {
         echo 1;
         /* @var $this Context */
@@ -59,7 +59,7 @@ $ctx = new Context();
 $ctx->response = new MockRes();
 
 // 异常透传, 终止执行
-async(function()  use($ctx) {
+spawn(function()  use($ctx) {
 
     yield await(compose(
         function($ctx, $next) {
@@ -86,7 +86,7 @@ echo "\n";
 
 // 可通过try catch 保证某个过滤器一下的异常不会继续向上透传
 // 异常截获
-async(function() use($ctx) {
+spawn(function() use($ctx) {
     yield await(compose(
         function($ctx, $next) {
             echo "{ ";

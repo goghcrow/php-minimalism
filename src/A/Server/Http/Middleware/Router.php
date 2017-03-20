@@ -12,7 +12,6 @@ namespace Minimalism\A\Server\Http\Middleware;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
 use Minimalism\A\Server\Http\Context;
-use Minimalism\A\Server\Http\Contract\Middleware;
 
 class Router extends RouteCollector
 {
@@ -49,16 +48,16 @@ class Router extends RouteCollector
 
         $routeInfo = $this->dispatcher->dispatch(strtoupper($ctx->method), $uri);
         switch ($routeInfo[0]) {
-            case \FastRoute\Dispatcher::NOT_FOUND:
+            case Dispatcher::NOT_FOUND:
                 $ctx->status = 404;
                 // ... 404 Not Found
                 break;
-            case \FastRoute\Dispatcher::METHOD_NOT_ALLOWED:
+            case Dispatcher::METHOD_NOT_ALLOWED:
                 $allowedMethods = $routeInfo[1];
                 $ctx->status = 405;
                 // ... 405 Method Not Allowed
                 break;
-            case \FastRoute\Dispatcher::FOUND:
+            case Dispatcher::FOUND:
                 $handler = $routeInfo[1];
                 $vars = $routeInfo[2];
                 $handler($ctx, $next, $vars);

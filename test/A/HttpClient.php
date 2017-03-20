@@ -13,6 +13,7 @@ use Minimalism\A\Client\AsyncDns;
 use Minimalism\A\Client\AsyncHttpClient;
 use Minimalism\A\Core\AsyncTask;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -147,7 +148,7 @@ function batchTest()
 {
     function serial()
     {
-        async(function() {
+        spawn(function() {
             try {
                 $ip = (yield \Minimalism\A\Client\async_dns_lookup("www.baidu.com"));
                 $r = (yield (new AsyncHttpClient($ip, 80))

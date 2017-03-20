@@ -9,8 +9,6 @@
 namespace Minimalism\A\Core;
 
 
-use function Minimalism\A\Client\defer;
-
 class BufferChannel
 {
     public $cap;
@@ -34,7 +32,7 @@ class BufferChannel
                 // 当无数据可接收时, 阻塞住
                 $this->recvCc->enqueue($cc); // 让出控制流
             } else {
-                // 当有数据可接收时, 先接受数据数据
+                // 当有数据可接收时, 先接收数据
                 $val = $this->queue->dequeue();
                 $this->cap++;
                 $cc($val, null);
@@ -45,7 +43,7 @@ class BufferChannel
         });
     }
 
-    public function send($val)
+    public function send($val = null)
     {
         return callcc(function($cc) use($val) {
             if ($this->cap > 0) {

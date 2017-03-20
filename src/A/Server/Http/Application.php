@@ -9,7 +9,7 @@
 namespace Minimalism\A\Server\Http;
 
 
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\setCtx;
 use Minimalism\A\Server\Http\Exception\HttpException;
 
@@ -83,8 +83,7 @@ class Application
         $this->fn = compose(...$this->middleware);
 
         $config = ['port' => $port] + $config + $this->defaultConfig();
-        $flag = $config['ssl'] ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;
-
+        $flag = (isset($config['ssl']) && $config['ssl']) ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;
         $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, $flag);
         $this->httpServer->set($config);
         // $this->httpServer->setglobal(HTTP_GLOBAL_ALL, HTTP_GLOBAL_GET | HTTP_GLOBAL_POST | HTTP_GLOBAL_COOKIE);
@@ -151,7 +150,7 @@ class Application
         $reqHandler = $this->makeRequestHandler($ctx);
         $resHandler = $this->makeResponseHandler($ctx);
         // TODO: onFinish : defer
-        async($reqHandler, $resHandler);
+        spawn($reqHandler, $resHandler);
     }
 
     protected function makeRequestHandler(Context $ctx)

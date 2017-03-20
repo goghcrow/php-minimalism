@@ -11,7 +11,7 @@ namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_read;
 use function Minimalism\A\Client\async_write;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -21,7 +21,7 @@ function randfile($file, $count, $bs = 1024 * 1024 /*m*/)
     return $count * $bs;
 }
 
-async(function() {
+spawn(function() {
     $f = "tmp";
     $size = randfile($f, rand(2, 9), 1024 * 1023);
 
@@ -31,7 +31,7 @@ async(function() {
 });
 
 
-async(function() {
+spawn(function() {
     $f = "tmp1";
     $f_copy = "{$f}_copy";
 

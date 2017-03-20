@@ -10,12 +10,12 @@ namespace Minimalism\Test\A;
 
 
 use function Minimalism\A\Client\async_dns_lookup;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-async(function() {
+spawn(function() {
     try {
         yield async_dns_lookup("www.baidu.com", 1);
     } catch (AsyncTimeoutException $e) {

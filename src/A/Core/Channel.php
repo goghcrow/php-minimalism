@@ -22,7 +22,7 @@ class Channel
         $this->sendQ = new \SplQueue();
     }
 
-    public function send($val)
+    public function send($val = null)
     {
         return callcc(function($cc) use($val) {
             if ($this->recvQ->isEmpty()) {

@@ -34,7 +34,6 @@ $app->on("error", function(Context $ctx, \Exception $ex) {
 });
 
 $app->υse(new Logger());
-$app->υse(new ResponseTime());
 $app->υse(new Favicon(__DIR__ . "/favicon.iRco"));
 $app->υse(new BodyDetecter()); // 输出特定格式body
 $app->υse(new ExceptionHandler()); // 处理异常

@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\callcc;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 
@@ -17,7 +17,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 
 // test return
-async(function() {
+spawn(function() {
     $r = (yield callcc(function($k) {
         $r = "hello world";
         $ex = null;
@@ -28,7 +28,7 @@ async(function() {
 
 
 // test exception
-async(function() {
+spawn(function() {
     try {
         $r = (yield callcc(function($k) {
             $r = null;
@@ -42,7 +42,7 @@ async(function() {
 });
 
 // example
-async(function() {
+spawn(function() {
     $ip = (yield callcc(function($k) {
         swoole_async_dns_lookup("www.baidu.com", function($host, $ip) use($k) {
             $k($ip);
@@ -52,7 +52,7 @@ async(function() {
     assert($ex === null);
 });
 
-async(function() {
+spawn(function() {
     $r = (yield callcc(function($k) {
         swoole_timer_after(100, function() use($k) {
             $k("done");
@@ -63,7 +63,7 @@ async(function() {
 });
 
 // test timeout
-async(function() {
+spawn(function() {
     $ex = null;
     try {
         $r = (yield callcc(function($k) {
@@ -87,7 +87,7 @@ async(function() {
 
 
 
-async(function() {
+spawn(function() {
     $k = (yield callcc(function($k) {
             $k($k);
     }));

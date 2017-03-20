@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_sleep;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\race;
 
 require __DIR__ . "/../../vendor/autoload.php";
@@ -18,7 +18,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 // 两个均完成, 但 t2 更快
 // 注意, t1 t2 都会被执行, 只会返回一个
-async(function() {
+spawn(function() {
     $start = microtime(true) * 1000;
     $r = (yield race([
         "t1" => function() {
@@ -37,7 +37,7 @@ async(function() {
 
 
 // 可以直接race IAsync 接口
-async(function() {
+spawn(function() {
     $start = microtime(true) * 1000;
     $r = (yield race([
         async_sleep(200),
@@ -50,7 +50,7 @@ async(function() {
 
 
 // p3 更快, 所以先完成了
-async(function() {
+spawn(function() {
     yield race([
         function() {
             yield async_sleep(100);
@@ -69,7 +69,7 @@ async(function() {
 
 
 // p6 更快, 所以失败了
-async(function() {
+spawn(function() {
     yield race([
         function() {
             yield async_sleep(200);

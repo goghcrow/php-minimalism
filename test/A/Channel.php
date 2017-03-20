@@ -77,19 +77,19 @@ function t2()
     go(function() use($ch) {
         while (true) {
             $recv = (yield $ch->recv());
-            echo "consumer1: $recv\n";
+            echo "consumer1 recv from $recv\n";
         }
     });
 
     go(function() use($ch) {
         while (true) {
             $recv = (yield $ch->recv());
-            echo "consumer2: $recv\n";
+            echo "consumer2 recv from $recv\n";
         }
     });
 }
 
-//t2();
+// t2();
 
 
 // timeout
@@ -150,7 +150,7 @@ function t4()
 
 function t5()
 {
-    $ch = new BufferChannel(rand(1, 4));
+    $ch = chan(rand(1, 4));
 
     go(function() use($ch) {
         $recv = (yield $ch->recv());
@@ -175,7 +175,7 @@ function t5()
     });
 }
 
-//t5();
+// t5();
 
 
 function t51()
@@ -265,11 +265,9 @@ function t7()
         $val = (yield $anotherCh->recv());
         echo $val, "\n";
     });
-
-
 }
 
-//t7();
+// t7();
 
 function t8()
 {
@@ -299,4 +297,35 @@ function t8()
     });
 }
 
-t8();
+// t8();
+
+
+function pingPong()
+{
+    $pingCh = chan();
+    $pongCh = chan();
+    
+    go(function() use($pingCh, $pongCh) {
+        while (true) {
+            echo (yield $pingCh->recv());
+            yield $pongCh->send("PONG\n");
+
+            yield async_sleep(1);
+        }
+    });
+    
+    go(function() use($pingCh, $pongCh) {
+        while (true) {
+            echo (yield $pongCh->recv());
+            yield $pingCh->send("PING\n");
+
+            yield async_sleep(1);
+        }
+    });
+    
+    go(function() use($pingCh) {
+        echo "start up\n";
+        yield $pingCh->send("PING\n");
+    });
+}
+pingPong();

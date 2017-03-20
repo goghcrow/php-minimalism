@@ -11,11 +11,11 @@ namespace Minimalism\Test\A;
 
 
 use Minimalism\A\Client\SwooleMysqlClient;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-async(function() {
+spawn(function() {
     try {
         $mysql = new SwooleMysqlClient();
         $mysql->on("close", function() { echo "mysql closed\n"; });

@@ -11,11 +11,11 @@ namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_dns_lookup;
 use Minimalism\A\Client\AsyncTcpClient;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-async(function() {
+spawn(function() {
 
     start:
     try {

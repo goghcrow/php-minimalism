@@ -86,8 +86,9 @@ class Response
                 return $this->res->header("Content-Length", $value);
 
             default:
-                $this->res->$name = $value;
-                return true;
+                return $this->res->header($name, $value);
+                // $this->res->$name = $value;
+                // return true;
         }
     }
 

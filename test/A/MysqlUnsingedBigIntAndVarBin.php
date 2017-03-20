@@ -11,7 +11,7 @@ namespace Minimalism\Test\A;
 
 
 use Minimalism\A\Client\AsyncMysql;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -19,7 +19,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 define("MAX_UNSIGNED_BIGINT", "18446744073709551615");
 
 
-async(function() {
+spawn(function() {
     $mysql = new AsyncMysql();
     try {
         yield $mysql->connect();

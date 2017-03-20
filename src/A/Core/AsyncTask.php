@@ -10,8 +10,6 @@ namespace Minimalism\A\Core;
 use Minimalism\A\Core\Exception\CancelTaskException;
 
 
-// TODO trampoline
-
 /**
  * Class AsyncTask
  * yield实现的半协程递归调度器
@@ -33,7 +31,7 @@ use Minimalism\A\Core\Exception\CancelTaskException;
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
  * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
- * 7. 递归实现, 避免在大循环内部yield, 会占用大量内存
+ * 7. 递归实现, 避免在大循环内部同步yield, 会占用大量内存, 如果有Async返回则没问题, 回调函数之前会退栈
  */
 final class AsyncTask implements Async
 {
@@ -53,90 +51,6 @@ final class AsyncTask implements Async
         $this->generator = $generator;
         $this->parent = $parent;
     }
-
-    // TODO 修改为trampoline实现之后，所有Async接口都需要显示return
-
-//    /**
-//     * @param callable|null $continuation function($r, $ex = null) { }
-//     */
-//    public function begin(callable $continuation = null)
-//    {
-//        $this->continuation = $continuation;
-//        $next = trampoline($this->next());
-//        if (is_callable($next)) {
-//            $next();
-//        }
-////        return $next();
-//    }
-//
-//    /**
-//     * @param mixed|null $result
-//     * @param \Throwable|\Exception|null $ex
-//     * @return Trampoline
-//     */
-//    public function next($result = null, $ex = null)
-//    {
-//        if ($ex instanceof CancelTaskException) {
-//            if ($continuation = $this->continuation) {
-//                return new Trampoline(function() use($continuation, $ex) {
-//                    return $continuation(null, $ex);
-//                });
-//            }
-//            return null; // for ide
-//        }
-//
-//        try {
-//            if ($ex) {
-//                $value = $this->generator->throw($ex);
-//            } else {
-//                if ($this->isfirst) {
-//                    $this->isfirst = false;
-//                    $value = $this->generator->current();
-//                } else {
-//                    $value = $this->generator->send($result);
-//                }
-//            }
-//
-//            if ($this->generator->valid()) {
-//                if ($value instanceof Syscall) {
-//                    $value = $value($this);
-//                }
-//
-//                if ($value instanceof \Generator) {
-//                    $value = new self($value, $this);
-//                }
-//
-//                if ($value instanceof Async) {
-//                    return new Trampoline(function() use($value) {
-//                        return $value->begin([$this, "next"]);
-//                    });
-//                } else {
-//                    return new Trampoline(function() use($value) {
-//                        return $this->next($value, null);
-//                    });
-//                }
-//            } else {
-//                if ($continuation = $this->continuation) {
-//                    return new Trampoline(function() use($continuation, $result) {
-//                        return $continuation($result, null);
-//                    });
-//                }
-//            }
-//        } catch (\Exception $ex) {
-//            if ($this->generator->valid()) {
-//                return new Trampoline(function() use($ex) {
-//                    return $this->next(null, $ex);
-//                });
-//            } else {
-//                if ($continuation = $this->continuation) {
-//                    return new Trampoline(function() use($continuation, $ex) {
-//                        return $continuation(null, $ex);
-//                    });
-//                }
-//            }
-//        }
-//        return null; // for ide
-//    }
 
     /**
      * @param callable|null $continuation function($r, $ex = null) { }

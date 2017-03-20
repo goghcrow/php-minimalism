@@ -4,7 +4,7 @@ namespace Minimalism\Test\A;
 
 
 use function Minimalism\A\Client\async_sleep;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -22,10 +22,10 @@ function pong($val)
     yield ping($val + 1);
 }
 
-async(function() {
+spawn(function() {
     yield ping(0);
 });
 
-async(function() {
+spawn(function() {
     yield ping(0);
 });

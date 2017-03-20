@@ -11,7 +11,7 @@ namespace Minimalism\Test\A;
 
 
 use Minimalism\A\Client\AsyncMysql;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 
 require __DIR__ . "/../../vendor/autoload.php";
@@ -39,7 +39,7 @@ function randstr($length = 1024)
 
 function testTimeout()
 {
-    async(function() {
+    spawn(function() {
         $mysql = new AsyncMysql();
         $ex = null;
         try {
@@ -58,7 +58,7 @@ testTimeout();
 
 function testSelect1()
 {
-    async(function() {
+    spawn(function() {
         $mysql = new AsyncMysql();
         try {
             yield $mysql->connect();
@@ -132,7 +132,7 @@ function testTransactionTask() {
 
 function testTransaction()
 {
-    async(testTransactionTask());
+    spawn(testTransactionTask());
 }
 testTransaction();
 

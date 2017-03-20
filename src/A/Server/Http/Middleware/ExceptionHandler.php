@@ -19,7 +19,7 @@ use Minimalism\A\Server\Http\Util\Template;
  * Class ExceptionHandler
  * @package Minimalism\A\Server\Http\Middleware
  *
- * TOOD 与 Context 的errorHandler冲突
+ * TODO 与 Context 的errorHandler冲突
  */
 class ExceptionHandler implements Middleware
 {
@@ -55,8 +55,6 @@ class ExceptionHandler implements Middleware
                 if ($status === 404) {
                     $ctx->body = (yield Template::render(__DIR__ . "/404.html"));
                 } else if ($status === 500) {
-                    // 触发错误事件
-                    $ctx->app->emit("error", $ctx, $ex);
                     $ctx->body = (yield Template::render(__DIR__ . "/500.html", $err));
                 } else {
                     $ctx->body = (yield Template::render(__DIR__ . "/error.html", $err));

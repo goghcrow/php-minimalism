@@ -12,7 +12,7 @@ namespace Minimalism\Test\A;
 use function Minimalism\A\Client\async_sleep;
 use function Minimalism\A\Client\async_dns_lookup;
 use function Minimalism\A\Client\async_curl_get;
-use function Minimalism\A\Core\async;
+use function Minimalism\A\Core\spawn;
 use function Minimalism\A\Core\await;
 use function Minimalism\A\Core\awaitAll;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
@@ -20,7 +20,7 @@ use Minimalism\A\Core\Exception\AsyncTimeoutException;
 require __DIR__ . "/../../vendor/autoload.php";
 
 // exception
-async(function() {
+spawn(function() {
     $ex = null;
     try {
         $r = rand(1, 10);
@@ -36,7 +36,7 @@ async(function() {
 });
 
 
-async(function() {
+spawn(function() {
     $ex = null;
     try {
         $r = (yield awaitAll([
@@ -55,7 +55,7 @@ async(function() {
 
 
 // 可以直接使用 IAsync 接口
-async(function() {
+spawn(function() {
     $start = microtime(true);
     (yield awaitAll([
         async_sleep(1000),
@@ -66,7 +66,7 @@ async(function() {
 });
 
 
-async(function() {
+spawn(function() {
     $start = microtime(true);
     $r = (yield awaitAll([
             function() {
@@ -87,7 +87,7 @@ async(function() {
 });
 
 
-async(function() {
+spawn(function() {
     $r = (yield awaitAll([
             function() { yield 3; },
             function() { yield 2; },
@@ -105,7 +105,7 @@ async(function() {
     assert($r["z"] === 1);
 });
 
-async(function() {
+spawn(function() {
     $ex = null;
     try {
         (yield awaitAll([
@@ -125,7 +125,7 @@ async(function() {
 });
 
 
-async(function() {
+spawn(function() {
     try {
         $results = (yield awaitAll([
             async_curl_get("www.baidu.com"),
