@@ -17,7 +17,7 @@ function noop()
 }
 
 /**
- * 执行异步任务
+ * spawn one semicoroutine
  *
  * @internal param callable|\Generator|mixed $task
  * @internal param callable $continuation function($r = null, $ex = null) {}
@@ -26,7 +26,7 @@ function noop()
  *
  * 说明:
  *  第一个参数为task
- *  对于其余参数
+ *  剩余参数无顺序要求
  *      如果参数类型 callable 则参数被设置为 Continuation
  *      如果参数类型 AsyncTask 则参数被设置为 ParentTask
  *      如果参数类型 array 则参数被设置为 Context

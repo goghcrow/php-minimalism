@@ -21,13 +21,13 @@ https://zhuanlan.zhihu.com/p/24444262
 
 
 
-> 但随之而来的弊病显然也是罄竹难书——callback hell，导致人类线性的思维会被拆分，业务逻辑会被放置在各个回调函数中，调试和维护的难度陡然增加。不过好在ES2015发布了新的语法特性yield，也带来了异步抽象——Promise结构，但基于生成器(generator)实现的特性会略微降低Node.js原有的性能而无法两全其美，受限于JavaScript解释性语言的性质，使得其无法在不借助外部编译器，自行完成CPS变换。而scala则可以基于宏来实现这一功能，将原有的代码以同步的形式编写，但最终被编译成回调形式的代码，一来编码时逻辑得以线性的顺序组织，二来没有上下文切换的开销，两全其美。
+> 但随之而来的弊病显然也是罄竹难书——callback hell,导致人类线性的思维会被拆分,业务逻辑会被放置在各个回调函数中,调试和维护的难度陡然增加。不过好在ES2015发布了新的语法特性yield,也带来了异步抽象——Promise结构,但基于生成器(generator)实现的特性会略微降低Node.js原有的性能而无法两全其美,受限于JavaScript解释性语言的性质,使得其无法在不借助外部编译器,自行完成CPS变换。而scala则可以基于宏来实现这一功能,将原有的代码以同步的形式编写,但最终被编译成回调形式的代码,一来编码时逻辑得以线性的顺序组织,二来没有上下文切换的开销,两全其美。
 
 
 
 
-> 无论何「异步模型」，最终都是基于回调的，最后都会抽象出一种通用的「异步任务模型」,'异步'的精神内核是回调，
-> `任何异步编程模型，最终都是基于异步回调的`
+> 无论何「异步模型」,最终都是基于回调的,最后都会抽象出一种通用的「异步任务模型」,'异步'的精神内核是回调,
+> `任何异步编程模型,最终都是基于异步回调的`
 > `异步回调本质上是 Continuation`
 > `异步回调是手写的CPS程序`
 > `yield 可以理解成为CPS变换语法糖`
@@ -40,27 +40,27 @@ https://zhuanlan.zhihu.com/p/24444262
 
 `yield语义从抽象角度可以理解为CPS变换语法糖`
 `yield语义从控制流角度可以理解为将控制权从generator(callee)转义到caller`
-`借由底层eventloop，在事件回调中异步驱动generator，将控制权重新转移回generator`
+`借由底层eventloop,在事件回调中异步驱动generator,将控制权重新转移回generator`
 
 
 
-`而从实现角度来看，
-Generator对象都会有自己的zend_execute_data与zend_vm_stack，
+`而从实现角度来看,
+Generator对象都会有自己的zend_execute_data与zend_vm_stack,
 每次yield
 
-每次调用send next throw方法，resume执行，都需要首先备份EG中相关上下文，
-然后将Generator的execute_data信息恢复到EG，
-调用zend_execute_ex()执行从当前上下文恢复执行执行，最后恢复执行前EG信息
+每次调用send next throw方法,resume执行,都需要首先备份EG中相关上下文,
+然后将Generator的execute_data信息恢复到EG,
+调用zend_execute_ex()执行从当前上下文恢复执行执行,最后恢复执行前EG信息
 `
 
 
 
 
-`任何异步编程模型，最终都是基于异步回调的`
+`任何异步编程模型,最终都是基于异步回调的`
 `异步回调本质上是 Continuation`
 `异步回调是手写的CPS程序`
-`回调”是“异步”的精髓，无论是何种异步模型`
-`最终都是基于回调函数的，最终其实也可以归纳成这里的异步调用形式`
+`回调”是“异步”的精髓,无论是何种异步模型`
+`最终都是基于回调函数的,最终其实也可以归纳成这里的异步调用形式`
 `并没有消除Callback`
 `实质 Continuation Monad`
 `Generator async/await 消除Callback`
@@ -68,26 +68,23 @@ Generator对象都会有自己的zend_execute_data与zend_vm_stack，
 
 
 
-[Coroutine](https://en.wikipedia.org/wiki/Coroutine)
-Generators, also known as semicoroutines, are also a generalisation of subroutines, but are more limited than coroutines. Specifically, while both of these can yield multiple times, suspending their execution and allowing re-entry at multiple entry points, they differ in that coroutines can control where execution continues after they yield, while generators cannot, instead transferring control back to the generator's caller. That is, since generators are primarily used to simplify the writing of iterators, the yield statement in a generator does not specify a coroutine to jump to, but rather passes a value back to a parent routine.
-
-However, it is still possible to implement coroutines on top of a generator facility, with the aid of a top-level dispatcher routine (a trampoline, essentially) that passes control explicitly to child generators identified by tokens passed back from the generators:
+> However, it is still possible to implement coroutines on top of a generator facility, with the aid of a top-level dispatcher routine (a trampoline, essentially) that passes control explicitly to child generators identified by tokens passed back from the generators:
 
 
 
 
 Fork仅需要调用一次。
-调用时会一直同步执行到第一个yield为止，然后Fork返回，上层不会阻塞在Fork调用。
-之后由底层做调度，保证resume回来的时候仍然由主线程继续执行yield后面的语句，直到遇到下个yield为止。
-循环往复，直到作为Fork参数的coroutine执行完毕。
+调用时会一直同步执行到第一个yield为止,然后Fork返回,上层不会阻塞在Fork调用。
+之后由底层做调度,保证resume回来的时候仍然由主线程继续执行yield后面的语句,直到遇到下个yield为止。
+循环往复,直到作为Fork参数的coroutine执行完毕。
 
 
 
 
-IO是相比CPU内存是最慢的，高性能Server最重要的处理好IO，IO模型与编程模型息息相关;
+IO是相比CPU内存是最慢的,高性能Server最重要的处理好IO,IO模型与编程模型息息相关;
 
-""coroutine 实现的核心问题是控制流转换，""
-我们可以相对容易的实现一个半协程，归功于
+""coroutine 实现的核心问题是控制流转换,""
+我们可以相对容易的实现一个半协程,归功于
 zend vm中保存stack与execute_data的工作已经由Generator实现了
 
 
@@ -123,11 +120,11 @@ Koa风生水起, 用php + yz_swoole实现一个KOA
 
 1. AsyncTask 实现
 2. race timeout 实现
-3. callcc实现， 转换dns查询, 转换timer
+3. callcc实现, 转换dns查询, 转换timer
 4. 各种客户端转换
 4. render实现
 5. 错误处理
-6. router实现， 介绍为php-koa实现路有时候的示例：参考martini
+6. router实现, 介绍为php-koa实现路有时候的示例：参考martini
     1. 一个HTTP方法配对一个URL匹配模型
     2. 正则路由
     3. 参数列表
@@ -219,7 +216,7 @@ callback 形式异步编程模型
 
 
 
-下面让我们一步一步实现一个全功能的异步任务执行器，或者更高大尚的名字协程调度器；
+下面让我们一步一步实现一个全功能的异步任务执行器,或者更高大尚的名字协程调度器；
 
 
 首先, 我们来分析co的接口
@@ -243,14 +240,14 @@ co(function() {
 
 
 
-首先让我们实现\Generator自动执行，我知道foreach可以，但我们需要更精确地控制
+首先让我们实现\Generator自动执行,我知道foreach可以,但我们需要更精确地控制
 
 
 
 
 
 TODO 修改
-所谓 Thunk 化就是将多参数函数，将其替换成单参数只接受回调函数作为唯一参数的版本 
+所谓 Thunk 化就是将多参数函数,将其替换成单参数只接受回调函数作为唯一参数的版本 
 
 
 
@@ -319,7 +316,7 @@ node 设计模式
 koa类似中间件系统：
 Ruby's Rack
 redux 中间件
-matini 中间件，灵感来源express的中间件Connect
+matini 中间件,灵感来源express的中间件Connect
 
 
 

@@ -3,12 +3,14 @@
 
 if (isset($argv[1]) && $argv[1] === "install") {
     $self = __FILE__;
+    `rm -rf /usr/local/bin/nova`;
     `chmod +x $self && cp $self /usr/local/bin/nova`;
     exit();
 }
 
 $usage = <<<USAGE
 Usage: nova -h主机 -p端口 -m方法 -a参数
+    nova -hqabb-dev-scrm-test0 -p8100 -mcom.youzan.scrm.customer.service.customerService.getByYzUid -a '{"kdtId":1, "yzUid": 1}'
     nova -h10.9.97.143 -p8050 -m=com.youzan.material.general.service.TokenService.getToken -a='{"kdtId":1,"scope":""}'
     nova -h10.9.188.33 -p8050 -m=com.youzan.material.general.service.MediaService.getMediaList -a='{"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}'
 USAGE;
@@ -20,6 +22,9 @@ if (!isset($a['h']) || !isset($a['p']) || !isset($a['m']) || !isset($a['a'])) {
 }
 
 $args = json_decode($a['a'], true);
+if ($args === null) {
+    $args = [];
+}
 if (json_last_error() !== JSON_ERROR_NONE) {
     echo "\033[1;31m", "JSON参数有误: ", json_last_error_msg(), "\033[0m\n";
     exit(1);
@@ -130,7 +135,14 @@ class NovaService
         });
 
         $this->deadline(2000, "connect_timeout");
-        $this->client->connect($this->host, $this->port);
+
+        DnsClient::lookup($this->host, function($host, $ip) {
+            if ($ip === null) {
+                echo "\033[1;31m", "DNS查询超时 host:{$host}", "\033[0m\n";exit;
+            } else {
+                $this->client->connect($ip, $this->port);
+            }
+        });
     }
 
     private function send()
@@ -344,5 +356,50 @@ class NovaService
             return $s;
         }
         return false;
+    }
+}
+
+
+
+class DnsClient
+{
+    const maxRetryCount = 3;
+    const timeout = 100;
+    private $timerId;
+    public $count = 0;
+    public $host;
+    public $callback;
+
+    public static function lookup($host, $callback)
+    {
+        $self = new static;
+        $self->host = $host;
+        $self->callback = $callback;
+        return $self->resolve();
+    }
+
+    public function resolve()
+    {
+        $this->onTimeout(static::timeout);
+
+        return swoole_async_dns_lookup($this->host, function($host, $ip) {
+            if ($this->timerId && swoole_timer_exists($this->timerId)) {
+                swoole_timer_clear($this->timerId);
+            }
+            call_user_func($this->callback, $host, $ip);
+        });
+    }
+
+
+    public function onTimeout($duration)
+    {
+        if ($this->count < static::maxRetryCount) {
+            $this->timerId = swoole_timer_after($duration, [$this, "resolve"]);
+            $this->count++;
+        } else {
+            $this->timerId = swoole_timer_after($duration, function() {
+                call_user_func($this->callback, $this->host, null);
+            });
+        }
     }
 }
