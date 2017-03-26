@@ -61,7 +61,7 @@ function await($task, ...$args)
  *
  * 说明:
  *  第一个参数为task
- *  剩余参数无顺序要求
+ *  剩余参数 优先检查callable 无顺序要求
  *      如果参数类型 callable 则参数被设置为 Continuation
  *      如果参数类型 AsyncTask 则参数被设置为 ParentTask
  *      如果参数类型 array 则参数被设置为 Context
