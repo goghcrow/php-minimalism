@@ -1,51 +1,55 @@
 # PHP异步编程: 手把手教你实现co与Koa
 
 
-近年来在面向高并发编程的道路上,nodejs与golang风生水起,人们渐渐把目光从多线程转移到Callback与CSP/Actor,
-死守着同步阻塞模型的广大屌丝PHPer难免有人心动,各种EventLoop的扩展不温不火,最后swoole反客为主,
-将完整的网络库通过扩展层暴露出来,于是我们有了一套相对完整的基于事件循环的Callback模型可用;
+近年来, 在面向高并发编程的道路上,nodejs与golang风生水起,人们渐渐把目光从多线程模型转移到Callback与CSP/Actor,
+死守着fpm多进程同步阻塞模型的广大屌丝PHPer难免有人心动,各种EventLoop的扩展不温不火,国内swoole一枝独秀,
+通过扩展方式提供了一整套基于事件循环的Callback模型解决方案;
 
-node之所以在js上开发结果,多半是因为js语言的函数式特性,适合异步回调代码编写,且浏览器的dom事件模型本身需要书写回调带来的行为习惯;
-但回调固有的思维拆分、逻辑割裂、调试维护难的问题随着node社区的繁荣变得亟待解决,从老赵脑洞大开编译方案windjs到co与Promise,各种方案层出不穷,
-最终[Promise](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise)被采纳为官方「异步编程标准规范」,
-[async/await](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/async_function)被纳入语言标准；
-
-因为模型相同, swoole中I/O接口同样以回调形式提供,PHPer"有幸"在高并发命题上的解决方案上遭遇与nodejs一样的问题；
-我司去年开源[Zan](http://zanphp.io/),内部构建一个与co类似的协程调度器(按wiki定义,确切来说是"半协程调度器"),
-重新解决了回调代码书写的问题,但这并不妨碍我们造轮子的天性；
+node之所以在js上开花结果, 多半是浏览器的dom事件模型培养起来的思维与习惯,让回调对于js稀松平常, 且语言自身的丰富的函数式特性, 适合异步回调代码编写.
+但回调固有的思维拆分、逻辑割裂、调试维护难的问题随着node社区的繁荣变得亟待解决,从老赵脑洞大开编译方案windjs到co与Promise,方案层出不穷,最终[Promise](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise)被采纳为官方「异步编程标准规范」,
+[async/await](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/async_function)被纳入语言标准;
 
 
+因I/O模型相同, PHPer有幸在高并发命题上的解决方案上遭遇与node一样的问题;
+Closure[RFC](https://wiki.php.net/rfc/closures?cm_mc_uid=26754990333314676210612&cm_mc_sid_50200000=1490031947)
+一定程度从语言本身改善了异步编程的体验;
+受限于引擎作用域机制的实现,PHP缺失词法作用域,必然缺失真正的词法闭包, Closure对象采用了use语法来显式捕获upValue到Closure对象的静态属性(closure->func.op_array.static_variables),个人认为这仅仅是实现不了闭包的匿名函数;
+Nikita Popov在PHP中实现了Generator[RFC](https://wiki.php.net/rfc/generators),并且让我们意识到
+Generator可以实现实现非抢占任务调度[译文:在PHP中使用协程实现多任务调度](http://www.laruence.com/2015/05/28/3038.html),我们可以借助于生成器实现协程.
+[wiki:Coroutine](https://en.wikipedia.org/wiki/Coroutine)
+> However, it is still possible to implement coroutines on top of a generator facility, 
+> with the aid of a top-level dispatcher routine (a trampoline, essentially) that passes control > explicitly to child generators identified by tokens passed back from the generators:
+
+继TSF之后, 我司去年了开源[Zan Framework](http://zanphp.io/), 内部通过构建一个半协程调度器,解决了swoole中I/O的回调接口的代码书写问题.
 
 
+-----------------------------------------------------------------------------------------------
 
-\Closure[RFC](https://wiki.php.net/rfc/closures?cm_mc_uid=26754990333314676210612&cm_mc_sid_50200000=1490031947)
-与\Generator[RFC](https://wiki.php.net/rfc/generators),一定程度从语言上改善了异步编程的体验;
-(吐槽: 因为内部作用域实现原因,PHP缺失词法作用域,自然也缺失真正的词法闭包, \Closure对象"朴实"的采用了use这一略显诡异的语法来显式捕获upValue到\Closure对象的静态属性(closure->func.op_array.static_variables),个人认为PHP仅仅算支持匿名函数,且PHP中匿名函数无法天然构成闭包)
-(Generator资料请参考Nikita Popov文章的译文[在PHP中使用协程实现多任务调度 ](http://www.laruence.com/2015/05/28/3038.html)),
+说明:
 
-
+```
+1. 下文中协程均指代使用生成器实现的半协程.
+2. 下文中耗时任务指代I/O或定时器, 非CPU计算.
+```
 
 -----------------------------------------------------------------------------------------------
 
 
 ### co
 
-谈及Koa首先要谈及co函数库,co与Promise诞生的初衷都是为了解决nodejs异步回调陷阱, 达到的目标是都是"同步书写异步代码";
+(对co库不了解的同学可以先参考[阮一峰 - co 函数库的含义和用法](http://www.ruanyifeng.com/blog/2015/05/co.html))
 
-co的核心是Generator自动执行器,或者说"异步迭代器",通过yield显示操纵控制流实现半协程调度器;
 
-(对co库不了解的同学可以参考[阮一峰 - co 函数库的含义和用法](http://www.ruanyifeng.com/blog/2015/05/co.html))
+谈及Koa(1.x)不得不谈及co, co与Promise是JSer在解决回调地虎问题前仆后继的众多产物之一, 
 
-> 3.x
-> Generator based flow-control goodness for nodejs and the browser, using thunks or promises, letting you write non-blocking code in a nice-ish way.
-> 4.x
-> Generator based control flow goodness for nodejs and the browser, using promises, letting you write non-blocking code in a nice-ish way.
+co其实是Generator自动执行器(半协程调度器): 基通过yield显式操纵控制流让我们可以做到以近乎同步的方式书写非阻塞代码;
 
-co新版与旧版的区别在于对Promises的支持,虽然Promise是一套比较完善的方案,但是如何实现Promise本身超出本文范畴,
+co新版与旧版的区别在于对thunks的支持, 4.x只支持promises, 
 
-PHP也没有大量异步类库的历史包袱,需要thunks方案做转换,我们仅仅声明一个简单的接口,来抽象异步任务；
+虽然Promise是一套比较完善的方案,但是如何实现Promise本身超出本文范畴,
 
-(声明interface动机是interface提供了一种可供检测的新类型,而不会在我们未来要实现的Generator执行器内部造成歧义;)
+且PHP没有大量异步接口的历史包袱需要thunks方案做转换,我们仅仅声明一个简单的接口,来抽象异步任务;
+
 
 ```php
 <?php 
@@ -61,18 +65,19 @@ interface Async
 }
 ```
 
-我们首先来实现koa的基础设施,使用50多行代码渐进的实现一个更为精练的半协程调度器：
+我们首先来实现Koa的基础设施,使用50多行代码渐进的实现一个更为精练的半协程调度器：
 
 -----------------------------------------------------------------------------------------------
 
-**注意: 以下实例代码中, 后继section中重复部分限于篇幅省略处理**
+**注意: 限于篇幅, 以下实例代码, 每部分仅提供改动部分, 其余省略**
 
 
 
-首先统一\Generator接口, 屏蔽send会直接跳到第二次yield的问题,
-内部隐式rewind, 需要先调用current() 获取当前value,
+生成器
+
+首先统一\Generator接口, 由于内部隐式rewind, 需要先调用current() 获取当前value,send会直接跳到第二次yield;
+
 [参见send方法说明](http://php.net/manual/en/generator.send.php)
-
 
 
 ```php
@@ -105,21 +110,18 @@ class Gen
 }
 ```
 
+手动迭代生成器, 递归的执行next, 调用send方法将将yield值作为yield表达式结果;
 
+(yield表达式可能是一个异步调用, 我们之后会把异步调用的结果作为yield表达式结果.)
 
-然后让Generator可以正常迭代, 并且调用send方法将暂时将yield值作为yield表达式结果,
-
-之所以这么做是因为之后的yield表达式可能是一个异步调用, 我们会把异步调用的结果send回Generator.
 
 ```
 如, $ip = (yield async_dns_lookup(...)  );
      ^          |--------------------|
      |                  yield值
-          |---------------------------|
-                    yield 表达式
+     |   |---------------------------|
+yield表达式结果       yield 表达式
 ```
-
-递归的执行next, 直到迭代器终止.
 
 
 ```php
@@ -159,9 +161,13 @@ $task->begin(); // output: 12
 
 ```
 
-PHP7支持Generator::getReturn, 可以通过return返回值,
+--------------------------------------------------------------------------------
 
-我们在PHP5中使用Generator最后一次yield值作为返回值,
+返回值
+
+PHP7支持通过Generator::getReturn获取生成器方法return的返回值,
+
+PHP5中我们约定使用Generator最后一次yield值作为返回值,
 
 因为我们最终需要嵌套Generator的返回值.
 
@@ -201,12 +207,17 @@ $r = $task->begin(); // output: 12
 echo $r; // output: 3
 ```
 
+--------------------------------------------------------------------------------
 
-PHP7Generator支持delegation, 可以自动展开yield antherGenerator,
+生成器委托
 
-我们需要在PHP5支持嵌套子生成器, 且支持将子生成器最后yield值作为yield表达式结果send回父生成器,
+PHP7中支持[delegating generator](https://wiki.php.net/rfc/generator-delegation), 可以自动展开subgenerator;
 
-只需要加两行代码, 递归的产生一个AsyncTask对象来执行子生成器即可
+> A “subgenerator” is a Generator used in the <expr> portion of the yield from <expr> syntax.
+
+我们需要在PHP5支持子生成器, 将子生成器最后yield值作为父生成器yield表达式结果.
+
+仅只需要加两行代码, 递归的产生一个AsyncTask对象来执行子生成器即可.
 
 ```php
 <?php
@@ -248,12 +259,15 @@ echo $r; // output: 3
 
 ```
 
-异步化:
-return其实可以被看成单参数, 且永远不会返回的函数(return :: r -> void),
+--------------------------------------------------------------------------------
 
-将return解糖改写为函数参数continuation(CPS变换),
+改写return
 
-将Generator结果通过回调形式返回, 为引入异步迭代做准备.
+return其实可以被替换为单参数且永远不返回的函数,
+
+将return解糖CPS变换, 改写为函数参数continuation,
+
+将Generator结果通过回调参数返回, 为引入异步迭代做准备.
 
 
 ```php
@@ -290,6 +304,7 @@ final class AsyncTask
     }
 }
 
+
 function newGen()
 {
     $r1 = (yield newSubGen());
@@ -304,22 +319,24 @@ $task->begin($trace); // output: 123
 
 ```
 
+--------------------------------------------------------------------------------
 
-引入抽象的异步接口:
+抽象异步模型
 
-只有一个方法的接口通常都可以使用闭包代替, 不能替代的原因有interface会引入新类型, 闭包则不会.
+对回调模型抽象出异步接口Async;
+
+只有一个方法的接口通常都可以使用闭包代替, 区别在于interface引入新类型, 闭包则不会.
 
 
 ```php
 <?php
 
-// 这里对异步模型进行抽象
 interface Async
 {
     public function begin(callable $callback);
 }
 
-// 经过CPS变换, AsyncTask符合Async定义, 实现该Async
+// AsyncTask符合Async定义, 实现Async
 final class AsyncTask implements Async
 {
     public function next($result = null)
@@ -346,9 +363,13 @@ final class AsyncTask implements Async
         }
     }
 }
+```
 
+两个简单的对回调接口转换例子:
 
-// 两个简单的例子
+```php
+<?php
+
 // 定时器修改为标准异步接口
 class AsyncSleep implements Async
 {
@@ -391,8 +412,11 @@ $task->begin($trace);
 
 ```
 
+--------------------------------------------------------------------------------
 
-至此, 很少几行代码, 我们其实已经实现了异步迭代器的执行器;
+异常
+
+尽管只有寥寥几行代码, 我们却已经实现了异常处理缺失的半协程调度器;
 
 下面先rollback回return的实现, 我们开始引入异常处理,
 
@@ -430,7 +454,7 @@ final class AsyncTask
         try {
             // send方法内部是一个resume的过程: 
             // 恢复execute_data上下文, 调用zend_execute_ex()继续执行,
-            // 后续中op_array内才可能会抛出异常
+            // 后续中op_array内可能会抛出异常
             $value = $this->gen->send($result);
         } catch (\Exception $ex) {}
 
@@ -468,7 +492,21 @@ try {
 }
 ```
 
-重新处理生成器嵌套, 需要将子生成器异常抛向父生成器
+--------------------------------------------------------------------------------
+
+异常透传
+
+重新处理生成器嵌套, 需要将子生成器异常抛向父生成器;
+
+当生成器迭代过程发生未捕获异常, 生成器将会被关闭, valid()返回false,
+
+未捕获异常会从生成器内部被抛向父作用域,
+
+嵌套子生成器内部的未捕获异常必须最终被抛向根生成器的calling frame,
+
+PHP7 中yield-from语言嵌套子生成器resume中异常传递实现采取goto try_again:标签方式层层向上抛出,
+
+我们的代码因为递归迭代的原因, 未捕获异常需要逆递归栈帧方向层层上抛 , 性能方便有改进余地.
 
 ```php
 <?php
@@ -540,8 +578,11 @@ echo $r; // output: 3
 
 ```
 
+--------------------------------------------------------------------------------
 
-我们基于上述注释来观察异常传递流程:
+异常传递流程:
+
+基于上述注释观察异常传递流程;
 
 ```php
 <?php
@@ -622,19 +663,11 @@ function g9()
 (new AsyncTask(g9()))->begin();
 ```
 
-当生成器迭代过程发生未捕获异常, 生成器将会被关闭, valid()返回false,
+--------------------------------------------------------------------------------
 
-未捕获异常会从生成器内部被抛向父作用域,
+重新进行CPS变换:
 
-嵌套子生成器内部的未捕获异常必须最终被抛向根生成器的calling frame,
-
-PHP7 中yield-from语言嵌套子生成器resume中异常传递实现采取goto try_again:标签方式层层向上抛出,
-
-我们的代码因为递归迭代的原因, 未捕获异常需要逆递归栈帧方向层层上抛 , 性能方便有改进余地.
-
---------------
-
-我们把加入异常处理的代码重新修改为CPS方式:
+我们把加入异常处理的代码重新修改为CPS方式;
 
 ```php
 <?php
@@ -667,7 +700,7 @@ final class AsyncTask
                 }
             } else {
                 // 迭代结束 返回结果
-                $cc = $this->continuation; // 父生成器next方法 或 用户传入continuation
+                $cc = $this->continuation; // cc指向 父生成器next方法 或 用户传入continuation
                 $cc($result, null);
             }
         } catch (\Exception $ex) {
@@ -676,7 +709,7 @@ final class AsyncTask
                 $this->next(null, $ex);
             } else {
                 // 未捕获异常
-                $cc = $this->continuation; // 父生成器next方法 或 用户传入continuation
+                $cc = $this->continuation; // cc指向 父生成器next方法 或 用户传入continuation
                 $cc(null, $ex);
             }
         }
@@ -735,11 +768,13 @@ $trace = function($r, $ex) {
 $task->begin($trace); // output: e
 
 ```
+--------------------------------------------------------------------------------
 
+重新加入Async
 
 重新加入Async抽象, 修改continuation的签名, 加入异常参数
 
-continuation:: (mixed $r, \Exception $ex) -> void
+continuation :: (mixed $r, \Exception $ex) -> void
 
 
 ```php
@@ -805,6 +840,7 @@ function newGen($try)
     try {
         $r1 = (yield newSubGen());
     } catch (\Exception $ex) {
+        // 捕获subgenerator抛出的异常
         if ($try) {
             echo "catch:" . $ex->getMessage(), "\n";
         } else {
@@ -828,7 +864,7 @@ $task->begin($trace);
 // cc_ex:timeout
 ```
 
------------------
+--------------------------------------------------------------------------------
 
 Syscall与Context
 
@@ -837,13 +873,11 @@ Syscall与Context
 
 Syscall :: AsyncTask $task -> mixed
 
-当将需要执行的函数打包成Syscall, 通过yield返回迭代器时,
+将需要执行的函数打包成Syscall, 通过yield返回迭代器,
 
 可以从Syscall参数获取到当前迭代器对象, 这里提供了一个外界与AsyncTask交互的扩展点,
 
-方便进行功能扩展, 我们借此演示如何添加跨生成器上下文.
-
-加入Context的动机是在嵌套生成器共享数据, 解构生成器之间依赖,
+我们借此演示如何添加跨生成器上下文, 在嵌套生成器共享数据, 解耦生成器之间依赖.
 
 
 ```php
@@ -909,17 +943,12 @@ final class AsyncTask implements Async
 }
 ```
 
-我们现在来兑现刚开始的承诺, 出去接口声明外, 不到60行代码, 我们其实已经完成了功能完整,
-
-支持`任务嵌套`与`异常处理`, 并可以通过Syscall扩充功能的半协程调度器.
-
-接下来我们主要演示如何转换常用异步回调接口, 以及一些调度器的扩展功能.
-
+--------------------------------------------------------------------------------
 
 ```php
 <?php
 
-// Syscall将 callable :: AsyncTask $task -> mixed 包装成单独类型
+// Syscall将 (callable :: AsyncTask $task -> mixed) 包装成单独类型
 class Syscall
 {
     private $fun;
@@ -980,7 +1009,16 @@ $task->begin($trace); // output: bar
 
 ```
 
+--------------------------------------------------------------------------------
 
+至此, 除去接口声明外, 不到60行代码, 我们实现了 支持`任务嵌套`与`异常处理`, 并可以通过Syscall扩充功能的半协程调度器.
+
+接下来我们主要演示如何转换常用异步回调接口, 以及一些调度器的扩展功能.
+
+
+--------------------------------------------------------------------------------
+
+spawn
 
 为了易用性, 我们为AsyncTask的创建提供了一种灵活的参数传递的封装
 
@@ -1069,12 +1107,22 @@ function spawn()
 ```
 
 
+--------------------------------------------------------------------------------
 
-终于可以做一些有趣的事情了
+一些有趣的组件
 
-异步回调API是无法直接使用yield语法的, 上文中我们将回调API显示实现Async接口,
+异步回调API是无法直接使用yield语法的, 需要使用thunk或者promise进行转换,
 
-通过参数传递异步结果回调度器, 我们似乎可以把这个简单的模式抽象出来, 实现一个穷人的call/cc
+thunkfy就是将多参数函数替换成单参数只接受回调函数作为唯一参数的函数[Thunk 函数的含义和用法](http://www.ruanyifeng.com/blog/2015/05/thunk.html),
+
+上文中我们将回调API显式实现Async接口, 显得有些麻烦, 
+
+这里可以把--通过参数传递异步结果回调度器--这个模式抽象出来, 实现一个穷人的call/cc.
+
+
+--------------------------------------------------------------------------------
+
+CallCC
 
 
 ```php
@@ -1106,15 +1154,11 @@ function callcc(callable $fn)
 我们创造的半协程中的callcc的功能有限, yield只能将控制权从Generator转移到起caller中:
 
 [wiki:Coroutine](https://en.wikipedia.org/wiki/Coroutine)
+
 > Generators, also known as semicoroutines, are also a generalisation of subroutines, but are more limited than coroutines. Specifically, while both of these can yield multiple times, suspending their execution and allowing re-entry at multiple entry points, they differ in that coroutines can control where execution continues after they yield, while generators cannot, instead transferring control back to the generator's caller. That is, since generators are primarily used to simplify the writing of iterators, the yield statement in a generator does not specify a coroutine to jump to, but rather passes a value back to a parent routine.
 
 
-我认为这里我们引入的semi-callcc实际上是人肉进行的thunky,
-
-因为swoole的异步api数量不多, 我们正好来看例子:
-
-# asyncInvoke :: (...$args, callable :: (mixed $r, Exception $ex) -> void) -> void
-# syncInvoke :: ...$args -> (callable :: (mixed $r, Exception $ex) -> void)
+我们引入的callcc实际上是人肉进行的thunky, 来看例子:
 
 
 ```php
@@ -1140,21 +1184,21 @@ function async_dns_lookup($host)
 
 class HttpClient extends \swoole_http_client
 {
-    public function awaitGet($uri)
+    public function async_get($uri)
     {
         return callcc(function($k) use($uri) {
             $this->get($uri, $k);
         });
     }
 
-    public function awaitPost($uri, $post)
+    public function async_post($uri, $post)
     {
         return callcc(function($k) use($uri, $post) {
             $this->post($uri, $post, $k);
         });
     }
 
-    public function awaitExecute($uri)
+    public function async_execute($uri)
     {
         return callcc(function($k) use($uri) {
             $this->execute($uri, $k);
@@ -1162,31 +1206,26 @@ class HttpClient extends \swoole_http_client
     }
 }
 
-
 // 这里!
 spawn(function() {
     $ip = (yield async_dns_lookup("www.baidu.com"));
     $cli = new HttpClient($ip, 80);
     $cli->setHeaders(["foo" => "bar"]);
-    $cli = (yield $cli->awaitGet("/"));
+    $cli = (yield $cli->async_get("/"));
     echo $cli->body, "\n";
 });
 
 ```
 
-我们可以用相同的模式来封装swoole的剩余异步api, 比如TcpClient,MysqlClient,RedisClient
+我们可以用相同的方式来封装swoole剩余的异步api(TcpClient,MysqlClient,RedisClient...), 大家可以举一反三(建议继承swoole原生类, 而不是直接实现Async);
 
-大家可以举一反三;
+--------------------------------------------------------------------------------
 
-(推荐继承swoole原生类, 而不是直接实现Async)
+Race与timeout
 
+看到这里, 你可能已经发现到我们封装的异步接口的问题了: 没有任何超时处理;
 
----------
-
-
-看到这里, 你可能已经注意到我们上面接口的问题了: 没有任何超时处理
-
-通常情况我们需要为每个异步添加定时器, 回调成功取消定时器, 否则在定时器回调透传异常;
+通常情况我们需要为每个异步添加定时器, 回调成功取消定时器, 否则在定时器回调透传异常, 例如;
 
 
 ```php
@@ -1211,7 +1250,8 @@ function timeoutWrapper(callable $fun, $timeout)
         $k = once($k);
         $fun($k);
         swoole_timer_after($timeout, function() use($k) {
-            $k(null, new \Exception("timeoutWrapper"));
+            // 这里异常可以从外部传入
+            $k(null, new \Exception("timeout"));
         });
     };
 }
@@ -1247,7 +1287,7 @@ spawn(function() {
 
 ```
 
-但是, 我们可以有更优雅的方式来超时处理
+但是, 我们可以有更优雅通用的方式来超时处理:
 
 
 ```php
@@ -1296,27 +1336,22 @@ class Any implements Async
 // helper function
 function await($task, ...$args)
 {
-    if ($task instanceof Async) {
-        $async = $task;
-        $task = function() use($async) {
-            yield $async;
-        };
+    if ($task instanceof \Generator) {
+        return $task;
     }
 
     if (is_callable($task)) {
-        $task = $task(...$args);
+        $gen = function() use($task, $args) { yield $task(...$args); };
+    } else {
+        $gen = function() use($task) { yield $task; };
     }
-
-    return $task;
+    return $gen();
 }
 
 
 function race(array $tasks)
 {
-    foreach ($tasks as &$task) {
-        $task = await($task);
-    }
-    unset($task);
+    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
 
     return new Syscall(function(AsyncTask $parent) use($tasks) {
         if (empty($tasks)) {
@@ -1328,7 +1363,10 @@ function race(array $tasks)
 }
 ```
 
-事实上我们实现了一个Promise.race的接口
+
+我们构造了一个与Promise.race相同语义的接口, 
+
+而我们之前构造Async接口则可以看成简陋版的Promise.then + Promise.catch
 
 
 ```php
@@ -1375,8 +1413,8 @@ spawn(function() {
 });
 ```
 
+我们非常容易构造出更多支持超时的接口, 但我们代码看起来比之前更加清晰;
 
-我们非常容易构造出更多的超时的接口, 但我们代码看起来比之前更清晰了
 
 ```php
 <?php
@@ -1392,26 +1430,7 @@ class HttpClient extends \swoole_http_client
             timeout($timeout),
         ]);
     }
-
-    public function awaitPost($uri, $post, $timeout = 1000)
-    {
-        return race([
-            callcc(function($k) use($uri, $post) {
-                $this->post($uri, $post, $k);
-            }),
-            timeout($timeout),
-        ]);
-    }
-
-    public function awaitExecute($uri, $timeout = 1000)
-    {
-        return race([
-            callcc(function($k) use($uri) {
-                $this->execute($uri, $k);
-            }),
-            timeout($timeout),
-        ]);
-    }
+    // ...
 }
 
 
@@ -1445,10 +1464,11 @@ spawn(function() {
 
 ```
 
+--------------------------------------------------------------------------------
 
-有了Any, 我们自然想到实现All,
+All与Parallel
 
-Any 表示多个异步回调, 任意回调执行则任务完成, All 则表示等待所有回调执行
+Any表示多个异步回调, 任一回调完成则任务完成, All表示等待所有回调均执行完成, 任务完成, 二者相同点是IO部分并发执行;
 
 
 ```php
@@ -1488,6 +1508,7 @@ class All implements Async
                 return;
             }
 
+            // 任一回调发生异常, 终止任务
             if ($ex) {
                 $this->done = true;
                 $k = $this->continuation;
@@ -1497,6 +1518,7 @@ class All implements Async
 
             $this->results[$id] = $r;
             if (--$this->n === 0) {
+                // 所有回调完成, 终止任务
                 $this->done = true;
                 if ($this->continuation) {
                     $k = $this->continuation;
@@ -1510,10 +1532,7 @@ class All implements Async
 
 function all(array $tasks)
 {
-    foreach ($tasks as &$task) {
-        $task = await($task);
-    }
-    unset($task);
+    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
 
     return new Syscall(function(AsyncTask $parent) use($tasks) {
         if (empty($tasks)) {
@@ -1525,7 +1544,6 @@ function all(array $tasks)
 }
 
 
-// test
 spawn(function() {
     $ex = null;
     try {
@@ -1552,22 +1570,19 @@ array(3) {
 });
 
 
-我们实现了出与Promise.all接口, 
+我们这里实现了与Promise.all相同语义的接口, 
 
-或者更复杂一些, 我们也可以实现拥有并发窗口调控能力的chunk方式作业的接口;
+或者更复杂一些, 我们也可以实现批量任务以chunk方式进行作业的接口, 留待读者自己完成;
 
-------------------------------------------------------------------
-------------------------------------------------------------------
-
-我们已经拥有了 `spawn` `callcc` `race` `all` `timeout` 已经支持yield的常用Client实现,
+至此, 我们已经拥有了 `spawn` `callcc` `race` `all` `timeout`.
 
 ------------------------------------------------------------------
-------------------------------------------------------------------
 
+Channel与协程间通信
 
-虽然我们已经构建了基于yield语义的半协程, 事实上, 我们仍旧可以做一些更有趣的事情,
+虽然已经构建了基于yield的半协程, 之前所有讨论都集中在单个协程, 我们可以再深入一步,
 
-比如Channel, 没错,就是golang的channel.
+构造带有阻塞语义的协程间通信原语--channel, 这里按照golang的channel来实现;
 
 [playground](https://tour.golang.org/concurrency/2)
 
@@ -1575,10 +1590,14 @@ array(3) {
 
 > This allows goroutines to synchronize without explicit locks or condition variables.
 
+相比golang, 我们因为只有一个线程, 对于chan发送与接收的阻塞的处理, 
 
-相比较golang, 我们只有一个线程, 对于chan发送与接收的阻塞的处理, 
+最终会被转换为对使用chan的协程的控制流的控制.
 
-我们最终转换为对使用chan的协程的控制流的控制.
+
+------------------------------------------------------------------
+
+无缓存Channel
 
 我们首先实现无缓存的Channel:
 
@@ -1647,11 +1666,16 @@ class Channel
 }
 ```
 
-接下来我们来实现带缓存的Channel
+------------------------------------------------------------------
+
+带缓存Channel
+
+接下来我们来实现带缓存的Channel:
 
 > Sends to a buffered channel block only when the buffer is full. 
 
 > Receives block when the buffer is empty.
+
 
 ```php
 <?php
@@ -1696,7 +1720,7 @@ class BufferChannel
 
             }
 
-            // 递归的唤醒其他被阻塞的发送者与接收者收发数据,注意顺序
+            // 递归唤醒其他被阻塞的发送者与接收者收发数据,注意顺序
             $this->recvPingPong();
         });
     }
@@ -1718,7 +1742,7 @@ class BufferChannel
 
             }
 
-            // 递归的唤醒其他被阻塞的接收者与发送者收发数据,注意顺序
+            // 递归唤醒其他被阻塞的接收者与发送者收发数据,注意顺序
             $this->sendPingPong();
 
             // 如果全部代码都为同步,防止多个发送者时, 数据全部来自某个发送者
@@ -1772,7 +1796,9 @@ class BufferChannel
 }
 ```
 
+------------------------------------------------------------------
 
+Channel演示
 
 这是我们最终得到的接口
 
@@ -1815,6 +1841,7 @@ go(function() use($pingCh, $pongCh) {
         yield $pongCh->send("PONG\n");
 
         // 递归调度器实现, 需要引入异步的方法退栈, 否则Stack Overflow...
+        // 或者考虑将send或者recv以defer方式实现
         yield async_sleep(1);
     }
 });
@@ -1828,6 +1855,7 @@ go(function() use($pingCh, $pongCh) {
     }
 });
 
+// start up
 go(function() use($pingCh) {
     echo "start up\n";
     yield $pingCh->send("PING");
@@ -1848,7 +1876,6 @@ PING
 
 ```
 
-
 当然, 我们可以很轻易构建一个生产者-消费者模型
 
 
@@ -1857,6 +1884,7 @@ PING
 
 $ch = chan();
 
+// 生产者1
 go(function() use($ch) {
     while (true) {
         yield $ch->send("producer 1");
@@ -1864,6 +1892,7 @@ go(function() use($ch) {
     }
 });
 
+// 生产者2
 go(function() use($ch) {
     while (true) {
         yield $ch->send("producer 2");
@@ -1871,6 +1900,7 @@ go(function() use($ch) {
     }
 });
 
+// 消费者1
 go(function() use($ch) {
     while (true) {
         $recv = (yield $ch->recv());
@@ -1878,6 +1908,7 @@ go(function() use($ch) {
     }
 });
 
+// 消费者2
 go(function() use($ch) {
     while (true) {
         $recv = (yield $ch->recv());
@@ -2052,162 +2083,408 @@ go(function() use($ch) {
 
 channel的发送与接受没有超时机制, golang可以select多个chan实现超时处理,
 
-我们也可以做一个range的设施, 或者在send于recv接受直接添加超时参数, 扩展接口功能,
+我们可以做一个select设施, 或者在send于recv接受直接添加超时参数, 扩展接口功能,
 
 留待读者自行实现. 
 
-
-
------------------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------------
 
+协程同步
+
+在多线程代码中我们经常会遇到这种模型, 将一个耗时任务, new一个新的Thread或者通常放到线程池后台执行, 
+
+当前线程执行另外任务, 之后通过某个api接口阻塞获取后台任务结果;
+
+Java童鞋应该对这个概念非常熟悉——JDK给予直接支持的Future;
+
+同样的模型我们可以利用介绍过channel对多个协程做进行同步来实现, 代码很简单:
 
 
+```
+<?php
 
-### Koa
+go(function() {
+    $start = microtime(true);
 
-Koa自述是下一代web框架：
+    $ch = chan();
 
-> 由 Express 原班人马打造的 koa,致力于成为一个更小、更健壮、更富有表现力的 Web 框架。
-> 使用 koa 编写 web 应用,通过组合不同的 generator,
-> 可以免除重复繁琐的回调函数嵌套,并极大地提升常用错误处理效率。
-> Koa 不在内核方法中绑定任何中间件,它仅仅提供了一个轻量优雅的函数库,使得编写 Web 应用变得得心应手。
+    // 开启一个新的协程, 异步执行耗时任务
+    spawn(function() use($ch) {
+        yield delay(1000);
+        yield $ch->send(42); // 通知+传送结果
+    });
+
+    yield delay(500);
+    $r = (yield $ch->recv()); // 阻塞等待结果
+    echo $r; // 42
+
+    // 我们这里两个耗时任务并发执行, 总耗时约1000ms
+    echo "cost ", microtime(true) - $start, "\n";
+});
+
+```
+
+事实上我们也很容易把Future模型移植过来
+
+```php
+<?php
+final class FutureTask
+{
+    const PENDING = 1;
+    const DONE = 2;
+    private $cc;
+
+    public $state;
+    public $result;
+    public $ex;
+
+    public function __construct(\Generator $gen)
+    {
+        $this->state = self::PENDING;
+
+        $asyncTask = new AsyncTask($gen);
+        $asyncTask->begin(function($r, $ex = null)  {
+            $this->state = self::DONE;
+            if ($cc = $this->cc) {
+                // 有cc, 说明有call get方法挂起协程, 在此处唤醒
+                $cc($r, $ex);
+            } else {
+                // 无挂起, 暂存执行结果
+                $this->result = $r;
+                $this->ex = $ex;
+            }
+        });
+    }
+
+    public function get()
+    {
+        return callcc(function($cc) use($timeout) {
+            if ($this->state === self::DONE) {
+                // 获取结果时, 任务已经完成, 同步返回结果
+                // 这里也可以考虑用defer实现, 异步返回结果, 首先先释放php栈, 降低内存使用
+                $cc($this->result, $this->ex);
+            } else {
+                // 获取结果时未完成, 保存$cc, 挂起等待
+                $this->cc = $cc;
+            }
+        });
+    }
+}
 
 
-Koa是那种与martini一样,设计清爽的框架,
-我们可以用少量的代码基于PHP5.6与yz-swoole(有赞内部自研稳定版本的Swoole,暂且等待,即将发布)重新发明；
-martini与Koa都属于中间件web框架,采用洋葱模型middleware stack,自身没有提供任何业务相关库,但提供了强大的灵活性,
+// helper
+function fork($task, ...$args)
+{
+    $task = await($task); // 将task转换为生成器
+    yield new FutureTask($task);
+}
+```
 
-对于web应用来讲,所有业务逻辑归根结底都在处理请求与相应对象,
-web中间件实质就是在请求与响应中间开放出来的可编排的扩展点,
-比如在修改请求做URLRewrite,比如身份验证,安全拦截；
 
-真正的业务逻辑都可以通过middleware实现,或者说按特定顺序对中间件灵活组合编排;
-Koa对中间编写的贡献是,合并req + res对象,封装组合方式,让编写更直观方便；
-因为koa2.x决定全面使用async/await, 我们这里使用PHP实现koa1.x,
-仍旧将Generator作为middleware实现形式.
+还是刚才那个例子, 我们改写为FutureTask版本:
 
------------------------------------------------------------------------------------------------
+
+```php
+<?php
+go(function() {
+    $start = microtime(true);
+
+    // fork 子协程执行耗时任务
+    /** @var $future FutureTask */
+    $future = (yield fork(function() {
+        yield delay(1000);
+        yield 42;
+    }));
+
+    yield delay(500);
+
+    // 阻塞等待结果
+    $r = (yield $future->get());
+    echo $r; // 42
+
+    // 总耗时仍旧只有1000ms
+    echo "cost ", microtime(true) - $start, "\n";
+});
+```
+
+
+再进一步, 我们扩充FutureTask的状态, 阻塞获取结果加入超时选项:
 
 
 ```php
 <?php
 
+final class FutureTask
+{
+    const PENDING = 1;
+    const DONE = 2;
+    const TIMEOUT = 3;
 
-// 作为一个表达能力很强中间件框架, koa本身只有极少的通用组件, 其中最有价值的是
-// > Koa's middleware stack flows in a stack-like manner,
-// > allowing you to perform actions downstream then filter and manipulate the response upstream.
-// KOA 地址
-// koa 只有四个组件, Application, Context, Request, Response
+    private $timerId;
+    private $cc;
 
-/*
-+Each middleware receives a Koa `Context` object that encapsulates an incoming
-+http message and the corresponding response to that message.  `ctx` is often used
-+as the parameter name for the context object.
+    public $state;
+    public $result;
+    public $ex;
+
+    // 我们这里加入新参数, 用来链接futureTask与caller父任务
+    // 这样的好处比如可以共享父子任务上下文
+    public function __construct(\Generator $gen, AsyncTask $parent = null)
+    {
+        $this->state = self::PENDING;
+
+        if ($parent) {
+            $asyncTask = new AsyncTask($gen, $parent);
+        } else {
+            $asyncTask = new AsyncTask($gen);
+        }
+
+        $asyncTask->begin(function($r, $ex = null)  {
+            // PENDING or TIMEOUT
+            if ($this->state === self::TIMEOUT) {
+                return;
+            }
+
+            // PENDING -> DONE
+            $this->state = self::DONE;
+
+            if ($cc = $this->cc) {
+                if ($this->timerId) {
+                    swoole_timer_clear($this->timerId);
+                }
+                $cc($r, $ex);
+            } else {
+                $this->result = $r;
+                $this->ex = $ex;
+            }
+        });
+    }
+
+    // 这里超时时间0为永远阻塞,
+    // 否则超时未获取到结果, 将向父任务传递超时异常
+    public function get($timeout = 0)
+    {
+        return callcc(function($cc) use($timeout) {
+            // PENDING or DONE
+            if ($this->state === self::DONE) {
+                $cc($this->result, $this->ex);
+            } else {
+                // 获取结果时未完成, 保存$cc, 开启定时器(如果需要), 挂起等待
+                $this->cc = $cc;
+                $this->getResultTimeout($timeout);
+            }
+        });
+    }
+
+    private function getResultTimeout($timeout)
+    {
+        if (!$timeout) {
+            return;
+        }
+
+        $this->timerId = swoole_timer_after($timeout, function() {
+            assert($this->state === self::PENDING);
+            $this->state = self::TIMEOUT;
+            $cc = $this->cc;
+            $cc(null, new AsyncTimeoutException());
+        });
+    }
+}
+```
+
+因为引入parentTask参数, 需要将父任务隐式传参, 
+
+而我们执行通过Syscall与执行当前生成器的父任务交互,
+
+所以我们重写fork辅助函数, 改用Syscall实现:
+
+
+```php
+<?php
+
+/**
+ * @param $task
+ * @return Syscall
  */
+function fork($task)
+{
+    $task = await($task);
+    return new Syscall(function(AsyncTask $parent) use($task) {
+        return new FutureTask($task, $parent);
+    });
+}
 
-// koa readme !!!
-// koa是中间件框架,中间件可以用callable与Generator表示
-// 参数约定 ctx, next
-/*
+```
 
-
-
-+The `Context` object also provides shortcuts for methods on its `request` and `response`.  In the prior
-+examples,  `ctx.type` can be used instead of `ctx.request.type` and `ctx.accepts` can be used
-+instead of `ctx.request.accepts`.
-
-
-## Koa Application
-+
-+The object created when executing `new Koa()` is known as the Koa application object.
-+
-+The application object is Koa's interface with node's http server and handles the registration
-+of middleware, dispatching to the middleware from http, default error handling, as well as
-+configuration of the context, request and response objects.
-
-*/
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-// 但凡web框架都会有拦截器或者过滤器的组件, aop
-// Ruby Rack
-// Golang matini
-// Python django
-// Node Express, Koa 都有一个类似的中间件系统
-// 对于web应用来讲,中间件在请求与响应中间开放出来可编排的扩展点,改写req res
+下面看一些关于超时的示例:
 
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```php
+<?php
 
-// 演示koa的中间件之前,我们先来一场穿越地心之旅
+go(function() {
+    $start = microtime(true);
 
-// https://zh.wikipedia.org/wiki/%E5%9C%B0%E7%90%83%E6%A7%8B%E9%80%A0
-// 物理学上,地球可划分为岩石圈、软流层、地幔、外核和内核5层。
-// 化学上,地球被划分为地壳、上地幔、下地幔、外核和内核。地质学上对地球各层的划分
+    /** @var $future FutureTask */
+    $future = (yield fork(function() {
+        yield delay(500);
+        yield 42;
+    }));
+
+    // 阻塞等待超时, 捕获到超时异常
+    try {
+        $r = (yield $future->get(100));
+        var_dump($r);
+    } catch (\Exception $ex) {
+        echo "get result timeout\n";
+    }
+
+    yield delay(1000);
+
+    // 因为我们只等待子任务100ms, 我们的总耗时只有 1100ms
+    echo "cost ", microtime(true) - $start, "\n";
+});
+
+go(function() {
+    $start = microtime(true);
+
+    /** @var $future FutureTask */
+    $future = (yield fork(function() {
+        yield delay(500);
+        yield 42;
+        throw new \Exception();
+    }));
+
+    yield delay(1000);
+
+    // 子任务500ms前发生异常, 已经处于完成状态
+    // 我们调用get会当即引发异常
+    try {
+        $r = (yield $future->get());
+        var_dump($r);
+    } catch (\Exception $ex) {
+        echo "something wrong in child task\n";
+    }
+
+    // 因为耗时任务并发执行, 这里总耗时仅1000ms
+    echo "cost ", microtime(true) - $start, "\n";
+});
+
+```
 
 
+
+-----------------------------------------------------------------------------------------------
+
+# 第二部分: Koa
+
+Koa自述是下一代web框架：
+
+> 引自官网:
+> 由 Express 原班人马打造的 Koa,致力于成为一个更小、更健壮、更富有表现力的 Web 框架。
+> 使用 Koa 编写 web 应用,通过组合不同的 generator,
+> 可以免除重复繁琐的回调函数嵌套,并极大地提升常用错误处理效率。
+> Koa 不在内核方法中绑定任何中间件,它仅仅提供了一个轻量优雅的函数库,使得编写 Web 应用变得得心应手。
+
+像`Ruby Rack` `Python django` `Golang matini` `Node Express` `PHP Laravel` `Java Spring`,
+
+Web框架大多会有一个面向AOP的中间件模块, 内部操纵Req/Res对象可选执行next动作,
+
+Koa与martini类似, 都属于设计清爽的中间件web框架, 采用洋葱模型middleware stack, 但合并了Request与Response对象, 编写更直观方便；
+
+> Koa's middleware stack flows in a stack-like manner,
+> allowing you to perform actions downstream then filter and manipulate the response upstream.
+> Each middleware receives a Koa `Context` object that encapsulates an incoming
+> http message and the corresponding response to that message.  `ctx` is often used
+> as the parameter name for the context object.
+
+[Laravel Middleware](https://laravel.com/docs/5.4/middleware)
+Laravel after方法的书写不够自然, 需要中间变量保存Response; Spring的Interceptor功能强大, 但编写略繁琐; Koa则简单的多, 而且可以在某个中间件中灵活控制之后中间件执行时机;
+
+其实对于web框架来讲, 业务逻辑归根结底都在处理请求与相应对象, web中间件实质就是在请求与响应中间开放出来的可编排的扩展点,
+
+比如修改请求做URLRewrite, 比如请求日志, 身份验证...
+
+真正的业务逻辑都可以通过middleware实现,或者说按特定顺序对中间件灵活组合编排;
+
+我们基于PHP5.6与yz-swoole(有赞内部自研稳定版本的swoole, 年中即将开源), 用少量的代码即可实现一个another Koa;
+
+Koa2.x决定全面使用async/await, 受限于PHP语法, 我们这里仅实现Koa1.x, 将Generator作为middleware实现形式.
+
+------------------------------------------------------------------------
+
+洋葱圈模型与穿越地心之旅
+
+(如果你了解洋葱圈模型, 略过本小节)
+
+首先让我们对洋葱圈模型有一个直观的认识,
+
+[地球构造](https://zh.wikipedia.org/wiki/%E5%9C%B0%E7%90%83%E6%A7%8B%E9%80%A0)
+
+> 物理学上,地球可划分为岩石圈、软流层、地幔、外核和内核5层。
+
+> 化学上,地球被划分为地壳、上地幔、下地幔、外核和内核。地质学上对地球各层的划分
+
+演示Koa的中间件之前, 我们用函数来描述一场穿越地心之旅:
+
+------------------------------------------------------
+
+```php
+<?php
 function crust($next)
 {
-    return function() use($next) {
-        echo "到达<地壳>\n";
-        $next();
-        echo "离开<地壳>\n";
-    };
+    echo "到达<地壳>\n";
+    $next();
+    echo "离开<地壳>\n";
 }
 
 function upperMantle($next)
 {
-    return function() use($next) {
-        echo "到达<上地幔>\n";
-        $next();
-        echo "离开<上地幔>\n";
-    };
+    echo "到达<上地幔>\n";
+    $next();
+    echo "离开<上地幔>\n";
 }
 
 function mantle($next)
 {
-    return function() use($next) {
-        echo "到达<下地幔>\n";
-        $next();
-        echo "离开<下地幔>\n";
-    };
+    echo "到达<下地幔>\n";
+    $next();
+    echo "离开<下地幔>\n";
 }
 
 function outerCore($next)
 {
-    return function() use($next) {
-        echo "到达<外核>\n";
-        $next();
-        echo "离开<外核>\n";
-    };
+    echo "到达<外核>\n";
+    $next();
+    echo "离开<外核>\n";
 }
 
 function innerCore($next)
 {
-    return function() {
-        echo "到达<内核>\n";
-    };
+    echo "到达<内核>\n";
 }
 
-
+// 我们逆序组合组合, 返回入口
 function makeTravel(...$layers)
 {
     $next = null;
     $i = count($layers);
     while ($i--) {
-        $next = $layers[$i]($next);
+        $layer = $layers[$i];
+        $next = function() use($layer, $next) {
+            // 这里next指向穿越下一次的函数, 作为参数传递给上一层调用
+            $layer($next);
+        };
     }
     return $next;
 }
 
-//$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore", "innerCore");
-//$travel(); // output:
 
+// 我们途径 crust -> upperMantle -> mantle -> outerCore -> innerCore 到达地心 
+// 然后穿越另一半球  -> outerCore -> mantle -> upperMantle -> crust
 
+$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore", "innerCore");
+$travel(); // output:
 /*
 到达<地壳>
 到达<上地幔>
@@ -2219,22 +2496,24 @@ function makeTravel(...$layers)
 离开<上地幔>
 离开<地壳>
 */
+```
 
+------------------------------------------------------
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```php
+<?php
 
 function outerCore1($next)
 {
-    return function() use($next) {
-        echo "到达<外核>\n";
-        // 我们放弃内核, 仅仅绕外壳一周, 从另一侧返回地表
-        // $next();
-        echo "离开<外核>\n";
-    };
+    echo "到达<外核>\n";
+    // 我们放弃内核, 仅仅绕外壳一周, 从另一侧返回地表
+    // $next();
+    echo "离开<外核>\n";
 }
 
-//$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore1", "innerCore");
-//$travel(); // output:
+
+$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore1", "innerCore");
+$travel(); // output:
 /*
 到达<地壳>
 到达<上地幔>
@@ -2245,21 +2524,22 @@ function outerCore1($next)
 离开<上地幔>
 离开<地壳>
 */
+```
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+------------------------------------------------------
 
-
+```php
+<?php
 function innerCore1($next)
 {
-    return function() {
-        // 我们到达内核之前遭遇了岩浆,计划终止,等待救援
-        throw new \Exception("岩浆");
-        echo "到达<内核>\n";
-    };
+    // 我们到达内核之前遭遇了岩浆,计划终止,等待救援
+    throw new \Exception("岩浆");
+    echo "到达<内核>\n";
 }
 
-//$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore", "innerCore1");
-//$travel(); // output:
+
+$travel = makeTravel("crust", "upperMantle", "mantle", "outerCore", "innerCore1");
+$travel(); // output:
 /*
 到达<地壳>
 到达<上地幔>
@@ -2267,27 +2547,29 @@ function innerCore1($next)
 到达<外核>
 Fatal error: Uncaught exception 'Exception' with message '岩浆'
 */
+```
 
+------------------------------------------------------
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```php
+<?php
 
 function mantle1($next)
 {
-    return function() use($next) {
-        echo "到达<下地幔>\n";
-        // 我们再下地幔的救援团队及时赶到 (try catch)
-        try {
-            $next();
-        } catch (\Exception $ex) {
-            echo "遇到", $ex->getMessage(), "\n";
-        }
-        // 我们仍旧没有去往内核, 绕道对面下地幔, 返回地表
-        echo "离开<下地幔>\n";
-    };
+    echo "到达<下地幔>\n";
+    // 我们在下地幔的救援团队及时赶到 (try catch)
+    try {
+        $next();
+    } catch (\Exception $ex) {
+        echo "遇到", $ex->getMessage(), "\n";
+    }
+    // 我们仍旧没有去往内核, 绕道对端下地幔, 返回地表
+    echo "离开<下地幔>\n";
 }
 
-//$travel = makeTravel("crust", "upperMantle", "mantle1", "outerCore", "innerCore1");
-//$travel(); // output:
+
+$travel = makeTravel("crust", "upperMantle", "mantle1", "outerCore", "innerCore1");
+$travel(); // output:
 /*
 到达<地壳>
 到达<上地幔>
@@ -2298,30 +2580,31 @@ function mantle1($next)
 离开<上地幔>
 离开<地壳>
 */
+```
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+------------------------------------------------------
+
+```php
+<?php
 
 function upperMantle1($next)
 {
-    return function() use($next) {
-        // 我们放弃对去程上地幔的暂留
-        // echo "到达<上地幔>\n";
-        $next();
-        // 只在返程时暂留
-        echo "离开<上地幔>\n";
-    };
+    // 我们放弃对去程上地幔的暂留
+    // echo "到达<上地幔>\n";
+    $next();
+    // 只在返程时暂留
+    echo "离开<上地幔>\n";
 }
 
 function outerCore2($next)
 {
-    return function() use($next) {
-        // 我们决定只在去程考察外壳
-        echo "到达<外核>\n";
-        $next();
-        // 因为温度过高,去程匆匆离开外壳
-        // echo "离开<外核>\n";
-    };
+    // 我们决定只在去程考察外核
+    echo "到达<外核>\n";
+    $next();
+    // 因为温度过高,去程匆匆离开外壳
+    // echo "离开<外核>\n";
 }
+
 
 $travel = makeTravel("crust", "upperMantle1", "mantle1", "outerCore2", "innerCore1");
 $travel(); // output:
@@ -2335,109 +2618,131 @@ $travel(); // output:
 离开<上地幔>
 离开<地壳>
 */
-
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-/*
 ```
-            --------------------------------------
-            |            middleware1              |
-            |    ----------------------------     |
-            |    |       middleware2         |    |
-            |    |    -------------------    |    |
-            |    |    |  middleware3    |    |    |
-            |    |    |                 |    |    |
-          next next next  ———————————   |    |    |
-请求 ——————————————————> |  handler  |   — 收尾工作->|
-响应 <—————————————————  |     G     |   |    |    |
-            | A  | C  | E ——————————— F |  D |  B |
-            |    |    |                 |    |    |
-            |    |    -------------------    |    |
-            |    ----------------------------     |
-            --------------------------------------
+
+------------------------------------------------------
 
 
-顺序 A -> C -> E -> G -> F -> D -> B
-    \---------------/   \----------/
-            ↓                ↓
-        请求响应完毕        收尾工作
+我们把函数从内向外组合, 把内层函数的执行控制权包裹成next参数传递给外层函数,
+
+让外层函数自行控制内层函数执行时机, 我们再一次把控制流暴露出来,
+
+第一次是引入continuation, 把return决定的控制流暴露到参数中,
+
+于是 我们可以在外层函数 执行next的前后加入自己的逻辑, 得到 AOP 的before与after语义,
+
+但不仅仅如此, 我们甚至可以不执行内层函数, 然后我们穿越地心的过程沿着某个半圆绕过了地核,
+
+再或者, 我们也可以放弃after, 函数成为 前置过滤器, 如果我们放弃before, 函数成为 后置过滤器,
+
+关于错误处理, 我们可以在某层的函数 try-catch next调用, 从而阻止内层函数的异常向上传递,
+
+想想我们在地底深处包裹了一层可以抵御岩浆外太空物质, 岩浆被安全的阻止在地心,
+
+事实上这就是一个极简的洋葱圈结构.
+
+------------------------------------------------------
+
+
+然后, 有心同学可能会发现, 我们的makeTravel其实是一个对函数列表进行rightReduce的函数.
+
+```php
+<?php
+
+function compose(...$fns)
+{
+    return array_right_reduce($fns, function($carry, $fn) {
+        return function() use($carry, $fn) {
+            $fn($carry);
+        };
+    });
+}
+
+function array_right_reduce(array $input, callable $function, $initial = null)
+{
+    return array_reduce(array_reverse($input, true), $function, $initial);
+}
+
 ```
-*/
+将上述makeTravel替换成compose, 我们将得到完全相同的结果.
 
 
-// 输出结构演示了这种洋葱圈结构的实现方式与执行流程
+------------------------------------------------------
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+Compose
 
+我们修改函数列表中函数的签名, middleware :: (Context $ctx, Generator $next) -> void,
 
-// 我们把函数从内向外组合, 把内层函数的执行控制权包裹成next参数传递给外层函数
-// 让外层函数自行控制内层函数执行时机, 我们再一次把控制流暴露出来
-// 第一次是引入continuation, 把return决定的控制流暴露到参数中
-// 于是 我们可以在外层函数 执行next时, 前后加入自己的逻辑, 得到 AOP 的before与after语义
-// 但是不仅仅如此, 我们甚至可以不执行内层函数, 然后我们穿越地心的过程沿着某个半圆绕过了地核 （画图）
-// 抑或,我们也可以放弃after,函数则成为 前置过滤器(Filter),如果我们放弃before,函数则成为 后置过滤器(Terminator)
-// 关于错误处理, 我们可以在某层的函数 try-catch next调用, 从而阻止内层函数的异常向上传递
-// 想想我们在地底深处包裹了一层可以抵御岩浆外太空物质, 岩浆被安全的舒服到了地心
-// 我们得到一个极简且巧妙的洋葱圈结构
+我们把满足List<Middleware>的函数列表进行组合(rightReduce), 得到中间件入口函数,
 
-// signature middleware :: (Context $ctx, $next) -> void
-// 我们把多个满足中间件签名的若干个函数(callable)组合成一个函数
+只需要稍加改造, 我们的compose方法便可以处理生成器函数, 用来支持我们上文的半协程.
 
-// 稍加改造, 我们把compose修改为生成器函数, 用来支持我们之前做的协程执行器async/go
+```php
+<?php
 function compose(...$middleware)
 {
-    return function(Context $ctx = null, $next = null) use($middleware) {
-        $ctx = $ctx ?: new Context();
-        $next = $next ?: function() { yield; };
-
+    return function(Context $ctx = null) use($middleware) {
+        $ctx = $ctx ?: new Context(); // Context 参见下文
+        $next = null;
         $i = count($middleware);
         while ($i--) {
             $curr = $middleware[$i];
             $next = $curr($ctx, $next);
+            assert($next instanceof \Generator);
         }
-        yield $next;
+        return $next;
     };
 }
+```
 
-/*
-Method Combination
- Build a method from components in different classes
- Primary methods: the “normal” methods; choose the
-most specific one
- Before/After methods: guaranteed to run;
-No possibility of forgetting to call super
-Can be used to implement Active Value pattern
- Around methods: wrap around everything;
-Used to add tracing information, etc.
- Is added complexity worth it?
-Common Lisp: Yes; Most languages: No
+如果是中间件是\Closure, 打包过程可以可以将$this变量绑定到$ctx, 
+
+中间件内可以使用$this代替$ctx, Koa1.x采用这种方式, Koa2.x已经废弃;
+
+```
+if ($middleware[$i] instanceof \Closure) {
+    // 
+    $curr = $middleware[$i]->bindTo($ctx, Context::class);
+}
+```
+
+rightReduce版本
+
+```php
+<?php
+function compose(array $middleware)
+{
+    return function(Context $ctx = null) use($middleware) {
+        $ctx = $ctx ?: new Context(); // Context 参见下文        
+        return array_right_reduce($middleware, function($rightNext, $leftFn) use($ctx) {
+            return $leftFn($ctx, $rightNext);
+        }, null);
+    };
+}
+```
+
+-----------------------------------------------------------------------------------------------
+
+接下来我们来看Koa的仅有四个组件, Application, Context, Request, Response, 依次给予实现:
+
+[Koa-guide](https://github.com/guo-yu/Koa-guide)
+
+-----------------------------------------------------------------------------------------------
+
+Koa::Application
 
 
-First-Class Dynamic Functions
- Functions are objects too
- Functions are composed of methods
- There are operations on functions (compose, conjoin)
- Code is organized around functions as well as classes
- Function closures capture local state variables
-(Objects are state data with attached behavior;
-Closures are behaviors with attached state data
-and without the overhead of classes.)
- */
+> The application object is Koa's interface with node's http server and handles the registration
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+> of middleware, dispatching to the middleware from http, default error handling, as well as
+
+> configuration of the context, request and response objects.
 
 
+我们的App模块是对swoole_http_server的简单封装, 在onRequest回调中对中间件compose并执行:
 
-// 参考 https://github.com/guo-yu/koa-guide
-
-// 1. App 模块是对swoole_http_server 的简单封装
-// 在onRequest回调中执行composer之后的中间件
-// koa 最大的优势是中间件系统,比传统的做法多了一层逆序回调,像我们之前展示的case,
-// koa中间件的原理与 Ruby Rack 或者 Connect/Express 或者 Django Middleware可能没有太大区别
-// 但是提供了一种最为简单明了的中间件编写方法
-
-
+```php
+<?php
 
 class Application
 {
@@ -2463,15 +2768,15 @@ class Application
         return $this;
     }
 
-    // compose中间件监听端口提供服务
+    // compose中间件 监听端口提供服务
     public function listen($port = 8000, array $config = [])
     {
         $this->fn = compose(...$this->middleware);
         $config = ['port' => $port] + $config + $this->defaultConfig();
         $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, SWOOLE_SOCK_TCP);
         $this->httpServer->set($config);
-        // ......省略代码
-        // 绑定 swoole HttpServer 事件, start shutdown connect close workerStart workerStop workerError request
+        // 省略绑定 swoole HttpServer 事件, start shutdown connect close workerStart workerStop workerError request
+        // ...
         $this->httpServer->start();
     }
 
@@ -2536,7 +2841,7 @@ class Application
 
     protected function respond(Context $ctx)
     {
-        if ($ctx->respond === false) return; // allow bypassing koa
+        if ($ctx->respond === false) return; // allow bypassing Koa
 
         $body = $ctx->body;
         $code = $ctx->status;
@@ -2575,9 +2880,17 @@ class Application
     }
 }
 
+```
 
-// Context 组件代理了Request与Response中的方法和属性,简化了使用方式与中间件接口
-// 这里用php的魔术方法来简化处理
+-----------------------------------------------------------------------------------------------
+
+Koa::Context
+
+Context 组件代理了Request与Response中的方法和属性,简化了使用方式与中间件接口, 这里用php的魔术方法来处理
+
+
+```php
+<?php
 
 class Context
 {
@@ -2624,9 +2937,16 @@ class Context
         }
     }
 }
+```
 
+-----------------------------------------------------------------------------------------------
 
-// Request 组件是对swoole_http_request 的简易封装
+Koa::Request
+
+Request 组件是对swoole_http_request 的简单封装
+
+```php
+<?php
 
 class Request
 {
@@ -2693,9 +3013,16 @@ class Request
         }
     }
 }
+```
 
+-----------------------------------------------------------------------------------------------
 
-// Response 组件是对swoole_http_response 的简易封装
+Koa::Response
+
+Response 组件是对swoole_http_response 的简单封装
+
+```php
+<?php
 
 class Response
 {
@@ -2770,39 +3097,98 @@ class Response
         $this->ctx->body = (yield Template::render($file, $this->ctx->state));
     }
 }
+```
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+-----------------------------------------------------------------------------------------------
 
-// example:
+Koa::HelloWorld
+
+以上便是全部了, 我们重点来看示例:
+
+
+我们只注册一个中间件, Hello Worler Server
+
+```php
+<?php
 
 $app = new Application();
+
+// ...
+
 $app->υse(function(Context $ctx) {
     $ctx->status = 200;
     $ctx->body = "<h1>Hello World</h1>";
 });
+
 $app->listen(3000);
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```
 
+
+我们在Hello中间件前面注册一个Reponse-Time中间件, 注意看, 我们的逻辑是连贯的;
+
+```php
+<?php
 
 $app->υse(function(Context $ctx, $next) {
+    
     $start = microtime(true);
-    yield $next;
+
+    yield $next; // 执行后续中间件
+
     $ms = number_format(microtime(true) - $start, 7);
+
     // response header 写入 X-Response-Time: xxxms
     $ctx->{"X-Response-Time"} = "{$ms}ms";
-    sys_echo("$ctx->method $ctx->url - $ms");
 });
 
+```
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+------------------------------------------------------------------------
 
-// 全局异常处理中间件
-// 需要在 业务逻辑中间件 前use
-// catch 在 ExceptionHandler之后use的中间件中未捕获异常
-// 这里插入一点,中间件的use顺序非常重要,比如这里的异常,必须优先use,才可以捕获下层中间件
-// 抛出的异常,又比如session中间件,需要优先于业务处理中间件
-// 而像处理404状态码的中间件,也需要高优先级,但是逻辑只会在upstream逆序调用,即next之后
+Middleware Interface
+
+我们为Middleware声明一个接口, 让稍微复杂一点的中间件以类的形式存在, 
+
+实现该接口的类实例自身满足callable类型, 我们的中间件接受任何callable,
+
+所以, 这并不是必须的, 仅仅是为了更好阻止代码, 且对PSR4的autoload友好;
+
+
+```php
+<?php
+
+interface Middleware
+{
+    public function __invoke(Context $ctx, $next);
+}
+```
+
+函数与类并没有孰优孰劣
+
+> Objects are state data with attached behavior; 
+
+> Closures are behaviors with attached state data and without the overhead of classes.
+
+我们可以在对象形式的中间件附加更多的状态, 以应对复杂的场景;
+
+
+------------------------------------------------------------------------
+
+Middleware 演示
+
+
+全局异常处理中间件
+
+我们在岩浆的实例其实已经注意到了, compose 的连接方式, 让我们有能力精确控制异常;
+
+Koa中间件最终行为强依赖注册顺序, 比如我们这里要引入的异常处理, 必须在业务逻辑中间件前注册,
+
+才能捕获后续中间件中未捕获异常, 回想一下我们的调度器实现的异常传递流程;
+
+
+```php
+<?php
 
 class ExceptionHandler implements Middleware
 {
@@ -2844,44 +3230,60 @@ class ExceptionHandler implements Middleware
     }
 }
 
-
 $app->υse(new ExceptionHandler());
 
-// 可以将FastRoute与Exception中间件结合
-// 很容可以定制一个针对路由注册的灵活的异常处理器
+```
+
+可以将FastRoute与Exception中间件结合, 
+
+很容可以定制一个按路由匹配注册的异常处理器, 留待读者自行实现.
 
 
+顺序问题, 再比如session中间件,需要优先于业务处理中间件, 
 
+而像处理404状态码的中间件, 则需要在upstream流程中(逆序)的收尾阶段, 我们仅仅只关心next后逻辑;
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-// 为了更好阻止代码,我们为Middleware声明一个接口
-
-interface Middleware
+```php
+<?php
+function notfound(Context $ctx, $next)
 {
-    public function __invoke(Context $ctx, $next);
+    yield $next;
+
+    if ($ctx->status !== 404 || $ctx->body) {
+        return;
+    }
+
+    $ctx->status = 404;
+
+    if ($ctx->accept("json")) {
+        $ctx->body = [
+            "message" => "Not Found",
+        ];
+        return;
+    }
+
+    $ctx->body = "<h1>404 Not Found</h1>";
 }
+```
 
-// 实现该接口的对象本身满足 callable 类型,我们的中间件接受任何callable
-// 可以是 function, Closure, array 等
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+------------------------------------------------------------------------
 
-// 路由是httpServer必不可少的组件,我们考虑如何实现一个路由中间件
+Router
 
-// 路由解析部分我们nikic的fast-route
-// "nikic/fast-route": "dev-master"
+路由是httpServer必不可少的组件, 我们使用nikic的[FastRoute](https://github.com/nikic/FastRoute)来实现一个路由中间件
 
-//use FastRoute\Dispatcher;
-//use FastRoute\RouteCollector;
-//use Minimalism\A\Server\Http\Context;
+
+```php
+<?php
+
+use FastRoute\Dispatcher;
+use FastRoute\RouteCollector;
+use Minimalism\A\Server\Http\Context;
 
 // 这里继承FastRoute的RouteCollector
 class Router extends RouteCollector
 {
-    /**
-     * @var Dispatcher
-     */
     public $dispatcher;
 
     public function __construct()
@@ -2891,6 +3293,7 @@ class Router extends RouteCollector
         parent::__construct($routeParser, $dataGenerator);
     }
 
+    // 返回路由中间件
     public function routes()
     {
         $this->dispatcher = new \FastRoute\Dispatcher\GroupCountBased($this->getData());
@@ -2916,6 +3319,7 @@ class Router extends RouteCollector
             case Dispatcher::NOT_FOUND:
                 // 状态码写入Context
                 $ctx->status = 404;
+                yield $next;
                 break;
             case Dispatcher::METHOD_NOT_ALLOWED:
                 $ctx->status = 405;
@@ -2923,23 +3327,25 @@ class Router extends RouteCollector
             case Dispatcher::FOUND:
                 $handler = $routeInfo[1];
                 $vars = $routeInfo[2];
+
                 // 从路由表提取处理器
-                $handler($ctx, $next, $vars);
+                yield $handler($ctx, $next, $vars);
                 break;
         }
     }
 }
 
 
-// https://github.com/nikic/FastRoute
 $router = new Router();
 $router->get('/user/{id:\d+}', function(Context $ctx, $next, $vars) {
     $ctx->body = "user={$vars['id']}";
 });
+
 // $route->post('/post-route', 'post_handler');
 $router->addRoute(['GET', 'POST'], '/test', function(Context $ctx, $next, $vars) {
     $ctx->body = "";
 });
+
 // 分组路由
 $router->addGroup('/admin', function (RouteCollector $router) {
     // handler :: (Context $ctx, $next, array $vars) -> void
@@ -2950,14 +3356,22 @@ $router->addGroup('/admin', function (RouteCollector $router) {
 
 $app->υse($router->routes());
 
+```
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+我们已经拥有了一个支持`多方法` `正则` `参数匹配` `分组`功能的路由中间件;
 
 
-// 全局请求超时处理器
-// 同时也可以结合FastRoute构造出一个针对特定路由匹配不同请求超时时间的中间件
+------------------------------------------------------------------------
 
-class Timeout implements Middleware
+请求超时中间件
+
+请求超时控制也是不可或缺的中间件
+
+
+```php
+<?php
+
+class RequestTimeout implements Middleware
 {
     public $timeout;
     public $exception;
@@ -2992,7 +3406,125 @@ class Timeout implements Middleware
     }
 }
 
-$app->υse(new Timeout(2000));
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+$app->υse(new RequestTimeout(2000));
 ```
+
+也可以结合FastRoute构造出一个按路由匹配请求超时的中间件, 留给读者自行实现;
+
+------------------------------------------------------------------------
+
+
+一个综合示例:
+
+```php
+<?php
+
+$app = new Application();
+
+$app->υse(new Logger());
+$app->υse(new Favicon(__DIR__ . "/favicon.iRco"));
+$app->υse(new BodyDetecter()); // 输出特定格式body
+$app->υse(new ExceptionHandler()); // 处理异常
+$app->υse(new NotFound()); // 处理404
+$app->υse(new RequestTimeout(200)); // 处理请求超时, 会抛出HttpException
+
+
+$router = new Router();
+
+$router->get('/index', function(Context $ctx) {
+    $ctx->status = 200;
+    $ctx->state["title"] = "HELLO WORLD";
+    $ctx->state["time"] = date("Y-m-d H:i:s", time());;
+    $ctx->state["table"] = $_SERVER;
+    yield $ctx->render(__DIR__ . "/index.html");
+});
+
+$router->get('/404', function(Context $ctx) {
+    $ctx->status = 404;
+});
+
+$router->get('/bt', function(Context $ctx) {
+    $ctx->body = "<pre>" . print_r(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), true);
+});
+
+$router->get('/timeout', function(Context $ctx) {
+    // 超时
+    yield async_sleep(500);
+});
+
+$router->get('/error/http_exception', function(Context $ctx) {
+    // 抛出带status的错误
+    $ctx->thrοw(500, "Internal Error");
+    throw new HttpException(500, "Internal Error"); // 相等
+    yield;
+});
+
+$router->get('/error/exception', function(Context $ctx) {
+    // 直接抛出错误, 500 错误
+    throw new \Exception("some internal error", 10000);
+    yield;
+});
+
+$router->get('/user/{id:\d+}', function(Context $ctx, $next, $vars) {
+    $ctx->body = "user={$vars['id']}";
+    yield;
+});
+
+// http://127.0.0.1:3000/request/www.baidu.com
+$router->get('/request/{url}', function(Context $ctx, $next, $vars) {
+    $r = (yield async_curl_get($vars['url']));
+    $ctx->body = $r->body;
+    $ctx->status = $r->statusCode;
+});
+
+$app->υse($router->routes());
+
+
+$app->υse(function(Context $ctx) {
+    $ctx->status = 200;
+    $ctx->body = "<h1>Hello World</h1>";
+    yield;
+});
+
+$app->listen(3000);
+
+```
+
+------------------------------------------------------------------------
+
+附录:
+
+个人对yield与coroutine的理解与总结, 有问题欢迎指正.
+
+在上文半协程中:
+
+> 从抽象角度可以将「yield」理解成为CPS变换的语法糖, yield帮我们优雅的链接了异步任务序列;
+
+> 从控制流角度可以将「yield」理解为将程序控制权从callee(Generator)转义到caller, 只有借由底层eventloop驱动, 将控制权重新转移回Generator;
+
+> 从实现角度来看「yield」, 每个生成器对象都会有自己的zend_execute_data与zend_vm_stack,
+调用send\next\throw方法, 都需要首先备份EG中相关上下文, 然后将Generator的execute_data信息恢复到EG,
+然后调用zend_execute_ex()从从当前上下文恢复执行执行, 之后最后恢复执行前EG信息;
+
+> 因为ZendVM中stack与execute_data的保存与切换工作已经由Generator实现了, 基于Generator构建半协程的核心问题是控制流转换;
+
+> 「yield」并没有消除回调, 只是让代码从视觉上变成同步, 实际仍异步执行, 事实上任何异步模型, 底层最后都是基于回调的;
+
+(完)
+
+------------------------------------------------------------------------
+
+参考:
+
+0. [koa - Github](https://github.com/koajs/koa)
+0. [koa - 官网](http://koajs.com/)
+0 .[Koa - 中文文档](https://github.com/guo-yu/Koa-guide)
+1. [wiki - Coroutine](https://en.wikipedia.org/wiki/Coroutine)
+8. [wiki - 地球构造](https://zh.wikipedia.org/wiki/%E5%9C%B0%E7%90%83%E6%A7%8B%E9%80%A0)
+2. [nikic - 在PHP中使用协程实现多任务调度(译文)](http://www.laruence.com/2015/05/28/3038.html)
+10.[nikic - FastRoute](https://github.com/nikic/FastRoute)
+4. [阮一峰 - Generator 函数的含义与用法](http://www.ruanyifeng.com/blog/2015/04/generator.html)
+5. [阮一峰 - Thunk 函数的含义和用法](http://www.ruanyifeng.com/blog/2015/05/thunk.html)
+6. [阮一峰 - co 函数库的含义和用法](http://www.ruanyifeng.com/blog/2015/05/co.html)
+3. [PHP RFC - generator](https://wiki.php.net/rfc/generators)
+7. [PHP RFC - delegating generator](https://wiki.php.net/rfc/generator-delegation)

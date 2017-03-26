@@ -51,6 +51,8 @@ class Router extends RouteCollector
             case Dispatcher::NOT_FOUND:
                 $ctx->status = 404;
                 // ... 404 Not Found
+                // TODO 路由没有匹配到, 404, 是否继续执行后继中间件
+                yield $next;
                 break;
             case Dispatcher::METHOD_NOT_ALLOWED:
                 $allowedMethods = $routeInfo[1];
@@ -60,9 +62,11 @@ class Router extends RouteCollector
             case Dispatcher::FOUND:
                 $handler = $routeInfo[1];
                 $vars = $routeInfo[2];
-                $handler($ctx, $next, $vars);
+                yield $handler($ctx, $next, $vars);
                 // ... call $handler with $vars
                 break;
+            default:
+                yield $next;
         }
     }
 }

@@ -24,14 +24,6 @@ function async_dns($host, $timeo = 100)
 }
 */
 
-function defer(callable $fn)
-{
-    // https://github.com/swoole/swoole-src/issues/600
-    // swoole_event_defer 在没有 IO 时会卡住 !!!
-    // return swoole_event_defer($fn);
-    return swoole_timer_after(1, $fn);
-}
-
 function async_sleep($ms)
 {
     return callcc(function($k) use($ms) {
@@ -39,6 +31,11 @@ function async_sleep($ms)
             $k(null);
         });
     });
+}
+
+function delay($ms)
+{
+    return async_sleep($ms);
 }
 
 function async_timeout($task, $ms, \Exception $ex = null)

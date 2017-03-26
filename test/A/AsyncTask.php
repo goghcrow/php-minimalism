@@ -11,30 +11,6 @@ use Minimalism\A\Core\Exception\CancelTaskException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
-function testLastExpEx()
-{
-    $task = function() {
-        yield 1;
-        throw new \Exception("ex");
-    };
-
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) {});
-}
-testLastExpEx();
-
-
-//function testCCEx()
-//{
-//    $task = function() { yield; };
-//    $atask = new AsyncTask($task());
-//    $atask->begin(function($r, $ex) {
-//        throw new \Exception();
-//    });
-//}
-//testCCEx();
-
-
 ob_start();
 
 // 测试 异常跨异步回调传递

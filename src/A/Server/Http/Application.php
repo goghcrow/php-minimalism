@@ -80,7 +80,7 @@ class Application
 
     public function listen($port = 8000, array $config = [])
     {
-        $this->fn = compose(...$this->middleware);
+        $this->fn = compose($this->middleware);
 
         $config = ['port' => $port] + $config + $this->defaultConfig();
         $flag = (isset($config['ssl']) && $config['ssl']) ? SWOOLE_SOCK_TCP | SWOOLE_SSL : SWOOLE_SOCK_TCP;

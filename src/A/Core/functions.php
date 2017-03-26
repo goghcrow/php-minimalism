@@ -16,6 +16,41 @@ function noop()
 
 }
 
+function noopGen()
+{
+    yield;
+}
+
+function isGeneratorFun(callable $fn)
+{
+    $closure = Closure::fromCallable($fn);
+    $ref = new \ReflectionFunction($closure);
+    return $ref->isGenerator();
+}
+
+/**
+ * @noinspection PhpInconsistentReturnPointsInspection
+ * @param $task
+ * @param array $args
+ * @return
+ */
+function await($task, ...$args)
+{
+    if ($task instanceof \Generator) {
+        return $task;
+    }
+
+    if (is_callable($task)) {
+        // 这里可以反射判断 callable isGeneratorFun
+        // 或者直接嵌套一层generator
+        $gen = function() use($task, $args) { yield $task(...$args); };
+    } else {
+        $gen = function() use($task) { yield $task; };
+    }
+    return $gen();
+}
+
+// TODO 精简掉这个函数!!!
 /**
  * spawn one semicoroutine
  *
@@ -67,7 +102,7 @@ function spawn()
     // 1. 匹配参数类型, 兼容参数传递顺序
 
     $task = func_get_arg(0);
-    $continuation = __NAMESPACE__ . "\\noop";
+    $continuation = function() { };
     $parent = null;
     $ctx = [];
 
@@ -102,7 +137,10 @@ function spawn()
         foreach ($ctx as $k => $v) {
             $task->$k = $v;
         }
-        (new AsyncTask($task, $parent))->begin($continuation);
+
+        $asyncTask = new AsyncTask($task, $parent);
+        $task->__self__ = [$asyncTask]; // hack
+        $asyncTask->begin($continuation);
     } else {
         // 如果为其余类型, 直接通过 Continuation 返回
         $continuation($task, null);
@@ -114,6 +152,18 @@ function go()
     spawn(...func_get_args());
 }
 
+/**
+ * @param $task
+ * @return Syscall
+ */
+function fork($task)
+{
+    $task = await($task);
+    return new Syscall(function(AsyncTask $parent) use($task) {
+        return new FutureTask($task, $parent);
+    });
+}
+
 function chan($n = 0)
 {
     if ($n === 0) {
@@ -122,32 +172,6 @@ function chan($n = 0)
         return new BufferChannel($n);
     }
 }
-
-/**
- * @param callable|Async|\Generator $task
- * @param array ...$args
- * @return \Generator
- *
- * 1. convert callable to \Generator
- * 2. convert IAsync to \Generator
- */
-function await($task, ...$args)
-{
-    if ($task instanceof Async) {
-        $async = $task;
-        $task = function() use($async) {
-            yield $async;
-        };
-    }
-
-    if (is_callable($task)) {
-        $task = $task(...$args);
-    }
-
-    return $task;
-}
-
-
 
 /**
  * call-with-current-continuation
@@ -195,6 +219,13 @@ function callcc(callable $fun, $timeout = 0)
     return new CallCC($fun);
 }
 
+function defer(callable $fn)
+{
+    // https://github.com/swoole/swoole-src/issues/600
+    // swoole_event_defer 在没有 IO 时会卡住 !!!
+    // return swoole_event_defer($fn);
+    return swoole_timer_after(1, $fn);
+}
 
 
 /**
@@ -251,10 +282,7 @@ function setCtx($key, $val)
  */
 function awaitAll(array $tasks)
 {
-    foreach ($tasks as &$task) {
-        $task = await($task);
-    }
-    unset($task);
+    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
 
     return new Syscall(function(AsyncTask $parent) use($tasks) {
         if (empty($tasks)) {
@@ -272,10 +300,7 @@ function awaitAll(array $tasks)
  */
 function awaitAny(array $tasks)
 {
-    foreach ($tasks as &$task) {
-        $task = await($task);
-    }
-    unset($task);
+    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
 
     return new Syscall(function(AsyncTask $parent) use($tasks) {
         if (empty($tasks)) {
@@ -297,6 +322,15 @@ function all(array $tasks)
     return awaitAll($tasks);
 }
 
+/**
+ * Promise.all
+ * @param array $tasks
+ * @return Syscall
+ */
+function parallel(array $tasks)
+{
+    return awaitAll($tasks);
+}
 
 /**
  * Promise.race

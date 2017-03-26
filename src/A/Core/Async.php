@@ -11,6 +11,8 @@ namespace Minimalism\A\Core;
 /**
  * CPS: Interface Async
  * @package Minimalism\A\Core
+ *
+ * TODO 将begin修改为__invoke, 让Async满足is_callable
  */
 interface Async
 {

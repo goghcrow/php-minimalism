@@ -17,8 +17,12 @@ use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
 require __DIR__ . "/../../vendor/autoload.php";
 
 
+set_error_handler(function() {
+    debug_print_backtrace();
+});
+
 spawn(function() {
-    $task = compose(function(Context $ctx, $next) {
+    $task = compose([function(Context $ctx, $next) {
         echo 1;
         /* @var $this Context */
         $this->body = "x";
@@ -37,7 +41,7 @@ spawn(function() {
     }, function(Context $ctx, $next) {
         echo $this->body;
         yield $next;
-    });
+    }]);
 
     // 123xyz456
     yield await($task);
@@ -61,7 +65,7 @@ $ctx->response = new MockRes();
 // 异常透传, 终止执行
 spawn(function()  use($ctx) {
 
-    yield await(compose(
+    yield await(compose([
         function($ctx, $next) {
             echo "{ ";
             yield $next;
@@ -79,7 +83,7 @@ spawn(function()  use($ctx) {
             yield $next;
             echo ") ";
         }
-    ), $ctx);
+    ]), $ctx);
 });
 
 echo "\n";
@@ -87,7 +91,7 @@ echo "\n";
 // 可通过try catch 保证某个过滤器一下的异常不会继续向上透传
 // 异常截获
 spawn(function() use($ctx) {
-    yield await(compose(
+    yield await(compose([
         function($ctx, $next) {
             echo "{ ";
             try {
@@ -108,5 +112,5 @@ spawn(function() use($ctx) {
             yield $next;
             echo ") ";
         }
-    ), $ctx);
+    ]), $ctx);
 });

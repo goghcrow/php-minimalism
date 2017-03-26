@@ -15,7 +15,7 @@ use Minimalism\A\Server\Http\Context;
 use Minimalism\A\Server\Http\Contract\Middleware;
 use Minimalism\A\Server\Http\Exception\HttpException;
 
-class Timeout implements Middleware
+class RequestTimeout implements Middleware
 {
     public $timeout;
     public $exception;
