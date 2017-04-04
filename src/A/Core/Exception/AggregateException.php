@@ -2,14 +2,14 @@
 /**
  * Created by IntelliJ IDEA.
  * User: chuxiaofeng
- * Date: 17/1/31
- * Time: 下午2:26
+ * Date: 17/4/5
+ * Time: 上午1:23
  */
 
 namespace Minimalism\A\Core\Exception;
 
 
-class AsyncTimeoutException extends TaskException
+class AggregateException extends TaskException
 {
 
 }

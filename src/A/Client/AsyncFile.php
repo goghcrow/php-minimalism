@@ -42,7 +42,7 @@ class AsyncFile implements Async
         return $this;
     }
 
-    public function begin(callable $continuation)
+    public function start(callable $continuation)
     {
         $this->complete = $continuation;
         if ($this->type === "read") {

@@ -8,7 +8,7 @@
 
 namespace Minimalism\A\Client;
 
-use function Minimalism\A\Core\await;
+use function Minimalism\A\Core\gen;
 use function Minimalism\A\Core\callcc;
 use function Minimalism\A\Core\race;
 
@@ -48,7 +48,7 @@ function async_timeout($task, $ms, \Exception $ex = null)
             });
         }),
         function() use (&$timerId, $task){
-            yield await($task);
+            yield gen($task);
             if (swoole_timer_exists($timerId)) {
                 swoole_timer_clear($timerId);
             }
@@ -101,7 +101,7 @@ function async_mysql_query(AsyncMysql $mysql, $sql, array $bind = [], $timeo = 1
 
 function async_mysql_begin(AsyncMysql $mysql, $timeo = 1000)
 {
-    return $mysql->begin($timeo);
+    return $mysql->start($timeo);
 }
 
 function async_mysql_commit(AsyncMysql $mysql, $timeo = 1000)

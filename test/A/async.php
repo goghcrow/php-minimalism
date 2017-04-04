@@ -15,18 +15,15 @@ use function Minimalism\A\Client\async_curl_get;
 use function Minimalism\A\Client\async_curl_post;
 use function Minimalism\A\Client\async_curl_request;
 use function Minimalism\A\Client\async_timeout;
-use function Minimalism\A\Client\async_timeout_clear;
 use function Minimalism\A\Core\spawn;
-use Minimalism\A\Core\AsyncTask;
-use function Minimalism\A\Core\await;
+use Minimalism\A\Core\Task;
+use function Minimalism\A\Core\gen;
 use function Minimalism\A\Core\cancelTask;
 use function Minimalism\A\Core\getCtx;
-use function Minimalism\A\Core\race;
 use function Minimalism\A\Core\setCtx;
-use Minimalism\A\Core\Exception\CancelTaskException;
+use Minimalism\A\Core\Exception\TaskCanceledException;
 
 require __DIR__ . "/../../vendor/autoload.php";
-
 
 
 function testAsyncTimeout()
@@ -113,7 +110,7 @@ function testIAsync()
     // AsyncTask 自身实现 IAsync
     spawn(function() {
         $say = "";
-        yield new AsyncTask(await(function() use(&$say) {
+        yield new Task(gen(function() use(&$say) {
             $say .= "Hello ";
             yield;
         }));
@@ -126,7 +123,7 @@ testIAsync();
 
 // 子任务
 spawn(function() {
-    $r = (yield await(function() {
+    $r = (yield gen(function() {
         $r1 = (yield async_dns_lookup("www.baidu.com"));
         $r2 = (yield async_dns_lookup("www.baidu.com"));
         yield [$r1, $r2];
@@ -149,7 +146,7 @@ spawn(function() {
 // 取消任务 2. 抛出CancelTaskException
 spawn(function() {
     yield;
-    throw new CancelTaskException();
+    throw new TaskCanceledException();
     echo "unreached\n";
     assert(false);
 });
@@ -158,7 +155,7 @@ spawn(function() {
 // 上下文1
 spawn(function() {
     yield setCtx("foo", "bar");
-    yield await(function() {
+    yield gen(function() {
         assert((yield getCtx("foo")) === "bar");
         yield setCtx("hello", "world");
     });
@@ -167,7 +164,7 @@ spawn(function() {
 
 // 上下文2
 spawn(function() {
-    yield await(function() {
+    yield gen(function() {
         $v = (yield getCtx("hello"));
         assert($v === "world");
     });
@@ -176,7 +173,7 @@ spawn(function() {
 
 // example
 spawn(function() {
-    yield await(function() {
+    yield gen(function() {
         $r = (yield async_curl_get("www.baidu.com", 80));
         assert($r->statusCode === 200);
         $r->close();
@@ -188,7 +185,7 @@ spawn(function() {
         assert($r->statusCode === 302);
     });
 
-    yield await(function() {
+    yield gen(function() {
         $ip = (yield async_dns_lookup("www.baidu.com"));
 
         $r = (yield async_curl_request($ip, 80, "PUT", "/",

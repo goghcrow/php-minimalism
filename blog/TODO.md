@@ -1,15 +1,69 @@
-申请一个新的gitlab账户, 防止Koa项目
-
 最后谈一次 JavaScript 异步编程
 https://zhuanlan.zhihu.com/p/24444262
 
 Coroutine从入门到劝退
 https://zhuanlan.zhihu.com/p/25513336
 
-
 引入
 compose 异步序列
 https://zhuanlan.zhihu.com/p/24444262
+
+
+什么程序设计语言机制是处理异步 IO 最恰当的抽象？
+https://www.zhihu.com/question/19585576
+
+
+
+
+Promise与C# Tasks.Task 是一类东西, 且功能远没有Task接口丰富
+
+Belleve
+> callcc 是功能集最小的。
+> 程序员最容易接受的是 coroutine。
+
+TODO//
+channel 添加 close 接口
+
+Monad是用来表达序列执行的一种构造.
+所以，Monad 代表的是层次，而不是顺序。（回想下 CPS，是不是用层次表示顺序的？）
+回调是用层次表示顺序.
+
+
+Go中channel机制介绍
+语法
+在Go中，channel结构是Goroutine间消息传递的基础，属于基本类型，在runtime库中以C语言实现。 Go中针对channel的操作主要包括以下几种：
+创建：ch = make(chan int, N)
+发送：ch <- l
+接收：l <- ch
+关闭：close(ch)
+另外，还可以通过select语句同时在多个channel上进行收发操作，语法如下：
+select {
+  case ch01 <- x:
+      ... ... /* do something ... */
+  case y <- ch02:
+      ... ... /* do something ... */
+  default:
+      ... ... /* no event ... */
+}
+此外，基于select的操作tai还支持超时控制，具体的语法示例如下：
+select {
+  case v := <- ch:
+      ... ...
+  case <- time.After(5 * time.Second):
+      ... ...
+}
+
+
+
+
+
+TODO//
+FibJS的作者，响马所言，
+
+编程范式的改变，需要一整套解决方案，包括协程引擎，调度器，重新封装的 api，仅靠一个核心引擎很难改变。
+generator 可以从形式上面同步化逻辑，但是入口和出口仍是异步，需要每个人都小心翼翼的先理解异步，再去写同步。
+二者都很难改变 nodejs 实质异步的门槛。
+
 
 
 http://www.ruanyifeng.com/blog/2015/04/generator.html

@@ -6,11 +6,11 @@
       * [生成器迭代](#生成器迭代)
       * [生成器返回值](#生成器返回值)
       * [生成器委托](#生成器委托)
-      * [改写return](#改写return)
+      * [return改写](#return改写)
       * [抽象异步模型](#抽象异步模型)
-      * [开始引入异常处理](#开始引入异常处理)
-      * [嵌套任务异常透传](#嵌套任务异常透传)
-      * [异常传递流程](#异常传递流程)
+      * [引入异常处理](#引入异常处理)
+      * [异常: 嵌套任务透传](#异常-嵌套任务透传)
+      * [异常: 传递流程](#异常-传递流程)
       * [异常: 重新进行CPS变换](#异常-重新进行cps变换)
       * [异常: 重新加入Async](#异常-重新加入async)
       * [Syscall与Context](#syscall与context)
@@ -23,12 +23,12 @@
       * [无缓存channel](#无缓存channel)
       * [缓存channel](#缓存channel)
       * [channel演示](#channel演示)
-      * [FutureTask 与 协程同步](#futuretask-与-协程同步)
+      * [FutureTask与fork](#futuretask与fork)
    * [第二部分: Koa](#第二部分-koa)
       * [Koa 前言](#koa-前言)
       * [穿越地心之旅](#穿越地心之旅)
       * [洋葱圈模型](#洋葱圈模型)
-      * [rightReduce 与 中间件compose](#rightreduce-与-中间件compose)
+      * [rightReduce与中间件compose](#rightreduce与中间件compose)
       * [Koa::Application](#koaapplication)
       * [Koa::Context](#koacontext)
       * [Koa::Request](#koarequest)
@@ -44,43 +44,36 @@
 
 ## 前言
 
-近年来,在面向高并发编程的道路上,nodejs与golang风生水起,人们渐渐把目光从多线程模型转移到callback与CSP/Actor,
-死守着FPM多进程同步阻塞模型的PHPer难免有人心动,多种EventLoop移植不温不火,而国内以swoole为代表,直接以扩展形式, 提供了整套callback模型的PHP异步编程解决方案;
+近年来,在面向高并发编程的道路上,Node.js与Golang风生水起,让人们渐渐把目光从多线程模型转移到callback与CSP/Actor上,用惯了FPM多进程同步阻塞模型的PHPer中总难免有人心
+动。多种EventLoop一直不温不火,而国内以swoole为代表,直接以扩展形式,提供了整套callback模型的PHP异步编程解决方案,正在逐渐的流行起来。
 
-Node在JS上开花结果,大约是是浏览器的DOM事件模型培养起来的callback书写习惯,与语言自身的函数式特性适合callback代码编写.
-但回调固有的逻辑割裂、调试维护难的问题随着node社区的繁荣逐渐显现, 从老赵脑洞大开的windjs到co与Promise, 方案层出不穷, 最终[Promise](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise)被采纳为官方「异步编程标准规范」,从C#借鉴过来的
-[async/await](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/async_function)被纳入语言标准;
+Node.js在JS上开花结果,也许是浏览器的DOM事件模型培养起来的callback书写习惯,与语言自身的函数式特性适合callback代码编写。但回调固有的逻辑割裂、调试维护难的问题随着node社区的繁荣逐渐显现,从老赵脑洞大开的windjs到co与Promise,方案层出不穷,最终[Promise](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Promise)被
+采纳为官方「异步编程标准规范」,从C#借鉴过来的[async/await](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/async_function)被纳入语言标准。
 
+因swoole与Node.js的I/O模型相同,PHPer有幸在高并发命题上遭遇与node一样的问题。Closure([RFC](https://wiki.php.net/rfc/closures?cm_mc_uid=26754990333314676210612&cm_mc_sid_50200000=1490031947))一定程度从语言本身改善了异步编程的体验,受限于Zend引擎作用域实现机制,PHP因缺失词法作用域从而缺失词法闭包,Closure对象采用了use语法来显式捕获upValue到静态属性的方式(closure->func.op_array.static_variables),我个人认为这有点像无法自动实现闭包的匿名函数。之后Nikita Popov在PHP中实现了Generator([RFC](https://wiki.php.net/rfc/generators)),并且让PHPer意
+识到生成器原来可以实现实现非抢占任务调度([译文:在PHP中使用协程实现多任务调度](http://www.laruence.com/2015/05/28/3038.html))。我们最终可以借助于生成器实现半协程来解决该问题。
 
-因I/O模型相同, PHPer有幸在高并发命题上上遭遇与node一样的问题.
-Closure([RFC](https://wiki.php.net/rfc/closures?cm_mc_uid=26754990333314676210612&cm_mc_sid_50200000=1490031947))
-一定程度从语言本身改善了异步编程的体验,受限于Zend引擎作用域实现机制,PHP缺失词法作用域从而缺失词法闭包,Closure对象采用了use语法来显式捕获upValue到静态属性的方式(closure->func.op_array.static_variables),私以为这有点像无法自动实现闭包的匿名函数.
-之后Nikita Popov在PHP中实现了Generator([RFC](https://wiki.php.net/rfc/generators)),并且让PHPer意识到
-生成器原来可以实现实现非抢占任务调度([译文:在PHP中使用协程实现多任务调度](http://www.laruence.com/2015/05/28/3038.html)).
-我们最终可以借助于生成器实现半协程来解决该问题.
-
-这篇文章秉承着我们造轮子的精神,从头实现一个全功能的基于生成器的半协程调度器与相关基础组件,并基于该调度器实(chao)现(xi)JS社区当红的koa框架,最终加深我们PHPer对异步编程的理解.
+这篇文章秉承着造轮子的精神,我们从头实现一个全功能的基于生成器(Generator)的半协程调度器与相关基础组件,并基于该调度器实(chao)现(xi)JS社区当红的koa框架,最终加深我们对异步编程的理解。
 
 
 -----------------------------------------------------------------------------------------------
 
 说明:
 
-1. 下文中协程均指代使用生成器实现的半协程, 具体概念参见[Wiki](https://en.wikipedia.org/wiki/Coroutine)
-2. 下文中耗时任务指代I/O或定时器, 非CPU计算.
-3. `广告` 继TSF之后, 我司去年了开源[Zan Framework](http://zanphp.io/), 内部的半协程调度器已经解决了swoole中回调接口的代码书写问题.
-4. 下文实例代码, 限于篇幅, 每部分仅呈现改动部分, 其余省略
-
+1. 下文中协程均指代使用生成器实现的半协程,具体概念参见[Wiki](https://en.wikipedia.org/wiki/Coroutine)。
+2. 下文中耗时任务指代I/O或定时器,非CPU计算。
+3. `广告` 继TSF之后,我司去年了开源[Zan Framework](http://zanphp.io/),内部的半协程调度器已经解决了swoole中回调接口的代码书写问题。
+4. 下文实例代码,限于篇幅,每部分仅呈现改动部分, 其余省略。
 
 ## 第一部分: 半协程调度器
 
-谈及koa(1.x)首先得说co, co与Promise是JSer在解决回调地狱问题前仆后继的众多产物之一,
+谈及koa(1.x)首先得说co,co与Promise是JSer在解决回调地狱(callback hell)问题前仆后继的众多产物之一。
 
-co其实是Generator自动执行器(半协程调度器): 通过yield显式操纵控制流让我们可以做到以近乎同步的方式书写非阻塞代码.
+co其实是Generator的自动执行器(半协程调度器): 通过yield显式操纵控制流让我们可以做到以近乎同步的方式书写非阻塞代码。
 
-Promise是一套比较完善的方案,但关于如何实现Promise本身超出本文范畴, 且PHP没有大量异步接口的历史包袱需要thunks方案做转换,
+Promise是一套比较完善的方案,但关于如何实现Promise本身超出本文范畴, 且PHP没有大量异步接口的历史包袱需要thunks方案做转换。
 
-于是, 我们的调度器仅基于一个简单的接口,来抽象异步任务;
+综上所述, 我们的调度器仅基于一个简单的接口,来抽象异步任务：
 
 ```php
 <?php 
@@ -99,13 +92,13 @@ interface Async
 1. 对co库不了解的同学可以先参考[阮一峰 - co 函数库的含义和用法](http://www.ruanyifeng.com/blog/2015/05/co.html)
 2. co新版与旧版的区别在于对thunks的支持, 4.x只支持Promises.
 
-我们首先构建Koa的基础设施, 渐进的实现一个约50+行代码的精练的半协程调度器:
+我们首先构建Koa的基础设施,渐进的实现一个约50+行代码的精练的半协程调度器:
 
 -----------------------------------------------------------------------------------------------
 
 ### 生成器
 
-统一\Generator接口, 由于内部隐式rewind, 需要先调用current() 获取当前value, 而send会直接跳到第二次yield;
+统一\Generator接口,由于内部隐式rewind, 需要先调用current() 获取当前value, 而send会直接跳到第二次yield;
 
 1. [send方法说明](http://php.net/manual/en/generator.send.php)
 2. [生成器说明](http://www.laruence.com/2015/05/28/3038.html)
@@ -146,10 +139,7 @@ class Gen
 
 ### 生成器迭代
 
-手动迭代生成器, 递归执行next, 调用send方法将将yield值作为yield表达式结果;
-
-(yield表达式可能是一个异步调用, 我们之后会把异步调用的结果作为yield表达式结果.)
-
+手动迭代生成器,递归执行next,调用send方法将将yield值作为yield表达式结果。(yield表达式可能是一个异步调用,我们之后会把异步调用的结果作为yield表达式结果。)
 
 ```
 如, $ip = (yield async_dns_lookup(...)  );
@@ -201,9 +191,9 @@ $task->begin(); // output: 12
 
 ### 生成器返回值
 
-PHP7支持通过(Generator::getReturn)[http://php.net/manual/en/generator.getreturn.php]获取生成器方法return的返回值,
+PHP7支持通过[Generator::getReturn](http://php.net/manual/en/generator.getreturn.php)获取生成器方法return的返回值。
 
-PHP5中我们约定使用Generator最后一次yield值作为返回值, 我们最终需要嵌套Generator的返回值.
+PHP5中我们约定使用Generator最后一次yield值作为返回值,我们最终需要嵌套Generator的返回值。
 
 ```php
 <?php
@@ -215,7 +205,7 @@ final class AsyncTask
         return $this->next();
     }
 
-    // 添加return传递每一次迭代的结果, 直到向上传递到begin
+    // 添加return传递每一次迭代的结果,直到向上传递到begin
     public function next($result = null)
     {
         $value = $this->gen->send($result);
@@ -244,15 +234,11 @@ echo $r; // output: 3
 
 ### 生成器委托
 
-PHP7中支持[delegating generator](https://wiki.php.net/rfc/generator-delegation), 可以自动展开subgenerator;
-
+PHP7中支持[delegating generator](https://wiki.php.net/rfc/generator-delegation),可以自动展开subgenerator;
 
 > A “subgenerator” is a Generator used in the <expr> portion of the yield from <expr> syntax.
 
-
-我们需要在PHP5支持子生成器, 将子生成器最后yield值作为父生成器yield表达式结果.
-
-仅只需要加两行代码, 递归的产生一个AsyncTask对象来执行子生成器即可.
+我们需要在PHP5支持子生成器,将子生成器最后yield值作为父生成器yield表达式结果,仅只需要加两行代码,递归的产生一个AsyncTask对象来执行子生成器即可。
 
 ```php
 <?php
@@ -296,14 +282,9 @@ echo $r; // output: 3
 
 --------------------------------------------------------------------------------
 
-### 改写return
+### return改写
 
-return其实可以被替换为单参数且永远不返回的函数,
-
-将return解糖CPS变换, 改写为函数参数continuation,
-
-将Generator结果通过回调参数返回, 为引入异步迭代做准备.
-
+return其实可以被替换为单参数且永远不返回的函数,将return解糖进行CPS变换,改写为函数参数continuation,将Generator结果通过回调参数返回,为引入异步迭代做准备。
 
 ```php
 <?php
@@ -360,8 +341,9 @@ $task->begin($trace); // output: 123
 
 对回调模型抽象出异步接口Async;
 
-只有一个方法的接口通常都可以使用闭包代替, 区别在于interface引入新类型, 闭包则不会.
+只有一个方法的接口通常都可以使用闭包代替,区别在于interface引入新类型,闭包则不会。
 
+如果说thunkify依赖了参数顺序的弱约定,Async相对严肃的依赖了类型。
 
 ```php
 <?php
@@ -449,13 +431,11 @@ $task->begin($trace);
 
 --------------------------------------------------------------------------------
 
-### 开始引入异常处理
+### 引入异常处理
 
-尽管只有寥寥几行代码, 我们却已经实现了异常处理缺失的半协程调度器;
+尽管只有寥寥几行代码,我们却已经实现了异常处理缺失的半协程调度器;
 
-下面先rollback回return的实现, 我们开始引入异常处理,
-
-目标是在嵌套生成器之间正确向上抛出异常, 跨生成器捕获异常.
+下面先rollback回return的实现,我们开始引入异常处理,目标是在嵌套生成器之间正确向上抛出异常,跨生成器捕获异常。
 
 
 ```php
@@ -529,19 +509,11 @@ try {
 
 --------------------------------------------------------------------------------
 
-### 嵌套任务异常透传
+### 异常: 嵌套任务透传
 
 重新处理生成器嵌套, 需要将子生成器异常抛向父生成器;
 
-当生成器迭代过程发生未捕获异常, 生成器将会被关闭, valid()返回false,
-
-未捕获异常会从生成器内部被抛向父作用域,
-
-嵌套子生成器内部的未捕获异常必须最终被抛向根生成器的calling frame,
-
-PHP7 中yield-from语言嵌套子生成器resume中异常传递实现采取goto try_again:标签方式层层向上抛出,
-
-我们的代码因为递归迭代的原因, 未捕获异常需要逆递归栈帧方向层层上抛 , 性能方便有改进余地.
+当生成器迭代过程发生未捕获异常,生成器将会被关闭,valid()返回false,未捕获异常会从生成器内部被抛向父作用域,嵌套子生成器内部的未捕获异常必须最终被抛向根生成器的calling frame,PHP7 中yield-from语言嵌套子生成器resume中异常传递实现采取goto try_again:标签方式层层向上抛出,我们的代码因为递归迭代的原因,未捕获异常需要逆递归栈帧方向层层上抛,性能方便有改进余地。
 
 ```php
 <?php
@@ -615,7 +587,7 @@ echo $r; // output: 3
 
 --------------------------------------------------------------------------------
 
-### 异常传递流程
+### 异常: 传递流程
 
 基于上述注释观察异常传递流程;
 
@@ -807,10 +779,7 @@ $task->begin($trace); // output: e
 
 ### 异常: 重新加入Async
 
-重新加入Async抽象, 修改continuation的签名, 加入异常参数
-
-continuation :: (mixed $r, \Exception $ex) -> void
-
+重新加入Async抽象,修改continuation的签名,加入异常参数 `continuation :: (mixed $r, \Exception $ex) -> void`
 
 ```php
 <?php
@@ -1125,7 +1094,7 @@ function spawn()
 
 异步回调API是无法直接使用yield语法的, 需要使用thunk或者promise进行转换,
 
-thunkfy就是将多参数函数替换成单参数只接受回调函数作为唯一参数的函数[Thunk 函数的含义和用法](http://www.ruanyifeng.com/blog/2015/05/thunk.html),
+thunkify就是将多参数函数替换成单参数只接受回调函数作为唯一参数的函数[Thunk 函数的含义和用法](http://www.ruanyifeng.com/blog/2015/05/thunk.html),
 
 上文中我们将回调API显式实现Async接口, 显得有些麻烦, 
 
@@ -2104,7 +2073,7 @@ channel的发送与接受没有超时机制, golang可以select多个chan实现�
 
 -----------------------------------------------------------------------------------------------
 
-### FutureTask 与 协程同步
+### FutureTask与fork
 
 在多线程代码中我们经常会遇到这种模型, 将一个耗时任务, new一个新的Thread或者通常放到线程池后台执行, 
 
@@ -2659,7 +2628,7 @@ $travel(); // output:
 
 ------------------------------------------------------
 
-### rightReduce 与 中间件compose
+### rightReduce与中间件compose
 
 
 然后, 有心同学可能会发现, 我们的makeTravel其实是一个对函数列表进行rightReduce的函数.
@@ -3506,6 +3475,8 @@ $app->listen(3000);
 以上我们完成了一个基于swoole的版本的php-koa.
 
 (`完`)
+
+(by `初晓峰`)
 
 ------------------------------------------------------------------------
 

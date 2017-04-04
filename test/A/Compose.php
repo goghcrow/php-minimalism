@@ -9,7 +9,7 @@
 namespace Minimalism\Test\A;
 
 use function Minimalism\A\Core\spawn;
-use function Minimalism\A\Core\await;
+use function Minimalism\A\Core\gen;
 use function Minimalism\A\Server\Http\compose;
 use Minimalism\A\Server\Http\Context;
 use Minimalism\A\Server\Http\Middleware\ExceptionHandler;
@@ -44,7 +44,7 @@ spawn(function() {
     }]);
 
     // 123xyz456
-    yield await($task);
+    yield gen($task);
 });
 
 
@@ -65,7 +65,7 @@ $ctx->response = new MockRes();
 // 异常透传, 终止执行
 spawn(function()  use($ctx) {
 
-    yield await(compose([
+    yield gen(compose([
         function($ctx, $next) {
             echo "{ ";
             yield $next;
@@ -91,7 +91,7 @@ echo "\n";
 // 可通过try catch 保证某个过滤器一下的异常不会继续向上透传
 // 异常截获
 spawn(function() use($ctx) {
-    yield await(compose([
+    yield gen(compose([
         function($ctx, $next) {
             echo "{ ";
             try {

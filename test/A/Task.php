@@ -4,10 +4,8 @@ namespace Minimalism\Test\A;
 
 
 use Minimalism\A\Client\AsyncSleep;
-use function Minimalism\A\Core\spawn;
-use Minimalism\A\Core\AsyncTask;
-use function Minimalism\A\Core\await;
-use Minimalism\A\Core\Exception\CancelTaskException;
+use Minimalism\A\Core\Task;
+use Minimalism\A\Core\Exception\TaskCanceledException;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -33,8 +31,8 @@ function testCatchGeneralException()
         yield 2;
     };
 
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) {
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) {
         assert($r === 2);
         assert($ex === null);
         if ($ex instanceof \Exception) {
@@ -59,8 +57,8 @@ function testGeneralException()
         yield 2;
     };
 
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) {
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) {
         // 普通异常仍然会调用complete
         assert($r === null);
         assert($ex instanceof \Exception && $ex->getMessage() === "general exception");
@@ -76,15 +74,15 @@ function testCancelException()
 {
     $task = function() {
         yield 1;
-        throw new CancelTaskException("cancel task exception");
+        throw new TaskCanceledException("cancel task exception");
         /** @noinspection PhpUnreachableStatementInspection */
         assert(false);
         yield 2;
     };
 
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) {
-        assert($ex instanceof CancelTaskException);
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) {
+        assert($ex instanceof TaskCanceledException);
         assert($r === null);
         echo "testCancelException\tDONE\n";
     });
@@ -98,7 +96,7 @@ function testCatchCancelException()
 {
     $subTask = function() {
         yield "sub\n";
-        throw new CancelTaskException("CancelTaskException");
+        throw new TaskCanceledException("CancelTaskException");
     };
 
     $task = function() use($subTask) {
@@ -114,9 +112,9 @@ function testCatchCancelException()
         yield 2;
     };
 
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) {
-        assert($ex instanceof CancelTaskException);
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) {
+        assert($ex instanceof TaskCanceledException);
         assert($r === null);
         echo "testCatchCancelException\tDONE\n";
     });
@@ -144,8 +142,8 @@ function nestedTask()
     };
 
 
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) use($nestedR) {
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) use($nestedR) {
         assert($r === $nestedR);
         assert($ex === null);
         echo "nestedTask\tDONE\n";
@@ -167,11 +165,11 @@ function nestedAsyncTask()
         $nestedTask = function () use($nestedR) {
             yield $nestedR;
         };
-        $r = (yield new AsyncTask($nestedTask()));
+        $r = (yield new Task($nestedTask()));
         assert($r === $nestedR);
     };
-    $atask = new AsyncTask($task());
-    $atask->begin(function($r, $ex) use($nestedR) {
+    $atask = new Task($task());
+    $atask->start(function($r, $ex) use($nestedR) {
         assert($r === $nestedR);
         assert($ex === null);
         echo "nestedAsyncTask\tDONE\n";
@@ -224,7 +222,22 @@ function nestedTask2()
         }
         // echo "nestedTask2\tDONE\n";
     };
-    $task = new AsyncTask(t3());
-    $task->begin($cb);
+    $task = new Task(t3());
+    $task->start($cb);
 }
 nestedTask2();
+
+
+function unObservedExceptionHandler()
+{
+    Task::$unObservedExceptionHandler = function(Task $sender, \Exception $ex) {
+        echo $ex->getMessage();
+    };
+
+    Task::run(function() {
+        throw new \Exception("unObservedExceptionHandler");
+    });
+}
+
+unObservedExceptionHandler();
+

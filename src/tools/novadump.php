@@ -10,27 +10,52 @@
 use Terminal as T;
 
 
-// TODO 抓mysql包
+/**
+ * novadump: nova协议抓包解码工具
+ *
+ * changelog:
+ *
+ * 2017-03-07
+ * 1. 从 `tcpdump -w` 实时解码pcap流: pcap -> linux sll -> ip -> tcp -> nova -> thrfit
+ * 2. 支持从项目读取thrift spec声明文件, 解码完整的thrift对象
+ * 注意: !!! pcap文件 链路层不是以太网协议, 而是linux_sll
+ *
+ * 2017-03-31
+ * 1. fix bug, 在链路层linux_sll过滤非IPV4type帧, 在网络层过滤非IPV4type报文
+ * 2. 加入解析pcap文件功能, 异步分段读取文件, 无论文件多大只占用很少内存(依赖yz-swoole 2.x版本, 文件异步读取接口)
+ * 3. thrift replay|exception 打印具体异常类型
+ * 4. 从linux_sll读取时间戳, 替代当前时间显示
+ *
+ * buglist: 还存在某些包没有正确过滤
+ *
+ * todolist: 抓mysql包
+ */
 
-// 实时解码tcpdump -w pcap流: pcap -> linux sll -> ip -> tcp -> nova -> thrfit
+
+
 
 $usage = <<<USAGE
 Usage: 
-    novadump --app=<应用名称> --path=<项目根路径> --filter=<tcpdump过滤表达式>
-             -s=<servicePattern> -m=<methodPattern>
-   
-    全部参数可选
-    建议 --app= 与 --path= 否则不予解开thrift包
-    -s -m 过滤函数为fnmatch
+    全部参数可选, 建议 --app= 与 --path= 否则不予解开thrift包, -s -m 过滤函数为fnmatch
+    
+    1. 读取tcpdump pcap流, 实时处理
+    2. --file 解析pcap文件
+
+    novadump --app=<应用名称> --path=<项目根路径> -s=<servicePattern> -m=<methodPattern> --filter=<tcpdump过滤表达式>   
+    novadump --app=<应用名称> --path=<项目根路径> -s=<servicePattern> -m=<methodPattern> --file=<pcap文件>
+    
     
     example:
-    
+        
     novadump
     novadump --app=pf-api --path=/home/www/pf-api
     novadump --filter='tcp and host 127.0.0.1 and port 8000'
     novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
     novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
              -s=com.youzan.service.* -m=getBy*
+
+    tcpdump -w /path/to/dump.pcap
+    novadump --app=pf-api --path=/home/www/pf-api --file=/path/to/dump.pcap
 USAGE;
 
 $self = __FILE__;
@@ -47,24 +72,31 @@ if (isset($argv[1]) && in_array($argv[1], ["help", "-h", "--help"], true)) {
 if (trim(`whoami`) !== "root") {
     sys_abort("请使用root权限运行");
 }
+
 if (PHP_OS === "Darwin") {
     sys_abort("暂时只支持Linux");
 }
 
 
 
-$a = getopt("s:m:", ["app:", "path:", "filter:"]);
+$a = getopt("s:m:", ["app:", "path:", "filter:", "file:"]);
 if (isset($a["app"]) && isset($a["path"])) {
     $appName = $a["app"];
     $path = $a["path"];
     NovaApp::init($appName, $path);
 }
 
+$pcapFile = null;
 $tcpFilter = "";
 $servicePattern = null;
 $methodPattern = null;
 
-if (isset($a["filter"])) {
+if (isset($a["file"])) {
+    if (!is_readable($a["file"]) || is_dir($a["file"])) {
+        sys_abort("can not read file {$a["file"]}");
+    }
+    $pcapFile = $a["file"];
+} else if (isset($a["filter"])) {
     // $filter = preg_split('#\s+#', $a["filter"]);
     $tcpFilter = $a["filter"];
 } else {
@@ -80,15 +112,20 @@ if (isset($a["m"])) {
 }
 
 
-`ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
-
-
-
 $filter = new NovaPacketFilter($servicePattern, $methodPattern);
 $handler = new NovaPacketHandler($filter);
 $novadump = new NovaDump($handler);
-$fd = $novadump->tcpdump($tcpFilter);
-$novadump->readLoop($fd);
+
+if ($pcapFile) {
+    $novadump->readFile($pcapFile);
+} else {
+    `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
+    $fd = $novadump->tcpdump($tcpFilter);
+    $novadump->readLoop($fd);
+}
+
+
+
 
 
 class NovaPacketFilter
@@ -167,11 +204,14 @@ class NovaPacketHandler
         $_method = T::format($method, T::FG_GREEN);
         $_attach = T::format($attach, T::DIM);
 
-        sys_echo("$srcIp:$srcPort > $dstIp:$dstPort, nova_ip $_ip, nova_port $_port, nova_seq $_seq");
-        sys_echo("service $_service, method $_method");
+        $sec = $rec_hdr["ts_sec"];
+        $usec = $rec_hdr["ts_usec"];
+        // !!! 这里显示的时间必须是 pcap包时间戳
+        sys_echo("$srcIp:$srcPort > $dstIp:$dstPort, nova_ip $_ip, nova_port $_port, nova_seq $_seq", $sec, $usec);
+        sys_echo("service $_service, method $_method", $sec, $usec);
 
         if ($attach && $attach !== "{}") {
-            sys_echo("attach $_attach");
+            sys_echo("attach $_attach", $sec, $usec);
         }
 
         if (!$isHeartbeat) {
@@ -221,6 +261,18 @@ class NovaDump
         }
         $this->proc = $proc;
         return $proc->pipe;
+    }
+
+    public function readFile($file)
+    {
+        swoole_async_read($file, function($filename, $content) {
+            if ($content === "") {
+                swoole_event_exit();
+            } else {
+                $this->buffer->write($content);
+                $this->pcap->captureLoop();
+            }
+        });
     }
 
     /**
@@ -284,7 +336,8 @@ class NovaApp
             } catch (\Exception $ex) {
                 // Hex::dump($thriftBin, "vvv/8/6");
                 // sys_error("decode thrift CALL fail");
-                sys_error($ex->getMessage());
+
+                sys_error(get_class($ex) . ":" . $ex->getMessage());
             }
         } else {
             try {
@@ -294,7 +347,7 @@ class NovaApp
             } catch (\Exception $ex) {
                 // Hex::dump($thriftBin, "vvv/8/6");
                 // sys_error("decode thrift REPLY fail");
-                sys_error($ex->getMessage());
+                sys_error(get_class($ex) . ":" . $ex->getMessage());
             }
         }
     }
@@ -495,13 +548,13 @@ class Pcap
         $magic_number = sprintf("%x",$magic_number);
 
         // 根据magic判断字节序
-        // be
         if ($magic_number === "a1b2c3d4") {
+            // le
             $this->u32 = "V";
             $this->u16 = "v";
             $this->uC = "C";
-            // le
         } else if ($magic_number === "d4c3b2a1") {
+            // be, 网络字节序
             $this->u32 = "N";
             $this->u16 = "n";
             $this->uC = "C";
@@ -602,6 +655,7 @@ class Pcap
     }
 
     /**
+     * Linux "cooked" capture encapsulation.
      *
      * Octet 8位元组 8个二进制位
      *
@@ -609,6 +663,8 @@ class Pcap
      * Byte 表示CPU可以独立的寻址的最小内存单位（不过通过移位和逻辑运算，CPU也可以寻址到某一个单独的bit）
      *
      * @see http://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html
+     * @see https://wiki.wireshark.org/SLL
+     *
      * +---------------------------+
      * |         Packet type       |
      * |         (2 Octets)        |
@@ -629,6 +685,14 @@ class Pcap
      * .                           .
      * .                           .
      * .                           .
+     *
+     * struct linux_sll {
+     *      u16   packet_type,  Packet_* describing packet origins
+     *      dev_type,     ARPHDR_* from net/if_arp.h
+     *      addr_len;     length of contents of 'addr' field
+     *      u8    addr[8];
+     *      u16   eth_type;     same as ieee802_3 'lentype' field, with additional Eth_Type_* exceptions
+     * };
      * @param MemoryBuffer $recordBuffer
      * @return array
      */
@@ -636,11 +700,35 @@ class Pcap
     {
         $linux_sll_fmt = [
             $this->u16 . "packet_type/",
+            // The packet type field is in network byte order (big-endian); it contains a value that is one of:
+            // 0, if the packet was specifically sent to us by somebody else;
+            // 1, if the packet was broadcast by somebody else;
+            // 2, if the packet was multicast, but not broadcast, by somebody else;
+            // 3, if the packet was sent to somebody else by somebody else;
+            // 4, if the packet was sent by us.
+
             $this->u16 . "arphdr_type/",
+            // The ARPHRD_ type field is in network byte order; it contains a Linux ARPHRD_ value for the link-layer device type.
+
             $this->u16 . "address_length/",
+            // The link-layer address length field is in network byte order;
+            // it contains the length of the link-layer address of the sender of the packet. That length could be zero.
+
             $this->u32 . "address_1/",
             $this->u32 . "address_2/",
+            // The link-layer address field contains the link-layer address of the sender of the packet;
+            // the number of bytes of that field that are meaningful is specified by the link-layer address length field.
+            // If there are more than 8 bytes, only the first 8 bytes are present, and if there are fewer than 8 bytes, there are padding bytes after the address to pad the field to 8 bytes.
+
             $this->u16 . "type",
+            // The protocol type field is in network byte order; it contains an Ethernet protocol type, or one of:
+            // 1, if the frame is a Novell 802.3 frame without an 802.2 LLC header;
+            // 4, if the frame begins with an 802.2 LLC header.
+            // ethernet type ...
+            //
+            // dechex(2048) === 0x800 -> Protocol IPV4
+            // 0x806 ARP
+            // ...
         ];
 
         // TODO 这里计算的address不对, 应该先获取length, 根据length获取指定长度length
@@ -673,21 +761,93 @@ class Pcap
     private function unpackIpHdr(MemoryBuffer $recordBuffer)
     {
         $ip_hdr = [
-            $this->uC . "version_ihl/",
-            $this->uC . "services/",
-            $this->u16 . "length/",
-            $this->u16 . "identification/",
-            $this->u16 . "flags_offset/",
-            $this->uC . "ttl/",
+            // version + ihl
+            $this->uC . "version_ihl/", // 4bit版本 === 4(IPV4) + 4bit首部长度（IHL）
+            // 版本
+            // IP报文首部的第一个字段是4位版本字段。对IPv4来说，这个字段的值是4。
+            // 第二个字段是4位首部长度，说明首部有多少32位字长。
+            // 首部长度（IHL）
+            // 由于IPv4首部可能包含数目不定的选项，这个字段也用来确定数据的偏移量。
+            // 这个字段的最小值是5（RFC 791），最大值是15。
+
+            // dscp + ecn
+            $this->uC . "services/",// 8bit
+            // DiffServ（DSCP）
+            // 最初被定义为服务类型字段，但被RFC 2474重定义为DiffServ。
+            // 新的需要实时数据流的技术会应用这个字段，一个例子是VoIP。
+            // 显式拥塞通告（ECN）
+            // 在RFC 3168中定义，允许在不丢弃报文的同时通知对方网络拥塞的发生。E
+            // CN是一种可选的功能，仅当两端都支持并希望使用，且底层网络支持时才被使用。
+
+            $this->u16 . "length/", // 16bit 全长 min20 ~ max65535
+            // 全长
+            // 这个16位字段定义了报文总长，包含首部和数据，单位为字节。
+            // 这个字段的最小值是20（20字节首部+0字节数据），最大值是65,535。
+            // 所有主机都必须支持最小576字节的报文，但大多数现代主机支持更大的报文。
+            // 有时候子网会限制报文的大小，这时报文就必须被分片。
+
+            $this->u16 . "identification/", // 标识符 16bit
+            // 标识符
+            // 这个字段主要被用来唯一地标识一个报文的所有分片。
+            // 一些实验性的工作建议将此字段用于其它目的，例如增加报文跟踪信息以协助探测伪造的源地址。
+
+            // flags + offset
+            $this->u16 . "flags_offset/", // 16bit = 3bit标志 + 13bit分片偏移
+            // 标志
+            // 这个3位字段用于控制和识别分片，它们是：
+            //  位0：保留，必须为0；
+            //  位1：禁止分片（DF）；
+            //  位2：更多分片（MF）。
+            // 如果DF标志被设置但路由要求必须分片报文，此报文会被丢弃。这个标志可被用于发往没有能力组装分片的主机。
+            // 当一个报文被分片，除了最后一片外的所有分片都设置MF标志。不被分片的报文不设置MF标志：它是它自己的最后一片。
+            // 分片偏移
+            // 这个13位字段指明了每个分片相对于原始报文开头的偏移量，以8字节作单位。
+
+            $this->uC . "ttl/", // 8bit
+            // 存活时间（TTL）
+            // 这个8位字段避免报文在互联网中永远存在（例如陷入路由环路）。
+            // 存活时间以秒为单位，但小于一秒的时间均向上取整到一秒。
+            // 在现实中，这实际上成了一个跳数计数器：报文经过的每个路由器都将此字段减一，当此字段等于0时，报文不再向下一跳传送并被丢弃。
+            // 常规地，一份ICMP报文被发回报文发送端说明其发送的报文已被丢弃。这也是traceroute的核心原理。
+
             $this->uC . "protocol/",
+            // 协议
+            // 这个字段定义了该报文数据区使用的协议。IANA维护着一份协议列表（最初由RFC 790定义）。
+            /**
+            协议字段值	协议名	缩写
+            1	互联网控制消息协议	ICMP 0x01
+            2	互联网组管理协议	IGMP 0x02
+            6	传输控制协议	TCP 0x06
+            17	用户数据报协议	UDP 0x11
+            41	IPv6封装	- 0x29
+            89	开放式最短路径优先	OSPF
+            132	流控制传输协议	SCTP
+             */
+
             $this->u16 . "checksum/",
+            // 首部检验和
+            // 这个16位检验和字段用于对首部查错。
+            // 在每一跳，计算出的首部检验和必须与此字段进行比对，如果不一致，此报文被丢弃。
+            // 值得注意的是，数据区的错误留待上层协议处理——用户数据报协议和传输控制协议都有检验和字段。
+            // 因为生存时间字段在每一跳都会发生变化，意味着检验和必须被重新计算，RFC 1071这样定义计算检验和的方法：
+            //  The checksum field is the 16-bit one's complement of the one's complement sum of all 16-bit words in the header.
+            //  For purposes of computing the checksum, the value of the checksum field is zero.
+
             $this->u32 . "source/",
+            // 源地址
+            // 一个IPv4地址由四个字节共32位构成，此字段的值是将每个字节转为二进制并拼在一起所得到的32位值。
+            // 例如，10.9.8.7是00001010000010010000100000000111。
+            // 这个地址是报文的发送端。但请注意，因为NAT的存在，这个地址并不总是报文的真实发送端，因此发往此地址的报文会被送往NAT设备，并由它被翻译为真实的地址。
+
             $this->u32 . "destination",
+            // 目的地址
+            // 与源地址格式相同，但指出报文的接收端。
+
         ];
 
 
         $ip = unpack(implode($ip_hdr), $recordBuffer->read(20));
-        if( !isset($ip["version_ihl"]) )
+        if(!isset($ip["version_ihl"]))
             sys_abort("malformed ip header");
 
         $ip['version'] = $ip['version_ihl'] >> 4;
@@ -700,6 +860,21 @@ class Pcap
 
         // TODO 计算ip options, 否则一旦ip有options, 后面解出来的都是错误
         // ignoring options
+        // 选项
+        // 附加的首部字段可能跟在目的地址之后，但这并不被经常使用。
+        // 请注意首部长度字段必须包括足够的32位字来放下所有的选项（包括任何必须的填充以使首部长度能够被32位整除）。
+        // 当选项列表的结尾不是首部的结尾时，EOL（选项列表结束，0x00）选项被插入列表末尾。下表列出了可能的选项：
+/*
+字段	长度（位）	描述
+备份	1	当此选项需要被备份到所有分片中时，设为1。
+类	2	常规的选项类别，0为“控制”，2为“查错和措施”，1和3保留。
+数字	5	指明一个选项。
+长度	8	指明整个选项的长度，对于简单的选项此字段可能不存在。
+数据	可变	选项相关数据，对于简单的选项此字段可能不存在。
+*/
+// 注：如果首部长度大于5，那么选项字段必然存在并必须被考虑。
+// 注：备份、类和数字经常被一并称呼为“类型”。
+// 宽松的源站选路（LSRR）和严格的源站选路（SSRR）选项不被推荐使用，因其可能带来安全问题。许多路由器会拒绝带有这些选项的报文。
 
         return $ip;
     }
@@ -849,6 +1024,8 @@ class Pcap
             }
             $recordBuffer = MemoryBuffer::ofBytes($record);
 
+            // 传输层叫做段（segment），在网络层叫做数据报（datagram），在链路层叫做帧（frame）
+
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
             // 注意: 此处不是ether
             // $ether = $this->unpackEtherHdr();
@@ -859,17 +1036,20 @@ class Pcap
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
             $linux_sll = $this->unpackLinuxSLL($recordBuffer);
-            // sys_echo("linux_sll " . json_encode($linux_sll, JSON_PRETTY_PRINT));
+            // 过滤非IPV4
+            if ($linux_sll['type'] !== 0x800/*IPV4*/) {
+                continue;
+            }
 
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
             $ip = $this->unpackIpHdr($recordBuffer);
-            // sys_echo("ip_hdr " . json_encode($ip, JSON_PRETTY_PRINT));
-
-            // 0x01 ICMP   0x06 TCP    0x11 UDP
-            // 只处理 TCP 包
+            // 过滤非IPV4
+            if ($ip['version'] !== 4/*IPV4*/) {
+                continue;
+            }
+            // 过滤非TCP包
             if ($ip["protocol"] !== 0x06) {
-                $this->buffer->reset();
                 continue;
             }
 
@@ -1487,8 +1667,14 @@ class Terminal
     }
 }
 
-function sys_echo($s) {
-    $time = date("H:i:s", time());
+function sys_echo($s, $sec = null, $usec = null) {
+    if ($sec === null) {
+        $sec = time();
+    }
+    $time = date("H:i:s", $sec);
+    if ($sec !== null && $usec !== null) {
+        $time .= ".$usec";
+    }
     echo "$time $s\n";
 }
 

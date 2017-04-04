@@ -15,7 +15,7 @@ namespace Minimalism\A\Core;
  *
  * 用来做cps变换, 实质上是将
  * asyncXXX(...args, callback) : void => syncXXX(...args) Async
- * Async begin(callback) : void
+ * Async start(callback) : void
  *
  * asyncInvoke :: (a, b -> void) -> void
  * syncInvoke :: a -> (b -> void)
@@ -33,7 +33,7 @@ class CallCC implements Async
         $this->fun = $fun;
     }
 
-    public function begin(callable $continuation)
+    public function start(callable $continuation)
     {
          $fun = $this->fun;
          // 不处理返回值，user-func返回值通过延续进行传递

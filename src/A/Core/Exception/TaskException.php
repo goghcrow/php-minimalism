@@ -2,11 +2,14 @@
 /**
  * Created by IntelliJ IDEA.
  * User: chuxiaofeng
- * Date: 17/1/31
- * Time: 下午1:42
+ * Date: 17/4/4
+ * Time: 下午10:08
  */
 
 namespace Minimalism\A\Core\Exception;
 
 
-class CancelTaskException extends \Exception { }
+class TaskException extends \Exception
+{
+
+}

@@ -18,7 +18,7 @@ class Syscall
         $this->fun = $fun;
     }
 
-    public function __invoke(AsyncTask $task)
+    public function __invoke(Task $task)
     {
         $cb = $this->fun;
         return $cb($task);

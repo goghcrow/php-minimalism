@@ -13,8 +13,8 @@ use function Minimalism\A\Client\async_sleep;
 use function Minimalism\A\Client\async_dns_lookup;
 use function Minimalism\A\Client\async_curl_get;
 use function Minimalism\A\Core\spawn;
-use function Minimalism\A\Core\await;
-use function Minimalism\A\Core\awaitAll;
+use function Minimalism\A\Core\gen;
+use function Minimalism\A\Core\waitAll;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 
 require __DIR__ . "/../../vendor/autoload.php";
@@ -24,7 +24,7 @@ spawn(function() {
     $ex = null;
     try {
         $r = rand(1, 10);
-        yield awaitAll([
+        yield waitAll([
             async_sleep(100),
             async_sleep(200),
             async_dns_lookup("www.baidu_.com", 1), // ex
@@ -39,7 +39,7 @@ spawn(function() {
 spawn(function() {
     $ex = null;
     try {
-        $r = (yield awaitAll([
+        $r = (yield waitAll([
             async_dns_lookup("www.bing.com", 100),
             async_dns_lookup("www.so.com", 100),
             async_dns_lookup("www.baidu.com", 100),
@@ -57,7 +57,7 @@ spawn(function() {
 // 可以直接使用 IAsync 接口
 spawn(function() {
     $start = microtime(true);
-    (yield awaitAll([
+    (yield waitAll([
         async_sleep(1000),
         async_sleep(1000),
         async_sleep(1000),
@@ -68,7 +68,7 @@ spawn(function() {
 
 spawn(function() {
     $start = microtime(true);
-    $r = (yield awaitAll([
+    $r = (yield waitAll([
             function() {
                 yield async_sleep(1000);
                 yield 'a';
@@ -88,14 +88,14 @@ spawn(function() {
 
 
 spawn(function() {
-    $r = (yield awaitAll([
+    $r = (yield waitAll([
             function() { yield 3; },
             function() { yield 2; },
             function() { yield 1; }
     ]));
     assert($r === [3, 2, 1]);
 
-    $r = (yield awaitAll([
+    $r = (yield waitAll([
             "x" => function() { yield 3; },
             "y" => function() { yield 2; },
             "z" => function() { yield 1; }]
@@ -108,7 +108,7 @@ spawn(function() {
 spawn(function() {
     $ex = null;
     try {
-        (yield awaitAll([
+        (yield waitAll([
                 function() { yield 3; },
                 function() { yield 2; },
                 function() {
@@ -127,7 +127,7 @@ spawn(function() {
 
 spawn(function() {
     try {
-        $results = (yield awaitAll([
+        $results = (yield waitAll([
             async_curl_get("www.baidu.com"),
             async_curl_get("www.baidu.com"),
             async_curl_get("www.baidu.com"),

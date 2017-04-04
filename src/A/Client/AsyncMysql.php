@@ -75,7 +75,7 @@ class AsyncMysql extends AsyncWithTimeout
         return $this;
     }
 
-    public function begin($timeout = 1000)
+    public function start($timeout = 1000)
     {
         $this->timeout = $timeout;
         $this->k = function() {

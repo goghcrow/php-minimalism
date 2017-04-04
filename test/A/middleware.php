@@ -10,7 +10,7 @@ namespace Minimalism\Test\A;
 
 use function Minimalism\A\Client\async_sleep;
 use function Minimalism\A\Core\spawn;
-use function Minimalism\A\Core\await;
+use function Minimalism\A\Core\gen;
 use function Minimalism\A\Server\Http\compose;
 use Minimalism\A\Server\Http\Middleware\RequestTimeout;
 
@@ -20,7 +20,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 spawn(function() {
     $ex = null;
     try {
-        yield await(compose([
+        yield gen(compose([
             new RequestTimeout(100, new \Exception("timeout")),
             function($ctx, $next) {
                 yield $next;
@@ -34,7 +34,7 @@ spawn(function() {
 
     $ex = null;
     try {
-        yield await(compose([
+        yield gen(compose([
             new RequestTimeout(200, new \Exception("timeout")),
             function($ctx, $next) {
                 yield $next;

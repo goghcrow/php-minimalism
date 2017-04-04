@@ -11,7 +11,7 @@ namespace Minimalism\Test\A;
 
 use Minimalism\A\Client\AsyncDns;
 use Minimalism\A\Client\AsyncHttpClient;
-use Minimalism\A\Core\AsyncTask;
+use Minimalism\A\Core\Task;
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
 use function Minimalism\A\Core\spawn;
 
@@ -27,8 +27,8 @@ function simpleGet()
         assert($swCli->statusCode === 200);
     };
 
-    $task = new AsyncTask($t());
-    $task->begin(function($r, $e) {
+    $task = new Task($t());
+    $task->start(function($r, $e) {
         if ($e) {
             assert(false);
         }
@@ -55,8 +55,8 @@ function buildReq()
         assert($swCli->statusCode === 302);
     };
 
-    $task = new AsyncTask($buildTask());
-    $task->begin(function($r, $e) {
+    $task = new Task($buildTask());
+    $task->start(function($r, $e) {
         if ($e) {
             assert(false);
         }
@@ -85,8 +85,8 @@ function seqReq()
         assert($swCli->statusCode === 200);
     };
 
-    $task = new AsyncTask($t());
-    $task->begin(function($r, $e) {
+    $task = new Task($t());
+    $task->start(function($r, $e) {
         if ($e) {
             assert(false);
             echo $e;
@@ -109,8 +109,8 @@ function testTimeout1()
         assert(false);
     };
 
-    $task = new AsyncTask($t());
-    $task->begin(function($r, $e) {
+    $task = new Task($t());
+    $task->start(function($r, $e) {
         assert($e instanceof \Exception);
     });
 }
@@ -135,8 +135,8 @@ function testTimeout2()
         assert($e instanceof AsyncTimeoutException);
     };
 
-    $task = new AsyncTask($t());
-    $task->begin();
+    $task = new Task($t());
+    $task->start();
 }
 
 testTimeout2();

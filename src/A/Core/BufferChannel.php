@@ -105,4 +105,9 @@ class BufferChannel
             }
         }
     }
+
+    public function close()
+    {
+        // TODO
+    }
 }

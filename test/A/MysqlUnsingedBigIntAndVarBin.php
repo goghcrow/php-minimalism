@@ -37,7 +37,7 @@ spawn(function() {
         $id = MAX_UNSIGNED_BIGINT;
         $varbin = fread(fopen("/dev/urandom", "r"), 1024);
 
-        yield $mysql->begin();
+        yield $mysql->start();
 
         yield $mysql->query("insert into `type_test` (`id`, `varbin`) values ($id, '" . addslashes($varbin) . "')");
 

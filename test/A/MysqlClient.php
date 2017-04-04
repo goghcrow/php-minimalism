@@ -82,7 +82,7 @@ function insert($commit = true)
 
     try {
         yield $mysql->connect();
-        yield $mysql->begin();
+        yield $mysql->start();
 
         $r = (yield $mysql->query("DROP TABLE IF EXISTS `tmp`;"));
         assert($r === true);
@@ -95,7 +95,7 @@ function insert($commit = true)
         assert($r === true);
 
 
-        yield $mysql->begin();
+        yield $mysql->start();
         $value = str_repeat("\0", 1024 * 1024 * 3.9); // max_allowed_packet 4m
         $r = (yield $mysql->query("insert into tmp (`text`) VALUE ('$value')"));
         assert($r === true);

@@ -9,11 +9,9 @@
 namespace Minimalism\A\Core;
 
 use Minimalism\A\Core\Exception\AsyncTimeoutException;
-use Minimalism\A\Core\Exception\CancelTaskException;
 
 function noop()
 {
-
 }
 
 function noopGen()
@@ -21,37 +19,25 @@ function noopGen()
     yield;
 }
 
-function isGeneratorFun(callable $fn)
+function isGenFun(callable $fn)
 {
-    $closure = Closure::fromCallable($fn);
-    $ref = new \ReflectionFunction($closure);
-    return $ref->isGenerator();
+    return Gen::isGenFun($fn);
 }
 
-/**
- * @noinspection PhpInconsistentReturnPointsInspection
- * @param $task
- * @param array $args
- * @return
- */
-function await($task, ...$args)
+function gen($task, ...$args)
 {
-    if ($task instanceof \Generator) {
-        return $task;
-    }
-
-    if (is_callable($task)) {
-        // 这里可以反射判断 callable isGeneratorFun
-        // 或者直接嵌套一层generator
-        $gen = function() use($task, $args) { yield $task(...$args); };
-    } else {
-        $gen = function() use($task) { yield $task; };
-    }
-    return $gen();
+    return Gen::from($task, ...$args);
 }
 
-// TODO 精简掉这个函数!!!
+function closure(callable $callable)
+{
+    return Closure::fromCallable($callable);
+}
+
+
 /**
+ * @deprecated
+ *
  * spawn one semicoroutine
  *
  * @internal param callable|\Generator|mixed $task
@@ -102,7 +88,7 @@ function spawn()
     // 1. 匹配参数类型, 兼容参数传递顺序
 
     $task = func_get_arg(0);
-    $continuation = function() { };
+    $continuation = null;
     $parent = null;
     $ctx = [];
 
@@ -110,7 +96,7 @@ function spawn()
         $arg = func_get_arg($i);
         if (is_callable($arg)) {
             $continuation = $arg;
-        } else if ($arg instanceof AsyncTask) {
+        } else if ($arg instanceof Task) {
             $parent = $arg;
         } else if (is_array($arg)) {
             $ctx = $arg;
@@ -127,7 +113,11 @@ function spawn()
             // 为了参数传递方便, 牺牲了对 task 是 callable 的args支持
             $task = $task(/* ...$args*/);
         } catch (\Exception $ex) {
-            $continuation(null, $ex);
+            if (is_callable($continuation)) {
+                $continuation(null, $ex);
+            } else {
+                throw $ex;
+            }
             return;
         }
     }
@@ -138,85 +128,87 @@ function spawn()
             $task->$k = $v;
         }
 
-        $asyncTask = new AsyncTask($task, $parent);
+        $asyncTask = new Task($task, $parent);
         $task->__self__ = [$asyncTask]; // hack
-        $asyncTask->begin($continuation);
+        if (is_callable($continuation)) {
+            $asyncTask->start($continuation);
+        } else {
+            $asyncTask->start();
+        }
     } else {
-        // 如果为其余类型, 直接通过 Continuation 返回
-        $continuation($task, null);
+        if (is_callable($continuation)) {
+            // 如果为其余类型, 直接通过 Continuation 返回
+            $continuation($task, null);
+        }
     }
 }
 
-function go()
+function run(...$args)
 {
-    spawn(...func_get_args());
+    Task::run(...$args);
 }
 
-/**
- * @param $task
- * @return Syscall
- */
+function go(...$args)
+{
+    Task::run(...$args);
+}
+
 function fork($task)
 {
-    $task = await($task);
-    return new Syscall(function(AsyncTask $parent) use($task) {
-        return new FutureTask($task, $parent);
-    });
+    return Task::fork($task);
 }
 
 function chan($n = 0)
 {
-    if ($n === 0) {
-        return new Channel();
-    } else {
-        return new BufferChannel($n);
-    }
+    return Task::chan($n);
 }
 
-/**
- * call-with-current-continuation
- *
- * 仅能够处理半协程的 call/cc, 比如将k本身传递出去, 没有意义, 无法任意跳转
- *
- * @param callable $fun
- *      $fun 参数会接收到continuation $k
- *      $k的签名: void fun($result = null, \Exception = null)
- *      可以抛出异常或者以同步方式返回值
- * @param null|int $timeout
- * @return Async 可以使用call/cc在async环境中将任务异步接口转换为同步接口
- * @example
- * 可以使用call/cc在async环境中将任务异步接口转换为同步接口
- *
- * ```php
- * function asyncSleep($ms) {
- *  return callcc(function($k) use($ms) {
- *      swoole_timer_after($ms, function() use($k) {
- *          $k();
- *      });
- *  });
- * }
- *
- * // yield asyncSleep(1000);
- *
- * $result = (yield callcc(function($k) {
- *      doSomethingAsync(function($result) use($k) {
- *      // 通过延续把异步结果返回给yield表达式左值
- *          $k($result);
- *          // or
- *          $k(null, $ex);
- *      });
- * }));
- * ```
- *
- * 超时其实可以去掉
- * 用race可以更干净的实现超时
- */
 function callcc(callable $fun, $timeout = 0)
 {
     if ($timeout > 0) {
         $fun = _timeout($fun, $timeout);
     }
-    return new CallCC($fun);
+    return Task::callcc($fun, $timeout);
+}
+
+function cancelTask()
+{
+    return Task::cancel();
+}
+
+function getCtx($key, $default = null)
+{
+    return Task::getCtx($key, $default);
+}
+
+function setCtx($key, $val)
+{
+    return Task::setCtx($key, $val);
+}
+
+function waitAll(array $tasks, $ms = 0)
+{
+    return Task::whenAll($tasks, $ms);
+}
+
+function all(array $tasks, $ms = 0)
+{
+    return Task::whenAll($tasks, $ms);
+}
+
+function parallel(array $tasks, $ms = 0)
+{
+    return Task::whenAll($tasks, $ms);
+}
+
+function whenAny(array $tasks, $ms = 0)
+{
+    return Task::whenAny($tasks, $ms);
+}
+
+function race(array $tasks, $ms = 0)
+{
+    return Task::whenAny($tasks, $ms);
 }
 
 function defer(callable $fn)
@@ -227,127 +219,14 @@ function defer(callable $fn)
     return swoole_timer_after(1, $fn);
 }
 
-
 /**
- * 取消任务
- * @return Syscall
- */
-function cancelTask()
-{
-    return new Syscall(function(/*AsyncTask $task*/) {
-        throw new CancelTaskException();
-    });
-}
-
-
-
-/**
- * 跨父子AsyncTask设置上下文
- * @param string $key
- * @param mixed $default
- * @return Syscall
- */
-function getCtx($key, $default = null)
-{
-    return new Syscall(function(AsyncTask $task) use($key, $default) {
-        while($task->parent && $task = $task->parent);
-        if (isset($task->generator->$key)) {
-            return $task->generator->$key;
-        } else {
-            return $default;
-        }
-    });
-}
-
-
-
-/**
- * 跨父子AsyncTask获取上下文
- * @param string $key
- * @param mixed $val
- * @return Syscall
- */
-function setCtx($key, $val)
-{
-    return new Syscall(function(AsyncTask $task) use($key, $val) {
-        while($task->parent && $task = $task->parent);
-        $task->generator->$key = $val;
-    });
-}
-
-/**
- * Promise.all, parallel
- * @param \Generator[] $tasks
- * @return Syscall
- */
-function awaitAll(array $tasks)
-{
-    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
-
-    return new Syscall(function(AsyncTask $parent) use($tasks) {
-        if (empty($tasks)) {
-            return null;
-        } else {
-            return new All($tasks, $parent);
-        }
-    });
-}
-
-/**
- * Promise.race, any
- * @param array $tasks
- * @return Syscall
- */
-function awaitAny(array $tasks)
-{
-    $tasks = array_map(__NAMESPACE__ . "\\await", $tasks);
-
-    return new Syscall(function(AsyncTask $parent) use($tasks) {
-        if (empty($tasks)) {
-            return null;
-        } else {
-            return new Any($tasks, $parent);
-        }
-    });
-}
-
-
-/**
- * Promise.all
- * @param array $tasks
- * @return Syscall
- */
-function all(array $tasks)
-{
-    return awaitAll($tasks);
-}
-
-/**
- * Promise.all
- * @param array $tasks
- * @return Syscall
- */
-function parallel(array $tasks)
-{
-    return awaitAll($tasks);
-}
-
-/**
- * Promise.race
- * @param array $tasks
- * @return Syscall
- */
-function race(array $tasks)
-{
-    return awaitAny($tasks);
-}
-
-/**
+ * @deprecated 对于swoole寥寥几个回调api没什么卵用
  * @param callable $fun
  * @param array ...$args
  * @return \Closure
  *
  * @example
+ *
  * // 修复callback参数位置
  * function dns($host, $cb) {
  *      swoole_async_dns_lookup($host, function($_, $ip) use($cb) {

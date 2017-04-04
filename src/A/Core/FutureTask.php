@@ -24,17 +24,17 @@ final class FutureTask
     public $result;
     public $ex;
 
-    public function __construct(\Generator $gen, AsyncTask $parent = null)
+    public function __construct(\Generator $gen, Task $parent = null)
     {
         $this->state = self::PENDING;
 
         if ($parent) {
-            $asyncTask = new AsyncTask($gen, $parent);
+            $asyncTask = new Task($gen, $parent);
         } else {
-            $asyncTask = new AsyncTask($gen);
+            $asyncTask = new Task($gen);
         }
 
-        $asyncTask->begin(function($r, $ex = null)  {
+        $asyncTask->start(function($r, $ex = null)  {
             // PENDING or TIMEOUT
             if ($this->state === self::TIMEOUT) {
                 return;

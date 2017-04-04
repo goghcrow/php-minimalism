@@ -13,6 +13,7 @@ function make($class, array $args = [])
 {
     static $isGt56;
     if ($isGt56 === null) {
+        // PHP_VERSION_ID >= xxxx
         $isGt56 = version_compare(phpversion(), '5.6.0', '>=');
     }
 

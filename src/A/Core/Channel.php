@@ -51,4 +51,9 @@ class Channel
             }
         });
     }
+
+    public function close()
+    {
+        // TODO
+    }
 }

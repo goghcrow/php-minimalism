@@ -25,9 +25,9 @@ class Any implements Async
     /**
      * AllTasks constructor.
      * @param \Generator[] $tasks
-     * @param AsyncTask $parent
+     * @param Task $parent
      */
-    public function __construct(array $tasks, AsyncTask $parent = null)
+    public function __construct(array $tasks, Task $parent = null)
     {
         $this->tasks = $tasks;
         $this->parent = $parent;
@@ -41,11 +41,11 @@ class Any implements Async
      *      void(mixed $result = null, \Throwable|\Exception $ex = null)
      * @return void
      */
-    public function begin(callable $continuation)
+    public function start(callable $continuation)
     {
         $this->continuation = $continuation;
         foreach ($this->tasks as $id => $task) {
-            (new AsyncTask($task, $this->parent))->begin($this->continuation($id));
+            (new Task($task, $this->parent))->start($this->continuation($id));
         };
     }
 

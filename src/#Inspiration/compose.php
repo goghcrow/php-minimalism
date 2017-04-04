@@ -6,10 +6,6 @@
  * Time: 下午10:28
  */
 
-namespace Minimalism\A\Core;
-
-
-
 // TODO exception handler
 
 

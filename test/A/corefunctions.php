@@ -8,16 +8,16 @@
 
 namespace Minimalism\Test\A;
 
-use function Minimalism\A\Core\isGeneratorFun;
+use function Minimalism\A\Core\isGenFun;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
 
-assert(isGeneratorFun(function() { yield; }));
+assert(isGenFun(function() { yield; }));
 
 
 function g() { yield; }
-assert(isGeneratorFun(__NAMESPACE__ . "\\g"));
+assert(isGenFun(__NAMESPACE__ . "\\g"));
 
 
 class c {
@@ -25,7 +25,7 @@ class c {
     public function m2() { yield; }
 }
 
-assert(isGeneratorFun(__NAMESPACE__ . "\\c::m1"));
-assert(isGeneratorFun([new c, "m2"]));
+assert(isGenFun(__NAMESPACE__ . "\\c::m1"));
+assert(isGenFun([new c, "m2"]));
 
 

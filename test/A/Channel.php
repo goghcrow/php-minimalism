@@ -19,14 +19,14 @@ function t0()
     $ch = new Channel();
 
     $recvAsync = $ch->recv();
-    $recvAsync->begin(function($r, $ex) {
+    $recvAsync->start(function($r, $ex) {
         // echo "recv return ";
         // var_dump($r); // 42
         assert($r === 42);
     });
 
     $sendAsync = $ch->send(42);
-    $sendAsync->begin(function($r, $ex) {
+    $sendAsync->start(function($r, $ex) {
         // echo "send return ";
         // var_dump($r); // null
         assert($r === null);

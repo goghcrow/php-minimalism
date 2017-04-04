@@ -14,7 +14,8 @@ namespace Minimalism\A\Core;
  * parallel tasks
  * @package Minimalism\A\Core
  *
- * 等待所有完成（或第一个失败）
+ * 等待所有完成（或第一个失败）TODO 修改行为
+ * 收集异常, 抛出AggregateException
  */
 class All implements Async
 {
@@ -29,9 +30,9 @@ class All implements Async
     /**
      * AllTasks constructor.
      * @param \Generator[] $tasks
-     * @param AsyncTask $parent
+     * @param Task $parent
      */
-    public function __construct(array $tasks, AsyncTask $parent = null)
+    public function __construct(array $tasks, Task $parent = null)
     {
         $this->tasks = $tasks;
         $this->parent = $parent;
@@ -44,11 +45,11 @@ class All implements Async
      * @param callable $continuation
      * @return void
      */
-    public function begin(callable $continuation = null)
+    public function start(callable $continuation = null)
     {
         $this->continuation = $continuation;
         foreach ($this->tasks as $id => $task) {
-            (new AsyncTask($task, $this->parent))->begin($this->continuation($id));
+            (new Task($task, $this->parent))->start($this->continuation($id));
         };
     }
 
