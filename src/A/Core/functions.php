@@ -219,6 +219,31 @@ function defer(callable $fn)
     return swoole_timer_after(1, $fn);
 }
 
+function new_($className, ...$args)
+{
+    assert(class_exists($className));
+
+    if (method_exists($className, "__construct")) {
+        $ctor = new \ReflectionMethod($className, "__construct");
+        assert($ctor->isPublic());
+
+        if ($ctor->isGenerator()) {
+            $clazz = new \ReflectionClass($className);
+            $obj = $clazz->newInstanceWithoutConstructor();
+            $ignoredRet = (yield $ctor->invoke($obj, ...$args));
+            // 这里需要特殊处理async
+            if ($obj instanceof Async) {
+                yield [$obj];
+            } else {
+                yield $obj;
+            }
+            return;
+        }
+    }
+
+    yield new $className(...$args);
+}
+
 /**
  * @deprecated 对于swoole寥寥几个回调api没什么卵用
  * @param callable $fun

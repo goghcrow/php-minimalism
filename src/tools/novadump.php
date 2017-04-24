@@ -13,6 +13,12 @@ use Terminal as T;
 /**
  * novadump: nova协议抓包解码工具
  *
+ * 适用于公司 centos 环境
+ * tcpdump version 4.1-PRE-CVS_2016_05_10
+ * libpcap version 1.4.0
+ * 超过65535byte的nova包受限于tcpdump版本捕获字节数不足导致程序退出
+ *
+ *
  * changelog:
  *
  * 2017-03-07
@@ -26,12 +32,15 @@ use Terminal as T;
  * 3. thrift replay|exception 打印具体异常类型
  * 4. 从linux_sll读取时间戳, 替代当前时间显示
  *
- * buglist: 还存在某些包没有正确过滤
+ * 2017-04-07
+ * 发现问题: 超过65535byte的nova包受限于tcpdump版本捕获字节数不足导致程序退出
  *
- * todolist: 抓mysql包
+ * 2017-04-21
+ * 高亮 src > dst 显示
+ *
+ * todo: mysql
+ * todo: redis
  */
-
-
 
 
 $usage = <<<USAGE
@@ -203,11 +212,15 @@ class NovaPacketHandler
         $_service = T::format($service, T::FG_GREEN);
         $_method = T::format($method, T::FG_GREEN);
         $_attach = T::format($attach, T::DIM);
+        $_src = T::format("$srcIp:$srcPort", T::BRIGHT);
+        $_dst = T::format("$dstIp:$dstPort", T::BRIGHT);
 
         $sec = $rec_hdr["ts_sec"];
         $usec = $rec_hdr["ts_usec"];
+
+        // 存在nova_ip和nova_port是因为可能发送接收的地址是proxy，nova_ip这里是服务真实ip
         // !!! 这里显示的时间必须是 pcap包时间戳
-        sys_echo("$srcIp:$srcPort > $dstIp:$dstPort, nova_ip $_ip, nova_port $_port, nova_seq $_seq", $sec, $usec);
+        sys_echo("$_src > $_dst, nova_ip $_ip, nova_port $_port, nova_seq $_seq", $sec, $usec);
         sys_echo("service $_service, method $_method", $sec, $usec);
 
         if ($attach && $attach !== "{}") {
@@ -248,6 +261,18 @@ class NovaDump
     {
         $proc = new \swoole_process(function(\swoole_process $proc) use($filter) {
             $args = ["-i", "any", "-s", "0","-U", "-w", "-"];
+
+            // 旧版本tcpdump -s 0
+            // tcpdump version 4.1-PRE-CVS_2016_05_10
+            // libpcap version 1.4.0
+            // Setting snaplen to 0 sets it to the default of 65535
+            // 但是, 新版本
+            // tcpdump.4.9.0 version 4.9.0
+            // libpcap version 1.8.1
+            // Setting snaplen to 0 sets it to the default of 262144
+            // 因为 -s 0 的snaplen > 65535
+            // -s 0 等于抓取最大值
+
             if ($filter) {
                 $args[] = $filter;
             }
@@ -290,6 +315,7 @@ class NovaDump
                 // !!!! buffer 太小会造成莫名其妙 pack包数据有问题....
                 $recv = $this->proc->read(1024 * 1024 * 2);
                 // swoole_process 将标准错误与标准输出重定向到一起了..这里先pass到两行tcpdump的标准错误输出
+                // tcpdump 新版本 stdout -> stderr -> stderr -> stdout 顺序输出, 应该过滤掉 2, 3
                 if (++$i <= 2) {
                     sys_echo($recv);
                     $recv = "";
@@ -586,6 +612,7 @@ class Pcap
             sys_abort("only support special Linux “cooked” capture");
         }
 
+        // TCPDUMP 新版本 -s snaplen 最大值 已经不是65535了
         if ($pcap_hdr["snaplen"] !== 65535) {
             sys_abort("please set snaplen=0, tcpdump -s 0");
         }
@@ -858,7 +885,6 @@ class Pcap
         $ip['source_ip'] = long2ip($ip['source']);
         $ip['destination_ip'] = long2ip($ip['destination']);
 
-        // TODO 计算ip options, 否则一旦ip有options, 后面解出来的都是错误
         // ignoring options
         // 选项
         // 附加的首部字段可能跟在目的地址之后，但这并不被经常使用。
@@ -1083,23 +1109,28 @@ class Pcap
             // move bytes
             $connBuffer->write($recordBuffer->readFull());
 
+            // 这里有个问题: 如果tcpdump 捕获的数据不全
+            // 需要使用对端回复的ip分节的 ack-1 来确认此条ip分节的长度
+            // 从而检查到接受数据是否有问题, 这里简化处理, 没有检测
             // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-            // 4byte nova msg_size
-            if ($connBuffer->readableBytes() < 4) {
-                continue;
-            }
+            while (true) {
+                // 4byte nova msg_size
+                if ($connBuffer->readableBytes() < 4) {
+                    continue 2;
+                }
 
-            $msg_size = unpack("Nmsg_size", $connBuffer->get(4))["msg_size"];
-            if ($msg_size > static::MAX_PACKET_SIZE) {
-                sys_abort("capture too large nova packet, $msg_size > 1024 * 1024 * 2");
-            }
-            if ($connBuffer->readableBytes() < $msg_size) {
-                continue;
-            }
+                $msg_size = unpack("Nmsg_size", $connBuffer->get(4))["msg_size"];
+                if ($msg_size > static::MAX_PACKET_SIZE) {
+                    sys_abort("capture too large nova packet, $msg_size > 1024 * 1024 * 2");
+                }
+                if ($connBuffer->readableBytes() < $msg_size) {
+                    continue 2;
+                }
 
-            $nova_data = $connBuffer->read($msg_size);
-            $this->unpackNova($nova_data, $rec_hdr, $linux_sll, $ip, $tcp);
+                $nova_data = $connBuffer->read($msg_size);
+                $this->unpackNova($nova_data, $rec_hdr, $linux_sll, $ip, $tcp);
+            }
         }
     }
 }
@@ -1190,6 +1221,24 @@ class MemoryBuffer
         $this->readerIndex += $len;
         if ($this->readerIndex === $this->writerIndex) {
             $this->reset();
+        }
+        return $read;
+    }
+
+    public function readLine()
+    {
+        if ($this->readableBytes() <= 0) {
+            return false;
+        }
+
+        $read = "";
+        while ($this->readableBytes()) {
+            $char = $this->read(1);
+            $read .= $char;
+            if ($char === "\r" && $this->get(1) === "\n") {
+                $read .= $this->read(1);
+                return $read;
+            }
         }
         return $read;
     }
