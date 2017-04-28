@@ -88,7 +88,7 @@ if (PHP_OS === "Darwin") {
 
 
 
-$a = getopt("s:m:", ["app:", "path:", "filter:", "file:"]);
+$a = getopt("s:m:", ["app:", "path:", "filter:", "file:", "copy::"]);
 if (isset($a["app"]) && isset($a["path"])) {
     $appName = $a["app"];
     $path = $a["path"];
@@ -99,6 +99,7 @@ $pcapFile = null;
 $tcpFilter = "";
 $servicePattern = null;
 $methodPattern = null;
+$exportFile = null;
 
 if (isset($a["file"])) {
     if (!is_readable($a["file"]) || is_dir($a["file"])) {
@@ -120,9 +121,15 @@ if (isset($a["m"])) {
     $methodPattern = $a["m"];
 }
 
+if (array_key_exists("copy", $a) && is_writable($a["copy"])) {
+    $exportFile = $a["copy"];
+}
+
 
 $filter = new NovaPacketFilter($servicePattern, $methodPattern);
-$handler = new NovaPacketHandler($filter);
+$copy = $exportFile ? new NovaCopy($exportFile) : null;
+
+$handler = new NovaPacketHandler($filter, $copy);
 $novadump = new NovaDump($handler);
 
 if ($pcapFile) {
@@ -181,13 +188,52 @@ class NovaPacketFilter
 }
 
 
+class NovaCopy
+{
+    public $file;
+
+    public function __construct($file)
+    {
+        $this->file = $file;
+    }
+
+    public function filter($type, $service, $method)
+    {
+        if ($type !== NovaApp::THRIFT_CALL) {
+            return false;
+        }
+
+        if (NovaPacketFilter::isHeartbeat($service, $method)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function __invoke($type, $ip, $port, $service, $method, $args)
+    {
+        if ($this->filter($type, $service, $method)) {
+            // TODO: 反射获取参数
+            $jsonArgs = json_encode($args);
+            echo "nova -h=$ip -p=$port -m=$service.$method -a '$jsonArgs'\n";
+        }
+    }
+}
+
 class NovaPacketHandler
 {
     public $filter;
+    public $novaCopy;
 
-    public function __construct(callable $filter = null)
+    /**
+     * NovaPacketHandler constructor.
+     * @param callable|null $filter
+     * @param callable $novaCopy
+     */
+    public function __construct($filter = null, $novaCopy = null)
     {
         $this->filter = $filter;
+        $this->novaCopy = $novaCopy;
     }
 
     public function __invoke($service, $method, $ip, $port, $seq, $attach, $thriftBin,
@@ -229,7 +275,11 @@ class NovaPacketHandler
 
         if (!$isHeartbeat) {
             if (NovaApp::$enable) {
-                NovaApp::dumpThrift($service, $method, $thriftBin);
+                list($type, $args) = NovaApp::dumpThrift($service, $method, $thriftBin);
+                if ($this->novaCopy) {
+                    $copy = $this->novaCopy;
+                    $copy($type, $dstIp, $dstPort, $service, $method, $args);
+                }
             } else {
                 Hex::dump($thriftBin, "vvv/8/6");
             }
@@ -337,6 +387,11 @@ class NovaDump
 
 class NovaApp
 {
+    const THRIFT_CALL = 1;
+    const THRIFT_REPLY = 2;
+    const THRIFT_EXCEPTION = 3;
+    const THRIFT_ONEWAY = 4;
+
     public static $enable = false;
 
     public $appName;
@@ -354,11 +409,12 @@ class NovaApp
 
         // THRIFT MESSAGE TYPE
         // CALL  = 1; REPLY = 2; EXCEPTION = 3; ONEWAY = 4;
-        if ($type === 1) {
+        if ($type === self::THRIFT_CALL) {
             try {
                 sys_echo(T::format("CALL", T::FG_YELLOW, T::BRIGHT));
                 $args = self::decodeServiceArgs($service, $method, $thriftBin);
                 sys_echo(T::format(json_encode($args), T::DIM));
+                return [$type, $args];
             } catch (\Exception $ex) {
                 // Hex::dump($thriftBin, "vvv/8/6");
                 // sys_error("decode thrift CALL fail");
@@ -370,12 +426,14 @@ class NovaApp
                 sys_echo(T::format("REPLY", T::FG_YELLOW, T::BRIGHT));
                 $resp = self::decodeResponse($service, $method, $thriftBin);
                 sys_echo(T::format(json_encode($resp), T::DIM));
+                return [$type, $resp];
             } catch (\Exception $ex) {
                 // Hex::dump($thriftBin, "vvv/8/6");
                 // sys_error("decode thrift REPLY fail");
                 sys_error(get_class($ex) . ":" . $ex->getMessage());
             }
         }
+        return [0, []];
     }
 
     public static function decodeServiceArgs($service, $method, $thriftBin)

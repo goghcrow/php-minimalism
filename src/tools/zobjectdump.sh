@@ -94,7 +94,7 @@ def zobjdump():
     return
 
 if __name__ == "__main__":
-    gdb.execute("call zend_gc_collect_cycles()")
+    # gdb.execute("call zend_gc_collect_cycles()")
     gdb.execute("info proc")
     zobjdump()
 EOF
@@ -103,6 +103,11 @@ EOF
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+
+# wget http://codesearch.qima-inc.com/raw/php-7.1.3/.gdbinit
+# sudo yum-test install yz-php7-swoole-soa-debuginfo.x86_64
+# sudo yum-test install yz-php7-devel.x86_64
+# sudo debuginfo-install yz-php7-7.1.3-2.el6.x86_64
 
 php7_script()
 {
