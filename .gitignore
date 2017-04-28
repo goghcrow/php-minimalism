@@ -260,3 +260,4 @@ test/_
 src/Coroutine
 test/Config/config
 src/tools/#internal
+ide_helper
