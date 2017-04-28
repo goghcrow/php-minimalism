@@ -1,6 +1,7 @@
 <?php
 
 $port = isset($argv[1]) ? intval($argv[1]) : 7777;
+
 $serv = new TraceServer($port);
 $serv->start();
 
@@ -61,9 +62,10 @@ class TraceServer
         
         $this->traceServer->start();
 
-        $this->startHeartbeat();
+        // $this->startHeartbeat();
     }
 
+    /*
     public function startHeartbeat()
     {
         swoole_timer_tick(5000, function() {
@@ -72,6 +74,7 @@ class TraceServer
             }
         });
     }
+    */
 
     public function onStart(\swoole_websocket_server $server)
     {
@@ -136,9 +139,10 @@ class TraceServer
         foreach ($headers as $key => $val) {
             $response->header($key, $val);
         }
+        // 设置ws连接sid, 必须保证sw与http同域, 共享cookie中sid传递到request中
+        $response->cookie("sid", $request->fd);
         $response->status(101);
         $response->end();
-
 
         $this->fds[$request->fd] = true;
         return true;
@@ -155,13 +159,13 @@ class TraceServer
         sys_echo("handshake success with fd#{$request->fd}");
     }
 
-    public function onMessage(\swoole_websocket_server $server, $frame)
+    public function onMessage(\swoole_websocket_server $server, \swoole_websocket_frame $frame)
     {
         if ($frame->data == "close") {
             $server->close($frame->fd);
             unset($this->fds[$frame->fd]);
         } else {
-            //echo "receive from {$frame->fd}:{$frame->data}, opcode:{$frame->opcode}, finish:{$frame->finish}\n";
+            sys_echo("receive from {$frame->fd}:{$frame->data}, opcode:{$frame->opcode}, finish:{$frame->finish}");
         }
     }
 
@@ -179,29 +183,38 @@ class TraceServer
         }
 
         if ($uri === "/report") {
-            $body = $request->rawcontent();
-            $response->status(200);
+            if (isset($request->get["sid"])) {
+                $sid = $request->get["sid"];
+                if (isset($this->fds[$sid])) {
+                    $body = $request->rawcontent();
+                    $response->status(200);
+                    $response->end();
+                    $this->pushTrace($sid, $body);
+                    return;
+                }
+            }
+            $response->status(404);
             $response->end();
-
-            $this->pushTrace($body);
             return;
         }
 
         if ($uri === "/request") {
-            parse_str($request->server["query_string"], $query);
-            if (isset($query["uri"])) {
-                $uri = $query["uri"];
+            $get = $request->get;
+            if (isset($get["uri"]) && isset($get["sid"])) {
+                $uri = $get["uri"];
+                $sid = $get["sid"];
+
                 $scheme = strtolower(parse_url($uri, PHP_URL_SCHEME));
                 if ($scheme === "nova") {
                     $body = $request->rawcontent();
-                    $this->novaRequest($response, $uri, $body);
+                    $this->novaRequest($sid, $response, $uri, $body);
                 } else if ($scheme === "http" || $scheme === "https") { // TODO support https
-                    $this->httpRequest($response, $uri);
+                    $this->httpRequest($sid, $response, $uri);
                 }
                 return;
             }
             $response->status(200);
-            $response->end('{"error":"invalid url"}');
+            $response->end('{"error":"invalid args"}');
             return;
         }
 
@@ -209,20 +222,23 @@ class TraceServer
         $this->trace($response);
     }
 
-    private function novaRequest(\swoole_http_response $response, $uri, $body)
+    private function novaRequest($sid, \swoole_http_response $response, $uri, $body)
     {
         $host = parse_url($uri, PHP_URL_HOST);
         $port = parse_url($uri, PHP_URL_PORT);
         // TODO
     }
 
-    private function httpRequest(\swoole_http_response $response, $uri)
+    private function httpRequest($sid, \swoole_http_response $response, $uri)
     {
         $host = parse_url($uri, PHP_URL_HOST);
         $port = parse_url($uri, PHP_URL_PORT);
         $path = parse_url($uri, PHP_URL_PATH);
         $query = parse_url($uri, PHP_URL_QUERY);
-        $headers = [self::KEY => "http://{$this->localIp}:{$this->port}/report"];
+
+        $headers = [
+            self::KEY => "http://{$this->localIp}:{$this->port}/report?sid=$sid"
+        ];
         $cookies = [];
         $data = "";
         $method = "GET";
@@ -232,9 +248,9 @@ class TraceServer
             use($path, $port, $method, $query, $headers, $cookies, $data, $timeout, $response)
         {
             if ($ip === null) {
-                echo "\033[1;31m", "DNS查询超时 host:{$host}", "\033[0m\n";exit;
-            } else {
-                $this->client->connect($ip, $this->port);
+                $response->status(200);
+                $response->end('{"error":"dns lookup timeout"}');
+                return;
             }
 
             $cli = new \swoole_http_client($ip, intval($port));
@@ -260,17 +276,31 @@ class TraceServer
         });
     }
 
-    private function pushTrace($data)
+    private function pushTrace($fd, $data)
     {
+        $this->traceServer->push($fd, $data);
+        return;
+
+        $a = substr($data, 0, 10);
+        $b = substr($data, 10);
+
         foreach ($this->fds as $fd => $_) {
-            $this->traceServer->push($fd, $data);
+            $this->traceServer->push($fd, $a);
+            swoole_timer_after(1, function() use($fd, $b) {
+                $this->traceServer->push($fd, $b);
+            });
         }
+
+
+
+
+//        foreach ($this->fds as $fd => $_) {
+//            $this->traceServer->push($fd, $data);
+//        }
     }
 
     private function trace(\swoole_http_response $response)
     {
-        $host = $this->localIp;
-        $port = $this->port;
         $response->end(<<<HTML
 <!DOCTYPE html>
 <html>
@@ -393,9 +423,9 @@ button {
   <section id="server">
   <h1>Zan Debugger Trace</h1>
   
-  <div class="hide-when-connected">Serve at 
-    <select id="addresses"><option>{$host}</option></select>:
-    <input type="number" id="serverPort" value="$port"></input>
+  <div class="hide-when-connected">Connect To 
+    <select id="addresses"><option></option></select>:
+    <input type="number" id="serverPort"></input>
     <button id="serverStart">Start!</button>
   </div>
   
@@ -452,32 +482,32 @@ button {
     this.onStart = onStart
     this.onClose = onClose
     
-    var wsServer = "ws://${host}:${port}";
+    var wsServer = 'ws://' + this.addr + ':' + this.port;
     
-    var websocket = new WebSocket(wsServer);
-    if (!websocket) {
+    var ws = new WebSocket(wsServer);
+    if (!ws) {
       return;
     }
-    
-    websocket.addEventListener('open', function (evt) {
+        
+    ws.addEventListener('open', function (evt) {
       this.isConnected = true;
       console.info("Connected to WebSocket server.");
       this.onStart(evt)
     }.bind(this));
 
-    websocket.addEventListener('close', function (evt) {
+    ws.addEventListener('close', function (evt) {
       this.isConnected = false;
       console.info("Disconnected");
       this.onClose(evt)
     }.bind(this));
 
-    websocket.addEventListener('error', function (evt, e) {
+    ws.addEventListener('error', function (evt, e) {
       this.isConnected = false;
       console.error('Error occured: ' + evt.data);
       this.onClose(evt)
     }.bind(this));
 
-    websocket.addEventListener('message', function (evt) {
+    ws.addEventListener('message', function (evt) {
       // console.info('Retrieved data from server: ' + evt.data.length);
       if (evt.data.length) {
         var traceData = JSON.parse(evt.data)
@@ -486,24 +516,29 @@ button {
       }
     });
 
-    this.websocket = websocket;
+    this.ws = ws;
   }
 
   Trace.prototype.stop = function() {
-    if (this.websocket && this.isConnected) {
-      this.websocket.close()
+    // this.ws.readyState !== WebSocket.CLOSED 
+    if (this.ws && this.isConnected) {
+      this.ws.close()
     }
   }
 
   Trace.prototype.send = function(toSend) {
-    if (this.websocket && this.isConnected) {
-      this.websocket.send(toSend)
+    // trace.ws.readyState === WebSocket.OPEN
+    if (this.ws && this.isConnected) {
+      return this.ws.send(toSend)
+    } else {
+      return false;
     }
   }
 
   var trace 
 
   function startServer() {
+    // trace.ws.readyState !== WebSocket.OPEN
     if (trace && trace.isConnected) {
       return;
     }
@@ -520,6 +555,7 @@ button {
   }
 
   function stopServer() {
+    // trace.ws.readyState !== WebSocket.CLOSED
     if (trace && trace.isConnected) {
       trace.stop();
     }
@@ -530,7 +566,8 @@ button {
   document.getElementById('requestGo').addEventListener('click', (function(){
     var url = document.getElementById('url')
     return function() {
-      fetch('./request?uri=' + encodeURIComponent(url.value))  
+      // 请求带上ws的sid(fd), 识别report的trace信息归属的哪个ws连接
+      fetch('./request?sid=' + getCookie('sid') + '&uri=' + encodeURIComponent(url.value))  
         .then(  
           function(response) {  
             if (response.status !== 200) {  
@@ -561,6 +598,9 @@ button {
   })());
   
   
+  // init
+  document.getElementById("addresses").innerHTML = '<option>' + window.location.hostname  + '</option>'
+  document.getElementById("serverPort").value = window.location.port;
   document.getElementById('serverStart').click();
   
   
@@ -599,6 +639,36 @@ button {
 
     console.log.apply(console, arr);
   }
+  
+  // http://stackoverflow.com/questions/4003823/javascript-getcookie-functions/4004010#4004010
+  function getCookies() {
+    var c = document.cookie, v = 0, cookies = {};
+    if (document.cookie.match(/^\s*\$Version=(?:"1"|1);\s*(.*)/)) {
+      c = RegExp.$1;
+      v = 1;
+    }
+    if (v === 0) {
+      c.split(/[,;]/).map(function(cookie) {
+        var parts = cookie.split(/=/, 2),
+            name = decodeURIComponent(parts[0].trimLeft()),
+            value = parts.length > 1 ? decodeURIComponent(parts[1].trimRight()) : null;
+        cookies[name] = value;
+      });
+    } else {
+      c.match(/(?:^|\s+)([!#$%&'*+\-.0-9A-Z^`a-z|~]+)=([!#$%&'*+\-.0-9A-Z^`a-z|~]*|"(?:[\x20-\x7E\x80\xFF]|\\[\x00-\x7F])*")(?=\s*[,;]|$)/g).map(function($0, $1) {
+        var name = $0,
+            value = $1.charAt(0) === '"'
+                        ? $1.substr(1, -1).replace(/\\(.)/g, "$1")
+                        : $1;
+        cookies[name] = value;
+      });
+    }
+    
+    return cookies;
+  }
+  function getCookie(name) {
+    return getCookies()[name];
+  }
 
   </script>
 </body>
@@ -610,7 +680,7 @@ HTML
 
 
 
-class NovaService
+class NovaClient
 {
     private static $auto_reconnect = false;
 
@@ -621,6 +691,7 @@ class NovaService
     private static $t_reply  = 2;
     private static $t_ex  = 3;
 
+    private $timeout;
     /** @var \swoole_client */
     public $client;
     private $host;
@@ -631,9 +702,18 @@ class NovaService
     {
         $this->host = $host;
         $this->port = $port;
+        $this->timeout = $timeout;
 
         $this->client = new \swoole_client(SWOOLE_SOCK_TCP, SWOOLE_SOCK_ASYNC);
         $this->init();
+    }
+
+    private $onError;
+    private $onClose;
+
+    public function on()
+    {
+
     }
 
     public function invoke($service, $method, array $args, array $attach, callable $onReceive)
@@ -660,21 +740,22 @@ class NovaService
 
         $this->client->on("error", function(\swoole_client $client) {
             $this->cancel("connect_timeout");
-            echo "\033[1;31m", "连接出错: ", socket_strerror($client->errCode), "\033[0m\n";
+            sys_echo("\033[1;31m连接出错: " . socket_strerror($client->errCode) . "\033[0m");
             if (self::$auto_reconnect) {
                 $this->connect();
-            } else {
-                swoole_event_exit();
-                exit(1);
+            } else if ($onError = $this->onError) {
+                $onError("连接出错: ", socket_strerror($client->errCode));
             }
         });
 
         $this->client->on("close", function(\swoole_client $client) {
-            // echo "close\n";
             $this->cancel("connect_timeout");
+            if ($onClose = $this->onClose) {
+                $onClose($client);
+            }
+
         });
         $this->client->on("receive", function(\swoole_client $client, $data) {
-            // fwrite(STDERR, "recv: " . implode(" ", str_split(bin2hex($data), 2)) . "\n");
             $recv = end($this->recvArgs);
             $recv($client, ...self::unpackResponse($data));
         });
@@ -687,11 +768,12 @@ class NovaService
             $this->invoke(...$this->recvArgs);
         });
 
-        $this->deadline(2000, "connect_timeout");
+        $this->deadline($this->timeout, "connect_timeout");
 
         DnsClient::lookup($this->host, function($host, $ip) {
-            if ($ip === null) {
-                echo "\033[1;31m", "DNS查询超时 host:{$host}", "\033[0m\n";exit;
+            if ($ip === null && $onError = $this->onError) {
+                sys_echo("\033[1;31mDNS查询超时 host:{$host}\033[0m");
+                $onError("DNS查询超时 host:{$host}");
             } else {
                 $this->client->connect($ip, $this->port);
             }
@@ -894,6 +976,8 @@ class NovaService
         return $this->client->{$prop} = swoole_timer_after($duration, function() {
             echo "\033[1;31m", "连接超时", "\033[0m\n";
             $this->client->close();
+
+            // TODO
         });
     }
 
