@@ -62,19 +62,17 @@ class TraceServer
         
         $this->traceServer->start();
 
-        // $this->startHeartbeat();
+        $this->startHeartbeat();
     }
 
-    /*
     public function startHeartbeat()
     {
         swoole_timer_tick(5000, function() {
             foreach ($this->fds as $fd => $_) {
-                $this->traceServer->push($fd, "");
+                $this->traceServer->push($fd, "", 0x9); // PING
             }
         });
     }
-    */
 
     public function onStart(\swoole_websocket_server $server)
     {
@@ -185,12 +183,19 @@ class TraceServer
         if ($uri === "/report") {
             if (isset($request->get["sid"])) {
                 $sid = $request->get["sid"];
-                if (isset($this->fds[$sid])) {
-                    $body = $request->rawcontent();
-                    $response->status(200);
-                    $response->end();
-                    $this->pushTrace($sid, $body);
-                    return;
+                if ($this->traceServer->exist($sid)) {
+                    if (isset($this->fds[$sid])) {
+
+                        // 响应上报trace信息请求, 并通过web socket连接中转
+                        $body = $request->rawcontent();
+                        $response->status(200);
+                        $response->end();
+
+                        $this->pushTrace($sid, $body);
+                        return;
+                    }
+                } else {
+                    unset($this->fds[$sid]);
                 }
             }
             $response->status(404);
@@ -276,27 +281,34 @@ class TraceServer
         });
     }
 
+    /**
+     * @param $fd
+     * @param $data
+     * WEBSOCKET_OPCODE_CONTINUATION_FRAME = 0x0,
+     * WEBSOCKET_OPCODE_TEXT_FRAME = 0x1,
+     * WEBSOCKET_OPCODE_BINARY_FRAME = 0x2,
+     * WEBSOCKET_OPCODE_CONNECTION_CLOSE = 0x8,
+     * WEBSOCKET_OPCODE_PING = 0x9,
+     * WEBSOCKET_OPCODE_PONG = 0xa,
+     */
     private function pushTrace($fd, $data)
     {
-        $this->traceServer->push($fd, $data);
+        $h = pack("N", strlen($data));
+        $payload = $h . $data;
+        $this->traceServer->push($fd, $payload, 0x2, true);
         return;
 
-        $a = substr($data, 0, 10);
-        $b = substr($data, 10);
 
-        foreach ($this->fds as $fd => $_) {
-            $this->traceServer->push($fd, $a);
-            swoole_timer_after(1, function() use($fd, $b) {
-                $this->traceServer->push($fd, $b);
-            });
+        // 分包测试
+        /*
+        while (strlen($payload) > 0) {
+            usleep(10000);
+            $a = substr($payload, 0, 10);
+            $payload = substr($payload, 10);
+            sys_echo("push $a");
+            $this->traceServer->push($fd, $a, 0x2, true);
         }
-
-
-
-
-//        foreach ($this->fds as $fd => $_) {
-//            $this->traceServer->push($fd, $data);
-//        }
+        */
     }
 
     private function trace(\swoole_http_response $response)
@@ -447,6 +459,178 @@ button {
   </section>
 
   <script>
+(function (exports) {
+  'use strict'
+
+  // bytes : Uint8Array
+
+  function str2bytes(string, encode = 'utf-8') {
+    return new TextEncoder(encode).encode(string)
+  }
+
+  function bytes2str(uint8array, encode = 'utf-8') {
+    return new TextDecoder(encode).decode(uint8array)
+  }
+
+  /**
+   * Buffer 
+   * @author xiaofeng
+   * 
+   * +-------------------+------------------+------------------+
+   * | prependable bytes |  readable bytes  |  writable bytes  |
+   * |                   |     (CONTENT)    |                  |
+   * +-------------------+------------------+------------------+
+   * |                   |                  |                  |
+   * V                   V                  V                  V
+   * 0      <=      readerIndex   <=   writerIndex    <=     size
+   */
+  function Buffer(size) {
+    this.bytes = new Uint8Array(size)
+    this.writerIndex = 0
+    this.readerIndex = 0
+  }
+
+  Buffer.fromBytes = function(bytes) {
+    let buf = new Buffer(bytes.length * 2)
+    buf.write(bytes)
+    return buf
+  }
+
+  Buffer.fromString = function(str) {
+    return Buffer.fromBytes(str2bytes(str))
+  }
+
+  Buffer.fromArrayBuffer = function(arraybuffer) {
+    return Buffer.fromBytes(new Uint8Array(arraybuffer))
+  }
+
+  Buffer.prototype.readableBytes = function() {
+    return this.writerIndex - this.readerIndex
+  }
+
+  Buffer.prototype.writableBytes = function() {
+    return this.bytes.length - this.writerIndex
+  }
+
+  Buffer.prototype.prependableBytes = function() {
+    return this.readerIndex
+  }
+
+  Buffer.prototype.capacity = function() {
+    return this.bytes.length
+  }
+
+  Buffer.prototype.get = function(len) {
+    len = Math.min(len, this.readableBytes())
+    return this.rawRead(this.readerIndex, len)
+  }
+
+  Buffer.prototype.read = function(len) {
+    len = Math.min(len, this.readableBytes())
+    let read = this.rawRead(this.readerIndex, len)
+    this.readerIndex += len
+    if (this.readerIndex === this.writerIndex) {
+      this.reset()
+    }
+    return read
+  }
+
+  Buffer.prototype.skip = function(len) {
+    len = Math.min(len, this.readableBytes())
+    this.readerIndex += len
+    if (this.readerIndex === this.writerIndex) {
+      this.reset()
+    }
+    return len
+  }
+
+  Buffer.prototype.readFull = function() {
+    return this.read(this.readableBytes())
+  }
+
+  Buffer.prototype.writeArrayBuffer = function(arraybuffer) {
+    return this.write(new Uint8Array(arraybuffer))
+  }
+  
+  Buffer.prototype.writeString = function(str) {
+    return this.write(str2bytes(str))
+  }
+
+  Buffer.prototype.write = function(bytes) {
+    if (bytes.length === 0) {
+      return
+    }
+
+    let len = bytes.length
+
+    if (len <= this.writableBytes()) {
+      this.rawWrite(this.writerIndex, bytes)
+      this.writerIndex += len
+      return
+    }
+
+    // expand
+    if (len > (this.prependableBytes() + this.writableBytes())) {
+      this.expand((this.readableBytes() + len) * 2)
+    }
+    
+    // copy-move
+    if (this.readerIndex !== 0) {
+      this.bytes.copyWithin(0, this.readerIndex, this.writerIndex)
+      this.writerIndex -= this.readerIndex
+      this.readerIndex = 0
+    }
+
+    this.rawWrite(this.writerIndex, bytes)
+    this.writerIndex += len
+  }
+
+  Buffer.prototype.reset = function() {
+    this.readerIndex = 0
+    this.writerIndex = 0
+  }
+
+  Buffer.prototype.toSring = function() {
+    return bytes2str(this.bytes.slice(this.readerIndex, this.writerIndex))
+  }
+
+  // private
+  Buffer.prototype.rawRead = function (offset, len) {
+    if (offset < 0 || offset + len > this.bytes.length) {
+      throw new RangeError('Trying to read beyond buffer length') 
+    }
+    return this.bytes.slice(offset, offset + len)
+  }
+
+  // private
+  Buffer.prototype.rawWrite = function (offset, bytes) {
+    let len = bytes.length
+    if (offset < 0 || offset + len > this.bytes.length) {
+      throw new RangeError('Trying to write beyond buffer length') 
+    }
+    for (let i = 0; i < len; i++) {
+      this.bytes[offset + i] = bytes[i]
+    }
+  }
+
+  // private
+  Buffer.prototype.expand = function (size) {
+    if (size <= this.bytes.capacity) {
+      return
+    }
+    let buf = new Uint8Array(size)
+    buf.set(this.bytes)
+    this.bytes = buf
+  }
+
+  exports.Buffer = Buffer
+  exports.str2bytes = str2bytes
+  exports.bytes2str = bytes2str
+
+}(window))
+  </script>
+
+  <script>
   var log = (function(){
     var traceLog = document.querySelector("#traceLog");
     var requestLog = document.querySelector("#requestLog");
@@ -476,6 +660,7 @@ button {
     this.isConnected = false;
     this.addr = addr;
     this.port = port;
+    this.buffer = new Buffer(1024 * 1024);
   }
 
   Trace.prototype.start = function(onStart, onClose) {
@@ -488,7 +673,10 @@ button {
     if (!ws) {
       return;
     }
-        
+    
+    // 使用ArrayBuffer接收的是二进制数据
+    ws.binaryType = 'arraybuffer';
+    
     ws.addEventListener('open', function (evt) {
       this.isConnected = true;
       console.info("Connected to WebSocket server.");
@@ -509,12 +697,34 @@ button {
 
     ws.addEventListener('message', function (evt) {
       // console.info('Retrieved data from server: ' + evt.data.length);
+      // 纯文本, 发现 websocket同样会分包
+      /*
       if (evt.data.length) {
         var traceData = JSON.parse(evt.data)
         console.log(traceData);
         log.trace(JSON.stringify(traceData, null, 2));
       }
-    });
+      */
+      
+      this.buffer.writeArrayBuffer(evt.data)
+      
+      if (this.buffer.readableBytes() < 4) {
+        return
+      }
+      
+      var arraybuffer = this.buffer.get(4).buffer
+      var len = new DataView(arraybuffer).getUint32(); // PHP pack('N')
+      if (this.buffer.readableBytes() < len + 4) {
+        return
+      }
+      
+      this.buffer.skip(4)
+      var str = bytes2str(this.buffer.read(len))
+      // console.log(str);
+      var traceData = JSON.parse(str)
+      console.log(traceData);
+      log.trace(JSON.stringify(traceData, null, 2));
+    }.bind(this));
 
     this.ws = ws;
   }
