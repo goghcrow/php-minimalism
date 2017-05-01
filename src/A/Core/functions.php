@@ -283,11 +283,11 @@ function thunkify(callable $fun, ...$args)
  */
 function _once(callable $fun)
 {
-    $has = false;
-    return function(...$args) use($fun, &$has) {
-        if ($has === false) {
+    $called = false;
+    return function(...$args) use($fun, &$called) {
+        if ($called === false) {
             $fun(...$args);
-            $has = true;
+            $called = true;
         }
     };
 }

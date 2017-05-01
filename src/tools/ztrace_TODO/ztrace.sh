@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # @author xiaofeng
-# @usage sudo zobjdump php_pid
+# @usage sudo ztrace php_pid
 
 
 ztrace_php7()

@@ -1,0 +1,265 @@
+
+:root {
+  --dwst-dark-pink: #936;
+}
+
+body
+{
+  font-family: monospace;
+  font-size: 10pt;
+  height: 100%;
+  background-color: #000;
+}
+.button
+{
+  width: auto;
+  padding: 0 1em 0 0;
+}
+input[type="text"]
+{
+  background-color: #444;
+  color: #fff;
+  font-family: monospace;
+  border: thin solid #f00;
+}
+
+.bar2 input[type="text"]
+{
+  background-color: #111;
+  border-width: 0;
+  width: 100%;
+  outline: none;
+}
+.bar2 input[type="text"]:active {
+  border-width: 0;
+}
+
+.consolebar input[type="button"]
+{
+  padding: 0;
+  width: 5em;
+}
+
+body
+{
+  margin: 0;
+}
+.preserved {
+  white-space: pre-wrap;
+}
+
+.consolebar
+{
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 24pt;
+  background-color: #222;
+}
+
+.consolebar .time
+{
+  font-family: monospace;
+  width: 1em;
+  color: #ddd;
+}
+
+.sec
+{
+  color: #777;
+}
+
+.consolebar .leftpad
+{
+  padding-left: 1em;
+}
+
+.consolebar .rightpad
+{
+  padding-right: 1em;
+}
+
+.bar2
+{
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 24pt;
+}
+
+
+
+
+
+.dwst-mlog__help-link {
+  color: #888;
+  font-style: italic;
+  text-decoration: none;
+}
+.dwst-mlog__help-link:hover {
+  color: #ff0;
+  text-decoration: none;
+}
+.dwst-mlog__command-link {
+  color: #6ab;
+  text-decoration: none;
+}
+.dwst-mlog__command-link:hover {
+  color: #3ef;
+  text-decoration: none;
+}
+.dwst-mlog__hexline {
+  color: #888;
+}
+.dwst-mlog__strong {
+  font-weight: bold;
+}
+.dwst-mlog__syntax {
+  font-style: italic;
+}
+.splash-button {
+  position: relative;
+  top: -3px;
+  height: 26px;
+  width: 48px;
+  background-image: url('minilogo.png');
+}
+.splash-button:hover {
+  background-image: url('minilogo-hover.png');
+  cursor: pointer;
+}
+.send-button {
+  position: relative;
+  top: 0;
+  height: 26px;
+  width: 26px;
+  background-image: url('return.png');
+}
+.send-button:hover {
+  background-image: url('return-hover.png');
+  cursor: pointer;
+}
+.input-holder {
+  width: 100%;
+  padding-right: 0.2em;
+}
+
+::-webkit-scrollbar {
+  height: 14px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #150010;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #302;
+}
+::-webkit-scrollbar-thumb:window-inactive {
+  background: #302;
+}
+::-webkit-scrollbar-corner {
+  background: #201;
+}
+
+.background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 24pt;
+  background-color: #030303;
+  width: 100ch;
+}
+
+#screen1
+{
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 24pt;
+  overflow: auto;
+  overflow-y: scroll;
+  vertical-align: top;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.terminal
+{
+  min-height: 100%;
+/*
+  background-color: #030303;
+*/
+  color: #ccc;
+  font-family: monospace;
+}
+
+/* clean ********************************************************************/
+
+
+.dwst-logline {
+  padding: 0 1ch 0 0;
+}
+
+.dwst-logline__item {
+  display: table-cell;
+  padding: 0 0 0 1ch;
+  vertical-align: top;
+}
+
+.dwst-direction {
+ box-sizing: content-box;
+ width: 9ch; /* len('received:') */
+ text-align: right;
+}
+
+.dwst-direction--sent
+{
+  color: #77c;
+}
+
+.dwst-direction--received
+{
+  color: #c77;
+}
+
+.dwst-direction--command
+{
+  color: #3ef;
+}
+
+.dwst-direction--error
+{
+  color: #f00;
+}
+
+.dwst-direction--warning
+{
+  color: #dd0;
+}
+
+.dwst-direction--system
+{
+  color: #7f7;
+}
+
+.dwst-gfx {
+  overflow: hidden;
+  max-width: 100ch;
+}
+.dwst-gfx__line {
+  margin: 0 auto;
+}
+.dwst-gfx__element {
+  white-space: pre;
+}
+.dwst-gfx__element--color-1 {
+  color: var(--dwst-dark-pink);
+}
+.dwst-gfx__element--color-2 {
+  color: #614;
+}
