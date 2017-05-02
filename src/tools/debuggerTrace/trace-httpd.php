@@ -3,6 +3,14 @@
 namespace Minimalism\DebuggerTrace;
 
 
+/**
+ * TODO 1. 命令行版本
+ * TODO 2. 回车绑定
+ * TODO 3. 历史记录
+ *
+ * nova://provider-address/com.xxx.XxxService?args={}&attach={}"
+ */
+
 $port = isset($argv[1]) ? intval($argv[1]) : 7777;
 
 $serv = new TraceServer($port);
@@ -10,6 +18,7 @@ $serv->start();
 
 class TraceServer
 {
+    const RFC6455GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     const KEY = "X-Trace-Callback";
 
     public $localIp;
@@ -39,6 +48,9 @@ class TraceServer
             'open_cpu_affinity' => 1,
             'daemonize' => 0,
             'reactor_num' => 1,
+
+            // 因为要把http返回trace信息的sid与websocket连接关联起来,
+            // 多个worker需要共享数据, 暂时只使用一个Worker
             'worker_num' => 1,
         ]);
     }
@@ -65,9 +77,20 @@ class TraceServer
         $this->traceServer->start();
     }
 
-    public function onStart(\swoole_websocket_server $server) { sys_echo("server starting ......"); }
-    public function onShutdown(\swoole_websocket_server $server) { sys_echo("server shutdown ....."); }
-    public function onConnect() { }
+    public function onStart(\swoole_websocket_server $server)
+    {
+        sys_echo("server starting ......");
+    }
+
+    public function onShutdown(\swoole_websocket_server $server)
+    {
+        sys_echo("server shutdown .....");
+    }
+
+    public function onConnect()
+    {
+
+    }
 
     public function onWorkerStart(\swoole_websocket_server $server, $workerId)
     {
@@ -75,7 +98,12 @@ class TraceServer
         sys_echo("worker #$workerId starting .....");
         $this->startHeartbeat();
     }
-    public function onWorkerStop(\swoole_websocket_server $server, $workerId) { }
+
+    public function onWorkerStop(\swoole_websocket_server $server, $workerId)
+    {
+
+    }
+
     public function onWorkerError(\swoole_websocket_server $server, $workerId, $workerPid, $exitCode, $sigNo)
     {
         sys_echo("worker error happening [workerId=$workerId, workerPid=$workerPid, exitCode=$exitCode, signalNo=$sigNo]...");
@@ -120,7 +148,6 @@ class TraceServer
 
     public function onClose(\swoole_websocket_server $server, $fd)
     {
-        // sys_echo("closed. fd#$fd");
         unset($this->fds[$fd]);
     }
 
@@ -131,6 +158,7 @@ class TraceServer
 
     public function onMessage(\swoole_websocket_server $server, \swoole_websocket_frame $frame)
     {
+        // 这里需要处理粘包
         /*
         if ($frame->data == "close") {
             $server->close($frame->fd);
@@ -188,6 +216,7 @@ class TraceServer
                     unset($this->fds[$fd]);
                 }
             }
+
             $response->status(404);
             $response->end();
             return;
@@ -213,8 +242,7 @@ class TraceServer
             return;
         }
 
-        $response->status(200);
-        $this->trace($response);
+        $this->index($response);
     }
 
     // nova://provider-address/com.xxx.XxxService?args={}&attach={}"
@@ -292,23 +320,30 @@ class TraceServer
         return;
     }
 
+
+    // http://127.0.0.1:7777/index?__method=POST&__data={"a":"b"}&&__cookie={"k":"v"}
     private function httpRequest($sid, \swoole_http_response $response, $uri)
     {
         $host = parse_url($uri, PHP_URL_HOST);
         $port = parse_url($uri, PHP_URL_PORT);
         $path = parse_url($uri, PHP_URL_PATH);
-        $query = parse_url($uri, PHP_URL_QUERY);
-
-        $headers = [
-            self::KEY => $this->getCallbackUrl($sid),
-        ];
-        $cookies = [];
-        $data = "";
-        $method = "GET";
-        $timeout = 3000;
+        $queryRaw = parse_url($uri, PHP_URL_QUERY);
+        parse_str($queryRaw, $GET);
 
 
-        DNS::lookup($host, function($ip) use($path, $port, $method, $query, $headers, $cookies, $data, $timeout, $response) {
+        // TODO 支持自定义 method header body timeout
+        $headers =  json_decode(array_get($GET, "__header", "{}"), true) ?: [];
+        $headers[self::KEY] = $this->getCallbackUrl($sid);
+        $cookies =  json_decode(array_get($GET, "__cookie", "{}"), true) ?: [];
+        $body = array_get($GET, "__body", "");
+        $method = strtoupper(array_get($GET, "__method", "GET"));
+        $timeout = array_get($GET, "__timeout", 3000);
+        foreach (["__header", "__cookie", "__body", "__method", "__timeout"] as $k) {
+            unset($GET[$k]);
+        }
+        $query = http_build_query($GET);
+
+        DNS::lookup($host, function($ip) use($path, $port, $method, $query, $headers, $cookies, $body, $timeout, $response) {
             if ($ip === null) {
                 $response->status(200);
                 $response->end('{"error":"dns lookup timeout"}');
@@ -328,7 +363,7 @@ class TraceServer
                 }
             });
             $cli->setMethod($method);
-            $cli->setData($data);
+            $cli->setData($body);
             $cli->setHeaders($headers);
             $cli->setCookies($cookies);
             $cli->execute("{$path}?{$query}", function(\swoole_http_client $cli) use($timerId, $response) {
@@ -375,8 +410,6 @@ class TraceServer
         });
     }
 
-    const RFC6455GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
     /**
      * Sec-WebSocket-Key是随机的字符串，服务器端会用这些数据来构造出一个SHA-1的信息摘要。
      * 把“Sec-WebSocket-Key”加上一个特殊字符串“258EAFA5-E914-47DA-95CA-C5AB0DC85B11”，
@@ -416,837 +449,1038 @@ class TraceServer
         return pack("N", strlen($pushData)) . $pushData;
     }
 
-    private function trace(\swoole_http_response $response)
+    private function index(\swoole_http_response $response)
     {
+        $response->status(200);
         $response->end(<<<HTML
 <!DOCTYPE html>
 <html>
+
 <head>
-  <meta charset="utf-8">
-  <title>Zan Debugger Trace</title>
-  <style>
-/*html { overflow: hidden; }*/
-body {
-  font-family: monospace, Arial, sans-serif;
-  background: #333;
-  
-  color: white;
-  font-size: 10pt;
-  /*margin: 0;*/
-  height: 100%;
-  
-  min-width: 500px;
-  min-height: 500px;
-}
-
-.background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 24pt;
-  background-color: #030303;
-}
-
-#screen1 {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 24pt;
-  
-  width: 100%;
-  height: 100%;
-  /*overflow: auto;*/
-  /*overflow-y: scroll;*/
-  /*vertical-align: top;*/
-  /*-webkit-user-select: text;*/
-  cursor: text;
-}
-
-/*
-.terminal {
-  min-height: 100%;
-  color: #e3e3e3;
-  font-family: monospace;
-  display: flex;
-  flex-direction: column;
-}
-
-.terminal .ter-header {
-  flex: 0.1;
-}
-.terminal .ter-request {
-  flex: 0.45;
-  overflow: scroll;
-}
-.terminal .ter-trace {
-  flex: 0.45;
-  overflow: scroll;
-}
-*/
-
-/*
-pre {
-  white-space: pre-wrap;
-}
-*/
-
-#requestLog {
-  background: #444;
-  color: #e3e3e3;
-  border: 1px solid #666;
-  padding: 3px;
-  height: 200px;
-  overflow: auto;
-  position: absolute;
-  top: 135px;
-  right: 5px;
-  left: 5px;
-}
-
-#traceLog {
-  background: #444;
-  color: #e3e3e3;
-  border: 1px solid #666;
-  padding: 3px;
-  overflow: auto;
-  position: absolute;
-  top: 350px;
-  right: 5px;
-  bottom: 5px;
-  left: 5px;
-}
-
-
-
-
-
-/********************************************************************/
-
-::-webkit-scrollbar {
-  height: 14px;
-  width: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: #150010;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #302;
-}
-::-webkit-scrollbar-thumb:window-inactive {
-  background: #302;
-}
-::-webkit-scrollbar-corner {
-  background: #201;
-}
-
-.splash-button {
-  position: relative;
-  top: -3px;
-  height: 26px;
-  width: 48px;
-  /*background-image: url('minilogo.png');*/
-}
-.splash-button:hover {
-  /*background-image: url('minilogo-hover.png');*/
-  cursor: pointer;
-}
-.send-button {
-  position: relative;
-  top: 0;
-  height: 26px;
-  width: 26px;
-  /*background-image: url('return.png');*/
-}
-.send-button:hover {
-  /*background-image: url('return-hover.png');*/
-  cursor: pointer;
-}
-.input-holder {
-  width: 100%;
-  padding-right: 0.2em;
-}
-
-/********************************************************************/
-
-input[type="text"] {
-  background-color: #444;
-  color: #fff;
-  font-family: monospace;
-  border: thin solid #f00;
-}
-
-.bar2 input[type="text"] {
-  background-color: #111;
-  border-width: 0;
-  width: 100%;
-  outline: none;
-}
-.bar2 input[type="text"]:active {
-  border-width: 0;
-}
-
-.consolebar input[type="button"] {
-  padding: 0;
-  width: 5em;
-}
-
-.preserved {
-  white-space: pre-wrap;
-}
-
-.consolebar {
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-  height: 24pt;
-  background-color: #222;
-}
-
-.consolebar .time {
-  font-family: monospace;
-  width: 1em;
-  color: #ddd;
-}
-
-.sec {
-  color: #777;
-}
-
-.consolebar .leftpad {
-  padding-left: 1em;
-}
-
-.consolebar .rightpad {
-  padding-right: 1em;
-}
-
-.bar2 {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 24pt;
-}
-
-/********************************************************************/
-.hide-when-not-connected {
-  display: none;
-}
-
-.connected .hide-when-not-connected {
-  display: block;
-}
-
-.connected .hide-when-not-connected p {
-  color: #33ff44
-}
-
-.connected .hide-when-connected {
-  display: none;
-}
-
-input[type="number"] {
-  width: 5em;
-}
-
-button {
-  cursor: pointer;
-  margin-left: 20px;
-}
-
-#serverStop {
-  background-color: #D14836;
-  background-image: -webkit-linear-gradient(top,#DD4B39,#D14836);
-  border: 1px solid transparent;
-  color: white;
-  border-radius: 2px;
-}
-
-#serverStop:hover {
-  background-color: #C53727;
-  background-image: -webkit-linear-gradient(top, #DD4B39, #C53727);
-  border: 1px solid #B0281A;
-}
-
-#logClear {
-  background-color: #a0d0d1;
-  background-image: -webkit-linear-gradient(top,#72d1ca,#a0d0d1);
-  border: 1px solid transparent;
-  color: white;
-  border-radius: 2px;
-}
-#logClear:hover {
-  background-color: #b8d0d1;
-  background-image: -webkit-linear-gradient(top, #abd1d0, #b8d0d1);
-  border: 1px solid #b8d0d1;
-}
-
-#requestGo {
-  background-color: #a0d0d1;
-  background-image: -webkit-linear-gradient(top,#72d1ca,#a0d0d1);
-  border: 1px solid transparent;
-  color: white;
-  border-radius: 2px;
-}
-
-#requestGo:hover {
-  background-color: #b8d0d1;
-  background-image: -webkit-linear-gradient(top, #abd1d0, #b8d0d1);
-  border: 1px solid #b8d0d1;
-}
-
-#url {
-  background: #444;
-  color: #ececec;
-  border: 1px solid #666;
-  overflow: auto;
-  width: 296px;
-  height: 20px;
-}
-  </style>
-</head>
-<body>
-  <!--<div class="background"></div>-->
-
-  <!--<div id="screen1" class="screen">-->
-    <!--<div id="ter1" class="terminal">-->
-      <div class="ter-header" id="server">
-      <h1>Zan Debugger Trace</h1>
-      
-      <div class="hide-when-connected">
-        Connect To 
-        <select id="addresses"><option></option></select>:
-        <input type="number" id="serverPort">
-        <button id="serverStart">Start!</button>
-      </div>
-      
-      <div class="hide-when-not-connected">
-        <p>Connected To <span class="connect-to"></span>
-          <button id="serverStop">Stop!</button>
-          <button id="logClear">Clear</button>
-        </p>
-        
-        <p>Request <span class="request"></span>
-          <!--example-->
-          <!--nova://10.9.188.33:8050/com.youzan.material.general.service.MediaService.getMediaList?args={"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}&attach={"xxx":"yyy"}-->
-          <!--http://127.0.0.1:8000/index/index/test-->
-          <input type="text" id="url" value="http://127.0.0.1:8000/index/index/test">
-          <button id="requestGo">Go!</button>
-        </p>
-      </div>
-      </div>
-      
-      <div class="ter-request"><pre><code id="requestLog"></code></pre></div>
-      
-      <div class="ter-trace"><pre><code id="traceLog"></code></pre></div>
-    <!--</div>-->
-  <!--</div>-->
-
-  <!--<div class="bar2">-->
-    <!--<table class="consolebar">-->
-      <!--<tr>-->
-        <!--<td id="clock1" style="color: transparent;" class="time rightpad leftpad">00:00:00</td>-->
-        <!--<td class="input-holder"><input id="msg1" type="text" value=""></td>-->
-        <!--<td class="button rightpad">-->
-          <!--<div class="send-button" id="sendbut1" type="button" value="send">Send</div>-->
-        <!--</td>-->
-        <!--<td class="button rightpad">-->
-          <!--<div class="splash-button" id="menubut1" type="button" value="menu">Menu</div>-->
-        <!--</td>-->
-      <!--</tr>-->
-    <!--</table>-->
-  <!--</div>-->
-  
-    
+  <meta charset="UTF-8">
+  <title>Debugger Trace</title>
+  <link rel=icon href=https://b.yzcdn.cn/v2/image/yz_fc.ico />
   <link href="http://apps.bdimg.com/libs/highlight.js/9.1.0/styles/monokai-sublime.min.css" rel="stylesheet">
-  <script id="worker_highlight" type="javascript/worker">
-    self.onmessage = function(event) {
-      importScripts('http://apps.bdimg.com/libs/highlight.js/9.1.0/highlight.min.js')
-      importScripts('http://apps.bdimg.com/libs/highlight.js/9.1.0/languages/json.min.js')
-      let result = self.hljs.highlightAuto(event.data)
-      self.postMessage(result.value)
-    }    
-  </script>
+  <link href="https://fonts.googleapis.com/css?family=Droid+Sans+Mono|Roboto|Open+Sans|Source+Code+Pro" rel="stylesheet">
+  <!--font-family: 'Droid Sans Mono', monospace;
+  font-family: 'Source Code Pro', monospace;
+  font-family: 'Roboto', sans-serif;
+  font-family: 'Open Sans', sans-serif;-->
+
+
+</head>
+<style>
+  /*::-webkit-scrollbar {
+    height: 12px;
+    width: 12px;
+    overflow: visible;
+  }
   
+   ::-webkit-scrollbar-track {
+    background-color: #F7F6F6;
+    background-clip: padding-box;
+    border: solid transparent;
+    border-width: 3px;
+    border-radius: 100px;
+  }
+  
+   ::-webkit-scrollbar-button {
+    height: 0;
+    width: 0;
+  }
+  
+   ::-webkit-scrollbar-thumb {
+    border-radius: 100px;
+    background-clip: padding-box;
+    border: solid transparent;
+    border-width: 3px;
+  }
+  
+   ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  
+   ::-webkit-scrollbar-thumb {
+    background-color: #E2E2E2;
+  }*/
+  /***********************************************************/
+  
+   ::-webkit-scrollbar {
+    height: 14px;
+    width: 14px;
+  }
+  
+   ::-webkit-scrollbar-track {
+    background: #150010;
+  }
+  
+   ::-webkit-scrollbar-thumb {
+    background: #302;
+  }
+  
+   ::-webkit-scrollbar-thumb:window-inactive {
+    background: #302;
+  }
+  
+   ::-webkit-scrollbar-corner {
+    background: #201;
+  }
+  
+  .wide-input {
+    background: #444;
+    color: #ececec;
+    border-radius: 3px;
+    border: 0px;
+    /*border: 1px solid #666;*/
+    overflow: auto;
+    padding-left: 10px;
+    padding-right: 10px;
+    width: calc(100% - 30px);
+    height: 25px;
+  }
+  
+  .label {
+    width: 70px;
+    margin: 0 10px 0 10px;
+  }
+  
+  .btn {
+    box-sizing: border-box;
+    border-radius: 3px;
+    height: 30px;
+    padding: 0 10px 0 10px;
+    display: inline-flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: 15px;
+    font-weight: normal;
+    font-family: 'Droid Sans Mono', monospace, Helvetica, Arial, sans-serif;
+    color: #fff;
+    cursor: default;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+  }
+  
+  .btn-secondary {
+    background-color: #F0F0F0;
+    color: #808080;
+    min-width: 100px;
+  }
+  
+  .btn-secondary:hover,
+  .btn-secondary.is-hovered {
+    background-color: #DCDCDC;
+    color: #808080;
+  }
+  
+  input,
+  button {
+    font-size: 15px;
+  }
+  
+  code {
+    font-family: 'Droid Sans Mono', monospace;
+    font-size: 12px;
+  }
+  /***********************************************************/
+  
+  body {
+    background: #333;
+    color: white;
+    font-size: 10pt;
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: absolute;
+    font-family: 'Droid Sans Mono', monospace, Helvetica, Arial, sans-serif;
+  }
+  
+  .app-root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: absolute;
+    /**/
+    overflow-x: auto;
+  }
+  
+  .app-requester {
+    display: flex;
+    flex-direction: column;
+    min-width: 900px;
+  }
+  
+  body,
+  .app-root,
+  .app-requester {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+  }
+  
+  .app-requester .requester-header {
+    flex: 0 0 50px;
+  }
+  
+  .requester-header {
+    background-color: #464646;
+    z-index: 90;
+    display: flex;
+    flex-direction: row;
+    box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.37);
+  }
+  
+  .app-requester .requester-contents {
+    flex: 1;
+  }
+  
+  .requester-contents {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+  }
+  
+  .requester-left-sidebar-wrapper {
+    flex: 0 0 auto;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    width: 200px;
+  }
+  
+  .requester-left-sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -5px;
+    width: 10px;
+    z-index: 100;
+    cursor: ew-resize;
+  }
+  
+  .requester-left-sidebar {
+    /*background-color: #FAFAFA;*/
+    z-index: 20;
+    border-right: 1px solid #DBDBDB;
+    box-sizing: border-box;
+    box-shadow: 1px 0 4px 0 rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: hidden;
+  }
+  /***********************************************************/
+  
+  .requester-content-builder {
+    display: flex;
+    flex-direction: row;
+  }
+  
+  .requester-content {
+    flex: 1;
+    overflow: hidden;
+  }
+  
+  .requester-content-builder .requester-builder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .requester-builder {
+    display: flex;
+    flex-direction: column;
+    overflow-x: auto;
+  }
+  
+  .requester-builder-header {
+    flex: 0 0 50px;
+    display: flex;
+    flex-direction: row;
+    /*border-bottom: 1px solid #DBDBDB;*/
+    border-bottom: 14px solid #302;
+  }
+  
+  .requester-builder-header.connected {
+    flex: 0 0 135px;
+  }
+  
+  .requester-builder-contents {
+    background: inherit;
+    flex: 1;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .requester-tab-contents {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+  }
+  
+  .layout-1-column.requester-tab-content {
+    overflow-y: scroll;
+  }
+  
+  .requester-tab-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .requester-tab-content.is-hidden {
+    display: none;
+  }
+  
+  .requester-contents .is-hidden {
+    display: none;
+  }
+  
+  .is-hidden {
+    display: none;
+  }
+  /***********************************************************/
+  
+  .hide-when-not-connected {
+    width: 100%;
+    display: none;
+  }
+  
+  .connected .hide-when-connected {
+    display: none;
+  }
+  
+  .connected .hide-when-not-connected {
+    display: block;
+  }
+  /*.connected .hide-when-not-connected p { color: #33ff44 }*/
+  
+  #connectServer {
+    background-color: #a0d0d1;
+    background-image: -webkit-linear-gradient(top, #72d1ca, #a0d0d1);
+    border: 1px solid transparent;
+    color: white;
+    border-radius: 2px;
+  }
+  
+  #connectServer:hover {
+    background-color: #b8d0d1;
+    background-image: -webkit-linear-gradient(top, #abd1d0, #b8d0d1);
+    border: 1px solid #b8d0d1;
+  }
+  
+  #disconnectServer {
+    background-color: #D14836;
+    background-image: -webkit-linear-gradient(top, #DD4B39, #D14836);
+    border: 1px solid transparent;
+    color: white;
+    border-radius: 2px;
+  }
+  
+  #disconnectServer:hover {
+    background-color: #C53727;
+    background-image: -webkit-linear-gradient(top, #DD4B39, #C53727);
+    border: 1px solid #B0281A;
+  }
+  
+  #logClear {
+    background-color: #a0d0d1;
+    background-image: -webkit-linear-gradient(top, #72d1ca, #a0d0d1);
+    border: 1px solid transparent;
+    color: white;
+    border-radius: 2px;
+  }
+  
+  #logClear:hover {
+    background-color: #b8d0d1;
+    background-image: -webkit-linear-gradient(top, #abd1d0, #b8d0d1);
+    border: 1px solid #b8d0d1;
+  }
+  
+  #doSend {
+    background-color: #a0d0d1;
+    background-image: -webkit-linear-gradient(top, #72d1ca, #a0d0d1);
+    border: 1px solid transparent;
+    color: white;
+    border-radius: 2px;
+  }
+  
+  #doSend:hover {
+    background-color: #b8d0d1;
+    background-image: -webkit-linear-gradient(top, #abd1d0, #b8d0d1);
+    border: 1px solid #b8d0d1;
+  }
+  
+  .request-line {
+    display: flex;
+    flex-flow: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .request-line .request-protocol {
+    width: 90px;
+  }
+  
+  #protocol-select {
+    height: 25px;
+    width: 70px;
+    margin-left: 10px;
+    font-size: 16px;
+  }
+  
+  .request-line .request-url {
+    flex: 1;
+  }
+  
+  .request-line .request-act {
+    width: 200px;
+  }
+  
+  .request-line .request-act>button {
+    width: 60px;
+  }
+  
+  .label-input {
+    flex: 1;
+  }
+  
+  .protocol-none .nova-is-hide,
+  .protocol-none .http-is-hide,
+  .protocol-http .nova-is-hide,
+  .protocol-nova .http-is-hide {
+    display: none;
+  }
+</style>
+
+<body>
+  <div class="app-root">
+    <div class="app-requester">
+      <!--<div class="requester-header">-->
+      <!--<h1>Zan Debugger Trace</h1>-->
+      <!--</div>-->
+
+      <div class="requester-contents">
+        <!--<div class="requester-left-sidebar-wrapper">-->
+        <!--<div class="requester-left-sidebar"></div>-->
+        <!--<div class="requester-left-sidebar-resize-handle"></div>-->
+        <!--</div>-->
+
+        <div class="requester-content requester-content-builder">
+          <div class="requester-builder">
+
+            <div class="requester-builder-header">
+              <div class="hide-when-connected">
+                <p><button id="connectServer" class="btn">Connect</button></p>
+              </div>
+
+              <div class="hide-when-not-connected">
+                <p>
+                  <div class="request-line">
+                    <div class="request-protocol">
+                      <select name="protocol" id="protocol-select">
+                        <option value="http">HTTP</option>
+                        <option value="nova">NOVA</option>
+                      </select>
+                    </div>
+                    <div class="request-url"><input class="wide-input" type="text" id="url" value=""></div>
+                    <div class="request-act">
+                      <button id="doSend" class="btn">Send</button>
+                      <button id="logClear" class="btn">Clear</button>
+                      <button id="disconnectServer" class="btn">Stop</button>
+                    </div>
+                  </div>
+                </p>
+
+                <div id="request-args" class="protocol-none">
+                  <p>
+                    <div class="request-line nova-is-hide">
+                      <span class="label">ArgsJson</span>
+                      <div class="label-input"><input class="wide-input" type="text" id="nova-args" value=""></div>
+                    </div>
+                  </p>
+                  <p>
+                    <div class="request-line nova-is-hide">
+                      <span class="label">Attach</span>
+                      <div class="label-input"><input class="wide-input" type="text" id="nova-attach" value=""></div>
+                    </div>
+                  </p>
+
+                  <p>
+                    <div class="request-line http-is-hide">
+                      <span class="label">Method</span>
+                      <select name="" id="http-method">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="COPY">COPY</option>
+                        <option value="HEAD">HEAD</option>
+                        <option value="OPTIONS">OPTIONS</option>
+                        <option value="LINK">LINK</option>
+                        <option value="UNLINK">UNLINK</option>
+                        <option value="PURGE">PURGE</option>
+                        <option value="LOCK">LOCK</option>
+                        <option value="UNLOCK">UNLOCK</option>
+                        <option value="PROPFIND">PROPFIND</option>
+                        <option value="VIEW">VIEW</option>
+                      </select>
+                      <span class="label">Header</span>
+                      <div class="label-input"><input class="wide-input" type="text" id="http-header" value="{}"></div>
+                      <span class="label">Cookie</span>
+                      <div class="label-input"><input class="wide-input" type="text" id="http-cookie" value="foo=bar;"></div>
+                    </div>
+                  </p>
+                  <p>
+                    <div class="request-line http-is-hide">
+                      <span class="label">Body</span>
+                      <div class="label-input"><input class="wide-input" type="text" id="http-body" value=""></div>
+                    </div>
+                  </p>
+                </div>
+
+
+              </div>
+            </div>
+
+            <div class="requester-builder-contents">
+              <div class="requester-tab-contents">
+                <div class="requester-tab-content layout-1-column">
+                  <pre><code id="requestLog"></code></pre>
+                </div>
+                <div class="requester-tab-content layout-1-column">
+                  <pre><code id="traceLog"></code></pre>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
   <script>
-(function (exports) {
-  'use strict'
+    (function (exports) {
+      'use strict'
 
-  // bytes : Uint8Array
+      function str2bytes(string, encode = 'utf-8') {
+        return new TextEncoder(encode).encode(string)
+      }
 
-  function str2bytes(string, encode = 'utf-8') {
-    return new TextEncoder(encode).encode(string)
-  }
+      function bytes2str(uint8array, encode = 'utf-8') {
+        return new TextDecoder(encode).decode(uint8array)
+      }
 
-  function bytes2str(uint8array, encode = 'utf-8') {
-    return new TextDecoder(encode).decode(uint8array)
-  }
+      /**
+       * Buffer 
+       * @author xiaofeng
+       * 
+       * bytes : Uint8Array
+       * 
+       * +-------------------+------------------+------------------+
+       * | prependable bytes |  readable bytes  |  writable bytes  |
+       * |                   |     (CONTENT)    |                  |
+       * +-------------------+------------------+------------------+
+       * |                   |                  |                  |
+       * V                   V                  V                  V
+       * 0      <=      readerIndex   <=   writerIndex    <=     size
+       */
+      function Buffer(size) {
+        this.bytes = new Uint8Array(size)
+        this.writerIndex = 0
+        this.readerIndex = 0
+      }
 
-  /**
-   * Buffer 
-   * @author xiaofeng
-   * 
-   * +-------------------+------------------+------------------+
-   * | prependable bytes |  readable bytes  |  writable bytes  |
-   * |                   |     (CONTENT)    |                  |
-   * +-------------------+------------------+------------------+
-   * |                   |                  |                  |
-   * V                   V                  V                  V
-   * 0      <=      readerIndex   <=   writerIndex    <=     size
-   */
-  function Buffer(size) {
-    this.bytes = new Uint8Array(size)
-    this.writerIndex = 0
-    this.readerIndex = 0
-  }
+      Buffer.fromBytes = function (bytes) {
+        let buf = new Buffer(bytes.length * 2)
+        buf.write(bytes)
+        return buf
+      }
 
-  Buffer.fromBytes = function(bytes) {
-    let buf = new Buffer(bytes.length * 2)
-    buf.write(bytes)
-    return buf
-  }
+      Buffer.fromString = function (str) {
+        return Buffer.fromBytes(str2bytes(str))
+      }
 
-  Buffer.fromString = function(str) {
-    return Buffer.fromBytes(str2bytes(str))
-  }
+      Buffer.fromArrayBuffer = function (arraybuffer) {
+        return Buffer.fromBytes(new Uint8Array(arraybuffer))
+      }
 
-  Buffer.fromArrayBuffer = function(arraybuffer) {
-    return Buffer.fromBytes(new Uint8Array(arraybuffer))
-  }
+      Buffer.prototype.readableBytes = function () {
+        return this.writerIndex - this.readerIndex
+      }
 
-  Buffer.prototype.readableBytes = function() {
-    return this.writerIndex - this.readerIndex
-  }
+      Buffer.prototype.writableBytes = function () {
+        return this.bytes.length - this.writerIndex
+      }
 
-  Buffer.prototype.writableBytes = function() {
-    return this.bytes.length - this.writerIndex
-  }
+      Buffer.prototype.prependableBytes = function () {
+        return this.readerIndex
+      }
 
-  Buffer.prototype.prependableBytes = function() {
-    return this.readerIndex
-  }
+      Buffer.prototype.capacity = function () {
+        return this.bytes.length
+      }
 
-  Buffer.prototype.capacity = function() {
-    return this.bytes.length
-  }
+      Buffer.prototype.get = function (len) {
+        len = Math.min(len, this.readableBytes())
+        return this.rawRead(this.readerIndex, len)
+      }
 
-  Buffer.prototype.get = function(len) {
-    len = Math.min(len, this.readableBytes())
-    return this.rawRead(this.readerIndex, len)
-  }
+      Buffer.prototype.read = function (len) {
+        len = Math.min(len, this.readableBytes())
+        let read = this.rawRead(this.readerIndex, len)
+        this.readerIndex += len
+        if (this.readerIndex === this.writerIndex) {
+          this.reset()
+        }
+        return read
+      }
 
-  Buffer.prototype.read = function(len) {
-    len = Math.min(len, this.readableBytes())
-    let read = this.rawRead(this.readerIndex, len)
-    this.readerIndex += len
-    if (this.readerIndex === this.writerIndex) {
-      this.reset()
-    }
-    return read
-  }
+      Buffer.prototype.skip = function (len) {
+        len = Math.min(len, this.readableBytes())
+        this.readerIndex += len
+        if (this.readerIndex === this.writerIndex) {
+          this.reset()
+        }
+        return len
+      }
 
-  Buffer.prototype.skip = function(len) {
-    len = Math.min(len, this.readableBytes())
-    this.readerIndex += len
-    if (this.readerIndex === this.writerIndex) {
-      this.reset()
-    }
-    return len
-  }
+      Buffer.prototype.readFull = function () {
+        return this.read(this.readableBytes())
+      }
 
-  Buffer.prototype.readFull = function() {
-    return this.read(this.readableBytes())
-  }
+      Buffer.prototype.writeArrayBuffer = function (arraybuffer) {
+        return this.write(new Uint8Array(arraybuffer))
+      }
 
-  Buffer.prototype.writeArrayBuffer = function(arraybuffer) {
-    return this.write(new Uint8Array(arraybuffer))
-  }
-  
-  Buffer.prototype.writeString = function(str) {
-    return this.write(str2bytes(str))
-  }
+      Buffer.prototype.writeString = function (str) {
+        return this.write(str2bytes(str))
+      }
 
-  Buffer.prototype.write = function(bytes) {
-    if (bytes.length === 0) {
-      return
-    }
+      Buffer.prototype.write = function (bytes) {
+        if (bytes.length === 0) {
+          return
+        }
 
-    let len = bytes.length
+        let len = bytes.length
 
-    if (len <= this.writableBytes()) {
-      this.rawWrite(this.writerIndex, bytes)
-      this.writerIndex += len
-      return
-    }
+        if (len <= this.writableBytes()) {
+          this.rawWrite(this.writerIndex, bytes)
+          this.writerIndex += len
+          return
+        }
 
-    // expand
-    if (len > (this.prependableBytes() + this.writableBytes())) {
-      this.expand((this.readableBytes() + len) * 2)
-    }
-    
-    // copy-move
-    if (this.readerIndex !== 0) {
-      this.bytes.copyWithin(0, this.readerIndex, this.writerIndex)
-      this.writerIndex -= this.readerIndex
-      this.readerIndex = 0
-    }
+        // expand
+        if (len > (this.prependableBytes() + this.writableBytes())) {
+          this.expand((this.readableBytes() + len) * 2)
+        }
 
-    this.rawWrite(this.writerIndex, bytes)
-    this.writerIndex += len
-  }
+        // copy-move
+        if (this.readerIndex !== 0) {
+          this.bytes.copyWithin(0, this.readerIndex, this.writerIndex)
+          this.writerIndex -= this.readerIndex
+          this.readerIndex = 0
+        }
 
-  Buffer.prototype.reset = function() {
-    this.readerIndex = 0
-    this.writerIndex = 0
-  }
+        this.rawWrite(this.writerIndex, bytes)
+        this.writerIndex += len
+      }
 
-  Buffer.prototype.toSring = function() {
-    return bytes2str(this.bytes.slice(this.readerIndex, this.writerIndex))
-  }
+      Buffer.prototype.reset = function () {
+        this.readerIndex = 0
+        this.writerIndex = 0
+      }
 
-  // private
-  Buffer.prototype.rawRead = function (offset, len) {
-    if (offset < 0 || offset + len > this.bytes.length) {
-      throw new RangeError('Trying to read beyond buffer length') 
-    }
-    return this.bytes.slice(offset, offset + len)
-  }
+      Buffer.prototype.toSring = function () {
+        return bytes2str(this.bytes.slice(this.readerIndex, this.writerIndex))
+      }
 
-  // private
-  Buffer.prototype.rawWrite = function (offset, bytes) {
-    let len = bytes.length
-    if (offset < 0 || offset + len > this.bytes.length) {
-      throw new RangeError('Trying to write beyond buffer length') 
-    }
-    for (let i = 0; i < len; i++) {
-      this.bytes[offset + i] = bytes[i]
-    }
-  }
+      // private
+      Buffer.prototype.rawRead = function (offset, len) {
+        if (offset < 0 || offset + len > this.bytes.length) {
+          throw new RangeError('Trying to read beyond buffer length')
+        }
+        return this.bytes.slice(offset, offset + len)
+      }
 
-  // private
-  Buffer.prototype.expand = function (size) {
-    if (size <= this.bytes.capacity) {
-      return
-    }
-    let buf = new Uint8Array(size)
-    buf.set(this.bytes)
-    this.bytes = buf
-  }
+      // private
+      Buffer.prototype.rawWrite = function (offset, bytes) {
+        let len = bytes.length
+        if (offset < 0 || offset + len > this.bytes.length) {
+          throw new RangeError('Trying to write beyond buffer length')
+        }
+        for (let i = 0; i < len; i++) {
+          this.bytes[offset + i] = bytes[i]
+        }
+      }
 
-  exports.Buffer = Buffer
-  exports.str2bytes = str2bytes
-  exports.bytes2str = bytes2str
+      // private
+      Buffer.prototype.expand = function (size) {
+        if (size <= this.bytes.capacity) {
+          return
+        }
+        let buf = new Uint8Array(size)
+        buf.set(this.bytes)
+        this.bytes = buf
+      }
 
-}(window))
+      exports.Buffer = Buffer
+      exports.str2bytes = str2bytes
+      exports.bytes2str = bytes2str
+
+    }(window))
   </script>
 
   <script>
-
-  function highlight(codeEl) {
-    let raw = document.querySelector('#worker_highlight').textContent
-    let blob = new Blob([raw], { type: "text/javascript" })
-    let worker = new Worker(window.URL.createObjectURL(blob))
-    worker.onmessage = function(event) { 
-      codeEl.innerHTML = event.data
-    }
-    worker.postMessage(codeEl.textContent)
-  }
-  
-  var log = (function(){
-    var traceLog = document.querySelector("#traceLog");
-    var requestLog = document.querySelector("#requestLog");
-    
-    var trace = function(el) {
-      return function(str) {
-        if (!str) {
-          return
-        }
-        if (str.length>0 && str.charAt(str.length-1)!='\\n') {
-          str+='\\n'
-        }
-        // var t = new Date().toLocaleTimeString()
-        el.innerText= /*t + '  ' + */ str + el.innerText;  
-        
-        // 高亮返回值
-        highlight(el)
-
-        // 高亮console json
-        JSONstringify(str)
-      };
-    };
-    
-    return {
-        trace: trace(traceLog),
-        response: trace(requestLog)
-    };
-  })();
-  
- 
-  function Trace(addr, port) {
-    this.isConnected = false;
-    this.addr = addr;
-    this.port = port;
-    this.buffer = new Buffer(1024 * 1024);
-  }
-
-  Trace.prototype.start = function(onStart, onClose) {
-    this.onStart = onStart
-    this.onClose = onClose
-    
-    var wsServer = 'ws://' + this.addr + ':' + this.port;
-    
-    var ws = new WebSocket(wsServer);
-    if (!ws) {
-      return;
-    }
-    
-    // 使用ArrayBuffer接收的是二进制数据
-    ws.binaryType = 'arraybuffer';
-    
-    ws.addEventListener('open', function (evt) {
-      // 无API可以获取websocket http response的header信息，这里使用cookie不准确
-      // response回来时设置的cookie可能在ws连接事件完成之前被改变 ？！
-      this.sid = getCookie('sid')
-      this.isConnected = true;
-      console.info("Connected to WebSocket server.");
-      this.onStart(evt)
-    }.bind(this));
-
-    ws.addEventListener('close', function (evt) {
-      this.isConnected = false;
-      console.info("Disconnected");
-      this.onClose(evt)
-    }.bind(this));
-
-    ws.addEventListener('error', function (evt, e) {
-      this.isConnected = false;
-      console.error('Error occured: ' + evt.data);
-      this.onClose(evt)
-    }.bind(this));
-
-    ws.addEventListener('message', function (evt) {
-      /*
-      纯文本, 发现 websocket同样会分包
-      if (evt.data.length) {
-        var traceData = JSON.parse(evt.data)
-        console.log(traceData);
-        log.trace(JSON.stringify(traceData, null, 2));
+    // http://stackoverflow.com/questions/4003823/javascript-getcookie-functions/4004010#4004010
+    function getCookies() {
+      var c = document.cookie, v = 0, cookies = {}
+      if (document.cookie.match(/^\s*\$Version=(?:"1"|1);\s*(.*)/)) {
+        c = RegExp.$1
+        v = 1
       }
-      */
-      
-      
-      // 处理粘包
-      this.buffer.writeArrayBuffer(evt.data)
-       
-      while(true) {
-        if (this.buffer.readableBytes() < 4) {
-          return
-        }
-      
-        var arraybuffer = this.buffer.get(4).buffer
-        var len = new DataView(arraybuffer).getUint32(); // PHP pack('N')
-        if (this.buffer.readableBytes() < len + 4) {
-          return
-        }
-      
-        this.buffer.skip(4)
-      
-        var str = bytes2str(this.buffer.read(len))
-        if (str === "PING") {
-          // 单独处理心跳
-          this.send("PONG");
-        } else {
-          try {
-            var traceData = JSON.parse(str)
-            console.log(traceData);
-            log.trace(JSON.stringify(traceData, null, 2));
-          } catch (e) {
-            console.error(e)
-          }
-        }
-      }
-
-      
-    }.bind(this));
-
-    this.ws = ws;
-  }
-
-  Trace.prototype.stop = function() {
-    // this.ws.readyState !== WebSocket.CLOSED 
-    if (this.ws && this.isConnected) {
-      this.ws.close()
-    }
-  }
-
-  Trace.prototype.send = function(toSend) {
-    // trace.ws.readyState === WebSocket.OPEN
-    if (this.ws && this.isConnected) {
-      return this.ws.send(toSend)
-    } else {
-      return false;
-    }
-  }
-
-  var trace 
-
-  function startServer() {
-    // trace.ws.readyState !== WebSocket.OPEN
-    if (trace && trace.isConnected) {
-      return;
-    }
-
-    // var addr=document.getElementById("addresses").value;
-    // var port=parseInt(document.getElementById("serverPort").value);
-    
-    var addr = window.location.hostname
-    var port = window.location.port ? window.location.port : 80
-    trace = new Trace(addr, port);
-    trace.start(function() {
-      document.querySelector(".connect-to").innerText=addr+":"+port;
-      document.querySelector("#server").className="connected";
-    }, function() {
-      document.querySelector("#server").className="";
-    })
-  }
-
-  function stopServer() {
-    // trace.ws.readyState !== WebSocket.CLOSED
-    if (trace && trace.isConnected) {
-      trace.stop();
-    }
-  }
-
-  document.getElementById('serverStart').addEventListener('click', startServer);
-  document.getElementById('serverStop').addEventListener('click', stopServer);
-  document.getElementById('requestGo').addEventListener('click', (function(){
-    var url = document.getElementById('url')
-    return function() {
-      // 首先清空trace记录
-      traceLog.innerText = '';
-      
-      // 请求带上ws的sid(fd), 识别report的trace信息归属的哪个ws连接
-      fetch('./request?sid=' + trace.sid + '&uri=' + encodeURIComponent(url.value))  
-        .then(
-          function(response) {  
-            if (response.status !== 200) {  
-              console.error('request error. Status Code: ' +  response.status);  
-              return; 
-            }
-            // response.json()
-            return response.text();
-          }  
-        )
-        .then(function(text) {
-          try {
-            var resp = JSON.parse(text)
-            console.log(resp);
-            log.response(JSON.stringify(resp, null, 2));
-          } catch (e) {
-            log.response(text);
-          }
+      if (v === 0) {
+        c.split(/[,;]/).map(function (cookie) {
+          var parts = cookie.split(/=/, 2),
+            name = decodeURIComponent(parts[0].trimLeft()),
+            value = parts.length > 1 ? decodeURIComponent(parts[1].trimRight()) : null
+          cookies[name] = value
         })
-        .catch(function(err) {
-          console.log('Fetch Error: ', err);  
-          log.response('fetch error');
-        });
-    };
-  })());
-  
-  document.getElementById('logClear').addEventListener('click', (function(){
-    var traceLog = document.querySelector("#traceLog");
-    var requestLog = document.querySelector("#requestLog");
-    return function() {
-      traceLog.innerText = '';
-      requestLog.innerText = '';
-      console.clear();
-    };
-  })());
-  
-  
-  // init
-  document.addEventListener('DOMContentLoaded', function() {
-    let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
-    if (isChrome) {
-      document.getElementById('serverStart').click();      
-    } else {
-      alert("请更换Chrome浏览器访问!!!")
-    }
-  })
-  
-  
-  function JSONstringify(json) {
-    if (typeof json != 'string') {
-        json = JSON.stringify(json, undefined, '\t');
+      } else {
+        c.match(/(?:^|\s+)([!#$%&'*+\-.0-9A-Z^`a-z|~]+)=([!#$%&'*+\-.0-9A-Z^`a-z|~]*|"(?:[\x20-\x7E\x80\xFF]|\\[\x00-\x7F])*")(?=\s*[,;]|$)/g).map(function ($0, $1) {
+          var name = $0,
+            value = $1.charAt(0) === '"'
+              ? $1.substr(1, -1).replace(/\\(.)/g, "$1")
+              : $1
+          cookies[name] = value
+        })
+      }
+
+      return cookies
     }
 
-    var 
+    function getCookie(name) {
+      return getCookies()[name]
+    }
+
+    function JSONstringify(json) {
+      if (typeof json != 'string') {
+        json = JSON.stringify(json, undefined, '\t')
+      }
+
+      var
         arr = [],
         _string = 'color:green',
         _number = 'color:darkorange',
         _boolean = 'color:blue',
         _null = 'color:magenta',
-        _key = 'color:red';
+        _key = 'color:red'
 
-    json = json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-        var style = _number;
+      json = json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        var style = _number
         if (/^"/.test(match)) {
-            if (/:$/.test(match)) {
-                style = _key;
-            } else {
-                style = _string;
-            }
+          if (/:$/.test(match)) {
+            style = _key
+          } else {
+            style = _string
+          }
         } else if (/true|false/.test(match)) {
-            style = _boolean;
+          style = _boolean
         } else if (/null/.test(match)) {
-            style = _null;
+          style = _null
         }
-        arr.push(style);
-        arr.push('');
-        return '%c' + match + '%c';
-    });
+        arr.push(style)
+        arr.push('')
+        return '%c' + match + '%c'
+      })
 
-    arr.unshift(json);
+      arr.unshift(json)
 
-    console.log.apply(console, arr);
-  }
-  
-  // http://stackoverflow.com/questions/4003823/javascript-getcookie-functions/4004010#4004010
-  function getCookies() {
-    var c = document.cookie, v = 0, cookies = {};
-    if (document.cookie.match(/^\s*\$Version=(?:"1"|1);\s*(.*)/)) {
-      c = RegExp.$1;
-      v = 1;
+      console.log.apply(console, arr)
     }
-    if (v === 0) {
-      c.split(/[,;]/).map(function(cookie) {
-        var parts = cookie.split(/=/, 2),
-            name = decodeURIComponent(parts[0].trimLeft()),
-            value = parts.length > 1 ? decodeURIComponent(parts[1].trimRight()) : null;
-        cookies[name] = value;
-      });
-    } else {
-      c.match(/(?:^|\s+)([!#$%&'*+\-.0-9A-Z^`a-z|~]+)=([!#$%&'*+\-.0-9A-Z^`a-z|~]*|"(?:[\x20-\x7E\x80\xFF]|\\[\x00-\x7F])*")(?=\s*[,;]|$)/g).map(function($0, $1) {
-        var name = $0,
-            value = $1.charAt(0) === '"'
-                        ? $1.substr(1, -1).replace(/\\(.)/g, "$1")
-                        : $1;
-        cookies[name] = value;
-      });
-    }
-    
-    return cookies;
-  }
-  function getCookie(name) {
-    return getCookies()[name];
-  }
+  </script>
 
+  <script src="http://apps.bdimg.com/libs/highlight.js/9.1.0/highlight.min.js"></script>
+  <script src="http://apps.bdimg.com/libs/highlight.js/9.1.0/languages/json.min.js"></script>
+
+  <script id="worker_highlight" type="javascript/worker">
+    self.onmessage = function(event) { importScripts('http://apps.bdimg.com/libs/highlight.js/9.1.0/highlight.min.js'); importScripts('http://apps.bdimg.com/libs/highlight.js/9.1.0/languages/json.min.js');
+    let result = self.hljs.highlightAuto(event.data); self.postMessage(result.value); }
+  </script>
+
+  <script>
+    function highlightBg(codeEl) {
+      let blob = new Blob([document.querySelector('#worker_highlight').textContent], { type: "text/javascript" })
+      let worker = new Worker(window.URL.createObjectURL(blob))
+      worker.onmessage = function (event) {
+        codeEl.innerHTML = event.data
+      }
+      worker.postMessage(codeEl.textContent)
+    }
+
+    function highlight(code) {
+      return hljs.highlightAuto(code).value
+      // console.log(hljs.highlightAuto(code).value)
+      // console.log(hljs.highlight("json", code).value)
+    }
+
+    const log = (function () {
+      let traceLog = document.querySelector("#traceLog")
+      let requestLog = document.querySelector("#requestLog")
+
+      let trace = function (el) {
+        return function (str) {
+          if (!str) {
+            return
+          }
+          if (str.length > 0 && str.charAt(str.length - 1) != '\\n') {
+            str += '\\n'
+          }
+          // var t = new Date().toLocaleTimeString()
+          el.innerText = /*t + '  ' + */ str + el.innerText
+          // el.innerText = highlight(str + el.innerText)
+
+          // 高亮返回值
+          highlightBg(el)
+
+          // 高亮console json
+          JSONstringify(str)
+        }
+      }
+
+      return {
+        trace: trace(traceLog),
+        response: trace(requestLog)
+      }
+    })()
+
+
+    function Trace(addr, port) {
+      this.isConnected = false
+      this.addr = addr
+      this.port = port
+      this.buffer = new Buffer(1024 * 1024)
+    }
+
+    Trace.prototype.start = function (onStart, onClose) {
+      this.onStart = onStart
+      this.onClose = onClose
+
+      let wsServer = 'ws://' + this.addr + ':' + this.port
+
+      let ws = new WebSocket(wsServer)
+      if (!ws) {
+        return
+      }
+
+      // 使用ArrayBuffer接收的是二进制数据
+      ws.binaryType = 'arraybuffer'
+
+      ws.addEventListener('open', function (evt) {
+        // 无API可以获取websocket http response的header信息，这里使用cookie不准确
+        // response回来时设置的cookie可能在ws连接事件完成之前被改变 ？！
+        this.sid = getCookie('sid')
+        this.isConnected = true
+        console.info("Connected to WebSocket server.")
+        this.onStart(evt)
+      }.bind(this))
+
+      ws.addEventListener('close', function (evt) {
+        this.isConnected = false
+        console.info("Disconnected")
+        this.onClose(evt)
+      }.bind(this))
+
+      ws.addEventListener('error', function (evt, e) {
+        this.isConnected = false
+        console.error('Error occured: ' + evt.data)
+        this.onClose(evt)
+      }.bind(this))
+
+      ws.addEventListener('message', function (evt) {
+        // 处理粘包
+        this.buffer.writeArrayBuffer(evt.data)
+
+        while (true) {
+          if (this.buffer.readableBytes() < 4) {
+            return
+          }
+
+          var arraybuffer = this.buffer.get(4).buffer
+          var len = new DataView(arraybuffer).getUint32() // PHP pack('N')
+          if (this.buffer.readableBytes() < len + 4) {
+            return
+          }
+
+          this.buffer.skip(4)
+
+          var str = bytes2str(this.buffer.read(len))
+          if (str === "PING") {
+            // 单独处理心跳
+            this.send("PONG")
+          } else {
+            try {
+              var traceData = JSON.parse(str)
+              console.log(traceData)
+              log.trace(JSON.stringify(traceData, null, 2))
+            } catch (e) {
+              console.error(e)
+            }
+          }
+        }
+      }.bind(this))
+
+      this.ws = ws
+    }
+
+    Trace.prototype.stop = function () {
+      // this.ws.readyState !== WebSocket.CLOSED 
+      if (this.ws && this.isConnected) {
+        this.ws.close()
+      }
+    }
+
+    Trace.prototype.send = function (toSend) {
+      // trace.ws.readyState === WebSocket.OPEN
+      if (this.ws && this.isConnected) {
+        return this.ws.send(toSend)
+      } else {
+        return false
+      }
+    }
+
+    let trace
+
+    let initRequest = (function () {
+      let el = document.getElementById('protocol-select')
+      return function () {
+        let evt = document.createEvent('HTMLEvents')
+        evt.initEvent('change', false, true)
+        el.dispatchEvent(evt)
+      }
+    }())
+
+    let swithRequest = (function () {
+      let el = document.getElementById('request-args')
+      let url = document.getElementById('url')
+      return function (protocol = 'none') {
+        el.className = 'protocol-' + protocol
+        
+        // TODO example
+        if (protocol === 'http') {
+          url.value = 'http://127.0.0.1:8000/index/index/test'
+        } else if (protocol === 'nova') {
+          url.value = 'nova://10.9.188.33:8050/com.youzan.material.general.service.MediaService.getMediaList'
+        }
+      }
+    }())
+
+    let startServer = (function () {
+      let el = document.querySelector(".requester-builder-header")
+
+      return function () {
+        // trace.ws.readyState !== WebSocket.OPEN
+        if (trace && trace.isConnected) {
+          return
+        }
+
+        var addr = window.location.hostname
+        var port = window.location.port ? window.location.port : 80
+        trace = new Trace(addr, port)
+        trace.start(function () {
+          initRequest()
+          // document.querySelector(".connect-to").innerText = addr + ":" + port
+          el.className = "requester-builder-header connected"
+        }, function () {
+          swithRequest('none')
+          el.className = "requester-builder-header"
+        })
+      }
+    }())
+
+    function stopServer() {
+      // trace.ws.readyState !== WebSocket.CLOSED
+      if (trace && trace.isConnected) {
+        trace.stop()
+        swithRequest('none')
+      }
+    }
+
+
+
+    document.getElementById('connectServer').addEventListener('click', startServer)
+    document.getElementById('disconnectServer').addEventListener('click', stopServer)
+    document.getElementById('doSend').addEventListener('click', (function () {
+      var url = document.getElementById('url')
+      return function () {
+        // 首先清空trace记录
+        traceLog.innerText = ''
+
+        // 请求带上ws的sid(fd), 识别report的trace信息归属的哪个ws连接
+        fetch('./request?sid=' + trace.sid + '&uri=' + encodeURIComponent(url.value))
+          .then(
+          function (response) {
+            if (response.status !== 200) {
+              console.error('request error. Status Code: ' + response.status)
+              return
+            }
+            // response.json()
+            return response.text()
+          }
+          )
+          .then(function (text) {
+            try {
+              var resp = JSON.parse(text)
+              console.log(resp)
+              log.response(JSON.stringify(resp, null, 2))
+            } catch (e) {
+              log.response(text)
+            }
+          })
+          .catch(function (err) {
+            console.log('Fetch Error: ', err)
+            log.response('fetch error')
+          })
+      }
+    })())
+
+    document.getElementById('logClear').addEventListener('click', (function () {
+      var traceLog = document.querySelector("#traceLog")
+      var requestLog = document.querySelector("#requestLog")
+      return function () {
+        traceLog.innerText = ''
+        requestLog.innerText = ''
+        console.clear()
+      }
+    })())
+
+    document.getElementById('protocol-select').addEventListener('change', function (e) {
+      swithRequest(e.srcElement.value)
+    })
+
+    document.addEventListener('DOMContentLoaded', function () {
+      let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
+      if (isChrome) {
+        document.getElementById('connectServer').click()
+      } else {
+        alert("请更换Chrome浏览器访问!!!")
+      }
+    })
   </script>
 </body>
+
 </html>
 HTML
 );
@@ -1619,4 +1853,12 @@ function sys_echo($context) {
     $workerId = isset($_SERVER["WORKER_ID"]) ? " #" . $_SERVER["WORKER_ID"] : "";
     $dataStr = date("Y-m-d H:i:s", time());
     echo "[{$dataStr}{$workerId}] $context\n";
+}
+
+function array_get(array $arr, $key, $default = null) {
+    if (isset($arr[$key])) {
+        return $arr[$key];
+    } else {
+        return $default;
+    }
 }
