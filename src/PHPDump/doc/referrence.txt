@@ -1,0 +1,9 @@
+参考资料:
+1. pcap文件格式: https://wiki.wireshark.org/Development/LibpcapFileFormat
+2. pcap文件格式: https://www.zybuluo.com/natsumi/note/80231
+3. 以太网帧格式: http://www.ituring.com.cn/article/42619
+4. http://www.10tiao.com/html/254/201612/2648945706/1.html
+5. linktypes: http://www.tcpdump.org/linktypes.html
+6. 113-special Linux “cooked” capture: http://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html
+7. man tcpdump @ map
+

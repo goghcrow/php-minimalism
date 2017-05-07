@@ -1,0 +1,5 @@
+.idea/
+vendor/
+test/coverage/
+novadump.phar
+load.php

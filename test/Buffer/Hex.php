@@ -3,10 +3,10 @@
 namespace Minimalism\Test;
 
 
-use Minimalism\Hex;
 
-require __DIR__ . "/../src/Hex.php";
+use Minimalism\Buffer\Hex;
 
+require __DIR__ . "/../../src/Buffer/Hex.php";
 
 $str = file_get_contents(__FILE__);
 

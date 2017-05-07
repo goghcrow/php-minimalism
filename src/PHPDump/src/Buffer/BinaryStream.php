@@ -1,34 +1,31 @@
 <?php
 
-namespace Minimalism\Buffer;
+namespace Minimalism\PHPDump\Buffer;
 
 
-
-class Binary implements Buffer
+/**
+ * Class BinaryStream
+ * @package Minimalism\Buffer
+ *
+ * @method string get($len)
+ * @method int readableBytes()
+ * @method string read($len)
+ * @method string readFull()
+ * @method bool write($bytes)
+ */
+class BinaryStream
 {
     private $buffer;
 
-    public function __construct(Buffer $buffer = null)
+    public function __construct(Buffer $buffer)
     {
-        if ($buffer === null) {
-            $this->buffer = new MemoryBuffer();
-        } else {
-            $this->buffer = $buffer;
-        }
+        $this->buffer = $buffer;
     }
 
-    public function __destruct()
+    public function __call($name, $args)
     {
-        if (is_callable([$this->buffer, "__destruct"])) {
-            /** @noinspection PhpUndefinedMethodInspection */
-            $this->buffer->__destruct();
-        }
-    }
-
-    public function __clone()
-    {
-        $this->buffer = clone $this->buffer;
-        $this->buffer->reset();
+        $fn = $this->buffer->$name;
+        return $fn(...$args);
     }
 
     public function writeUInt8($i)
@@ -154,25 +151,5 @@ class Binary implements Buffer
     {
         $ret = unpack("dr", $this->buffer->read(8));
         return $ret === false ? null : $ret["r"];
-    }
-
-    public function write($bytes)
-    {
-        return $this->buffer->write($bytes);
-    }
-
-    public function read($len)
-    {
-        return $this->buffer->read($len);
-    }
-
-    public function readFull()
-    {
-        return $this->buffer->readFull();
-    }
-
-    public function reset()
-    {
-        return $this->buffer->reset();
     }
 }

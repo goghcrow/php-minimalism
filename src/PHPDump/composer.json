@@ -1,0 +1,24 @@
+{
+  "name": "php-minimalism/php-dump",
+  "authors": [
+    {
+      "name": "xiaofeng"
+    }
+  ],
+  "require": {
+    "php": "^5.6 || ^7.0"
+  },
+  "autoload": {
+    "files": [
+      "src/Collection/function.php"
+    ],
+    "psr-4": {
+      "Minimalism\\PHPDump\\": "src"
+    }
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-master": "0.1-dev"
+    }
+  }
+}

@@ -3,15 +3,16 @@
 namespace Minimalism\Test\Buffer;
 
 
-use Minimalism\Buffer\Binary;
+use Minimalism\Buffer\BinaryStream;
+use Minimalism\Buffer\MemoryBuffer;
 
 
 require __DIR__ . "/../../src/Buffer/Buffer.php";
 require __DIR__ . "/../../src/Buffer/MemoryBuffer.php";
-require __DIR__ . "/../../src/Buffer/Binary.php";
+require __DIR__ . "/../../src/Buffer/BinaryStream.php";
 
 
-$bin = new Binary();
+$bin = new BinaryStream(new MemoryBuffer());
 
 $bin->writeUInt8(12);
 $bin->writeUInt16BE(24);

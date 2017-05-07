@@ -1,39 +1,8 @@
 #!/usr/bin/env php
 <?php
-namespace Minimalism\Novadump;
+namespace Minimalism\PHPDump;
 
-use Minimalism\Novadump\Terminal as T;
-
-/**
- * Created by IntelliJ IDEA.
- * User: chuxiaofeng
- * Date: 17/3/7
- * Time: 下午11:42
- *
- * novadump: nova协议抓包解码工具
- *
- * changelog:
- *
- * 2017-03-07
- * 1. 从 `tcpdump -w` 实时解码pcap流: pcap -> linux sll -> ip -> tcp -> nova -> thrfit
- * 2. 支持从项目读取thrift spec声明文件, 解码完整的thrift对象
- * 注意: !!! pcap文件 链路层不是以太网协议, 而是linux_sll
- *
- * 2017-03-31
- * 1. fix bug, 在链路层linux_sll过滤非IPV4type帧, 在网络层过滤非IPV4type报文
- * 2. 加入解析pcap文件功能, 异步分段读取文件, 无论文件多大只占用很少内存(依赖yz-swoole 2.x版本, 文件异步读取接口)
- * 3. thrift replay|exception 打印具体异常类型
- * 4. 从linux_sll读取时间戳, 替代当前时间显示
- *
- * 2017-04-07
- * 发现问题: 超过65535byte的nova包受限于tcpdump版本捕获字节数不足导致程序退出
- *
- * 2017-04-21
- * 高亮 src > dst 显示
- *
- * 2017-05-04
- * 添加copy参数，导出nova调用到nova命令行格式文件
- */
+use Minimalism\PHPDump\Terminal as T;
 
 
 $usage = <<<USAGE
@@ -353,13 +322,34 @@ class NovaPacketHandler
 
         if (!$isHeartbeat) {
             if (NovaApp::$enable) {
+
+
                 list($type, $args) = NovaApp::dumpThrift($service, $method, $thriftBin);
                 if ($this->novaCopy) {
                     $copy = $this->novaCopy;
                     $copy($type, $dstIp, $dstPort, $service, $method, $args);
                 }
+
+                Hex::dump($thriftBin, "vvv/8/6");
+
+                $buf = new MemoryBuffer();
+                $buf->write($thriftBin);
+                $tcodec = new TCodec($buf);
+                list($type, $name, $seqId, $fields) = $tcodec->decode();
+
+                $msgType = TMessageType::getName($type);
+                echo "\n#$seqId $msgType $name\n";
+                echo json_encode($fields, JSON_PRETTY_PRINT), "\n";
+
             } else {
                 Hex::dump($thriftBin, "vvv/8/6");
+                $buf = new MemoryBuffer();
+                $buf->write($thriftBin);
+                $tcodec = new TCodec($buf);
+                list($type, $name, $seqId, $fields) = $tcodec->decode();
+                $msgType = TMessageType::getName($type);
+                echo "\n#$seqId $msgType $name\n";
+                echo json_encode($fields, JSON_PRETTY_PRINT), "\n";
             }
         }
 
@@ -2054,3 +2044,441 @@ function λ() {} // for IDE合并注释
 
 
 
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+interface Buffer
+{
+    public function get($len);
+
+    public function readableBytes();
+
+    public function read($len);
+
+    public function readFull();
+
+    public function write($bytes);
+}
+
+abstract class Enum
+{
+    private static $classMap;
+
+    public static function getName($type)
+    {
+        $class = static::class;
+
+        if (!isset(self::$classMap[$class])) {
+            $clazz = new \ReflectionClass($class);
+            self::$classMap[$class] = array_flip($clazz->getConstants());
+        }
+
+        $consts = self::$classMap[$class];
+        if (isset($consts[$type])) {
+            return $consts[$type];
+        } else {
+            return $class . "\\UNKNOWN";
+        }
+    }
+}
+
+final class TType extends Enum
+{
+    const STOP   = 0;
+    const VOID   = 1;
+    const BOOL   = 2;
+    const BYTE   = 3;
+    const I08    = 3;
+    const DOUBLE = 4;
+    const I16    = 6;
+    const I32    = 8;
+    const I64    = 10;
+    const STRING = 11;
+    // const UTF7   = 11;
+    const STRUCT = 12;
+    const MAP    = 13;
+    const SET    = 14;
+    const LST    = 15;
+    const UTF8   = 16;
+    const UTF16  = 17;
+
+    // 其他简单类型不会用于网络传输
+    private static $basicType = [
+        self::BOOL   => 'Bool',
+        self::BYTE   => 'Byte',
+        self::I16    => 'I16',
+        self::I32    => 'I32',
+        self::I64    => 'I64',
+        self::DOUBLE => 'Double',
+        self::STRING => 'String'
+    ];
+
+    private static $complexType = [
+        self::STRUCT => 'Object',
+        self::MAP    => 'Map',
+        self::SET    => 'Set',
+        self::LST    => 'List',
+    ];
+
+    public static function isBasic($type)
+    {
+        return isset(self::$basicType[$type]);
+    }
+
+    public static function getName($type)
+    {
+        if (isset(self::$basicType[$type])) {
+            return self::$basicType[$type];
+        }
+        if (isset(self::$complexType[$type])) {
+            return self::$complexType[$type];
+        }
+        return "Unknown";
+    }
+}
+
+class TMessageType extends Enum
+{
+    const CALL  = 1;
+    const REPLY = 2;
+    const EXCEPTION = 3;
+    const ONEWAY = 4;
+}
+
+class TBinaryReader
+{
+    const VERSION_1 = 0x80010000;
+
+    private $buffer;
+
+    public function __construct(MemoryBuffer $buffer)
+    {
+        $this->buffer = $buffer;
+    }
+
+    public function readMessageBegin()
+    {
+        $sz = $this->readI32();
+        assert($sz < 0); // 只处VERSION_1, 高位字节第一bit恒等于1(leading bit is 1)
+        $version = (int) ($sz & 0xffff0000); // 高位两字节版本
+        // 这里我们使用协议 VERSION_1 0x80010000 // 低位第二字节未使用
+        assert($version === (int) self::VERSION_1);
+
+        $type = $sz & 0x000000ff;  // 低位一字节消息类型
+        $name = $this->readString();
+        $seqId = $this->readI32();
+
+        return [$type, $name, $seqId];
+    }
+
+    public function readMessageEnd()
+    {
+    }
+
+    public function readStructBegin()
+    {
+        return "";
+    }
+
+    public function readStructEnd()
+    {
+    }
+
+    public function readFieldBegin()
+    {
+        $fieldType = $this->readByte();
+        if ($fieldType == TType::STOP) {
+            $fieldId = 0;
+        } else {
+            $fieldId = $this->readI16();
+        }
+
+        return [$fieldType, $fieldId];
+    }
+
+    public function readFieldEnd()
+    {
+    }
+
+    public function readMapBegin()
+    {
+        $keyType = $this->readByte();
+        $valType = $this->readByte();
+        $size = $this->readI32();
+        return [$keyType, $valType, $size];
+    }
+
+    public function readMapEnd()
+    {
+    }
+
+    public function readListBegin()
+    {
+        $elemType = $this->readByte();
+        $size = $this->readI32();
+        return [$elemType, $size];
+    }
+
+    public function readListEnd()
+    {
+    }
+
+    public function readSetBegin()
+    {
+        $elemType = $this->readByte();
+        $size = $this->readI32();
+        return [$elemType, $size];
+    }
+
+    public function readSetEnd()
+    {
+    }
+
+    public function readBool()
+    {
+        $data = $this->buffer->read(1);
+        return (unpack('c', $data)[1]) == 1;
+    }
+
+    public function readByte()
+    {
+        $data = $this->buffer->read(1);
+        return unpack('c', $data)[1];
+    }
+
+    public function readI16()
+    {
+        $data = $this->buffer->read(2);
+        $arr = unpack('n', $data);
+        $value = $arr[1];
+        if ($value > 0x7fff) {
+            $value = 0 - (($value - 1) ^ 0xffff);
+        }
+        return $value;
+    }
+
+    public function readI32()
+    {
+        $data = $this->buffer->read(4);
+        $arr = unpack('N', $data);
+        $value = $arr[1];
+        if ($value > 0x7fffffff) { // TODO why
+            $value = 0 - (($value - 1) ^ 0xffffffff);
+        }
+        return $value;
+    }
+
+    public function readI64()
+    {
+        $data = $this->buffer->read(8);
+        $arr = unpack('N2', $data);
+
+        assert(PHP_INT_SIZE === 8);
+
+        // Upcast negatives in LSB bit
+        if ($arr[2] & 0x80000000) {
+            $arr[2] = $arr[2] & 0xffffffff;
+        }
+
+        // Check for a negative
+        if ($arr[1] & 0x80000000) {
+            $arr[1] = $arr[1] & 0xffffffff;
+            $arr[1] = $arr[1] ^ 0xffffffff;
+            $arr[2] = $arr[2] ^ 0xffffffff;
+            return 0 - $arr[1]*4294967296 - $arr[2] - 1;
+        } else {
+            return $arr[1]*4294967296 + $arr[2];
+        }
+    }
+
+    public function readDouble()
+    {
+        $data = strrev($this->buffer->read(8)); // TODO WHY reverse ?
+        return unpack('d', $data)[1];
+    }
+
+    public function readString()
+    {
+        $len = $this->readI32();
+        if ($len > 0) {
+            return $this->buffer->read($len);
+        } else {
+            return "";
+        }
+    }
+}
+
+
+
+
+class TCodec
+{
+    private $reader;
+
+    public function __construct(MemoryBuffer $buffer)
+    {
+        $this->reader = new TBinaryReader($buffer);
+    }
+
+    public function decode()
+    {
+        list($type, $name, $seqId) = $this->reader->readMessageBegin();
+        $fields = $this->decodeStruct();
+        $this->reader->readMessageEnd();
+
+        return [$type, $name, $seqId, $fields];
+    }
+
+    private function decodeStruct()
+    {
+        $reader = $this->reader;
+
+        $reader->readStructBegin();
+        $fields = [];
+        while (true) {
+            list($fieldType, $fieldId) = $reader->readFieldBegin();
+            if ($fieldType === TType::STOP) {
+                break;
+            }
+            $fieldVal = $this->decodeField($fieldType);
+            $reader->readFieldEnd();
+
+            $fields["#$fieldId"] = $this->buildField($fieldType, $fieldVal);
+        }
+        $reader->readStructEnd();
+
+        return $fields;
+    }
+
+    private function decodeField($fieldType)
+    {
+        $reader = $this->reader;
+
+        switch ($fieldType) {
+            case TType::BOOL:
+                $fieldVal = $reader->readBool();
+                break;
+
+            case TType::BYTE:
+                $fieldVal = $reader->readByte();
+                break;
+
+            case TType::DOUBLE:
+                $fieldVal = $reader->readDouble();
+                break;
+
+            case TType::I16:
+                $fieldVal = $reader->readI16();
+                break;
+
+            case TType::I32:
+                $fieldVal = $reader->readI32();
+                break;
+
+            case TType::I64:
+                $fieldVal = $reader->readI64();
+                break;
+
+            case TType::STRING:
+                $fieldVal = $reader->readString();
+                break;
+
+            case TType::STRUCT:
+                $fieldVal = $this->decodeStruct();
+                break;
+
+            case TType::MAP:
+                $elemVal = [];
+                list($keyType, $valType, $size) = $reader->readMapBegin();
+                for ($i = 0; $i < $size; $i++) {
+                    $keyVal = $this->decodeField($keyType);
+                    $valVal = $this->decodeField($valType);
+                    $elemVal[$keyVal] = $valVal;
+                }
+                $reader->readMapEnd();
+
+                $fieldVal = $this->buildMapField(TType::SET, $keyType, $valType, $elemVal);
+                break;
+
+            case TType::SET:
+                $elemVal = [];
+                list($elemType, $size) = $reader->readSetBegin();
+                for ($i = 0; $i < $size; $i++) {
+                    $elemVal[] = $this->decodeField($elemType);
+                }
+                $reader->readSetEnd();
+
+                $fieldVal = $this->buildListSetField(TType::SET, $elemType, $elemVal);
+                break;
+
+            case TType::LST:
+                $elemVal = [];
+                list($elemType, $size) = $reader->readListBegin();
+                for ($i = 0; $i < $size; $i++) {
+                    $elemVal[] = $this->decodeField($elemType);
+                }
+                $reader->readListEnd();
+
+                $fieldVal = $this->buildListSetField(TType::LST, $elemType, $elemVal);
+                break;
+
+            case TType::STOP:
+            default:
+                $fieldVal = null;
+                break;
+        }
+
+        return $fieldVal;
+    }
+
+    private function buildField($fieldType, $fieldVal)
+    {
+        if (TType::isBasic($fieldType)) {
+            $typeName = TType::getName($fieldType);
+            return "{$typeName} {$fieldVal}";
+        } else {
+            return $fieldVal; // buildListSetField 或 buildMapField 结果
+        }
+    }
+
+    private function buildListSetField($collectionType, $valType, array $listSet)
+    {
+        $cTypeName = TType::getName($collectionType);
+        $vTypeName = TType::getName($valType);
+        $typeName = "$cTypeName<$vTypeName>";
+
+        if (TType::isBasic($valType)) {
+            $vals = implode(", ", $listSet);
+            return "$typeName { $vals }";
+        } else {
+            return [
+                "type" => $typeName,
+                "val" => $listSet,
+            ];
+        }
+    }
+
+    private function buildMapField($collectionType, $keyType, $valType, array $map)
+    {
+        $cTypeName = TType::getName($collectionType);
+        $kTypeName = TType::getName($keyType);
+        $vTypeName = TType::getName($valType);
+        $typeName = "$cTypeName<$kTypeName, $vTypeName>";
+
+        if (TType::isBasic($valType)) {
+            $vals = [];
+            foreach ($map as $k => $v) {
+                $vals[] = "$k: $v";
+            }
+            $vals = implode(", ", $vals);
+            return "$typeName { $vals }";
+        } else {
+            return [
+                "type" => $typeName,
+                "val" => $map,
+            ];
+        }
+    }
+}

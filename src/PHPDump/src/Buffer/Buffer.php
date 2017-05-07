@@ -1,6 +1,6 @@
 <?php
 
-namespace Minimalism\Buffer;
+namespace Minimalism\PHPDump\Buffer;
 
 
 interface Buffer

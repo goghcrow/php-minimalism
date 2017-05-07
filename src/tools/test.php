@@ -1,6 +1,43 @@
 <?php
 
 
+$fa = new FileAppender("tmp.log");
+for ($i = 1000; $i < 2000; $i++) {
+    $fa->append("$i\n");
+}
+exit;
+
+
+class FileAppender
+{
+    private $file;
+    private $offset;
+
+    public function __construct($file, $offset = null)
+    {
+        $this->file = $file;
+        if ($offset === null) {
+            if (file_exists($file)) {
+                $this->offset = filesize($file);
+            } else {
+                $this->offset = 0;
+            }
+        } else {
+            $this->offset = $offset;
+        }
+    }
+
+    public function append($contents)
+    {
+        $size = strlen($contents);
+        if ($size) {
+            // 只有返回false才会停止写，返回false会关闭文件
+            swoole_async_write($this->file, $contents, $this->offset, function($file, $size) {});
+            $this->offset += $size;
+        }
+    }
+}
+
 exit;
 
 $dir = new \DirectoryIterator(__DIR__);

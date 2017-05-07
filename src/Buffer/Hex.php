@@ -1,6 +1,6 @@
 <?php
 
-namespace Minimalism;
+namespace Minimalism\Buffer;
 
 
 /**
@@ -81,7 +81,7 @@ class Hex
         $halfPerGroup = $nHexs / 2;
 
         $hexLines = str_split(bin2hex($str), $nCols * $nHexs);
-        $charLines = str_split(static::bin($str, $placeholder), $nCols * $halfPerGroup);
+        $charLines = str_split(static::toASCII($str, $placeholder), $nCols * $halfPerGroup);
 
         $buffer = "";
         foreach ($hexLines as $i => $line) {
@@ -108,7 +108,7 @@ class Hex
         $halfPerGroup = $nHexs / 2;
 
         $hexLines = str_split(bin2hex($str), $nCols * $nHexs);
-        $charLines = str_split(static::bin($str, $placeholder), $nCols * $halfPerGroup);
+        $charLines = str_split(static::toASCII($str, $placeholder), $nCols * $halfPerGroup);
 
         $lineHexWidth = $nCols * $nHexs + strlen($sep) * ($nCols - 1);
 
@@ -131,7 +131,7 @@ class Hex
         return implode($sep, str_split($str, $len));
     }
 
-    private static function bin($str, $placeholder = ".")
+    private static function toASCII($str, $placeholder = ".")
     {
         static $from = "";
         static $to = "";
