@@ -3,6 +3,7 @@
 namespace Minimalism\PHPDump\Nova;
 
 
+use Minimalism\PHPDump\Thrift\ThriftPacket;
 use Minimalism\PHPDump\Thrift\TMessageType;
 
 
@@ -15,21 +16,14 @@ class NovaCopy
         $this->file = $file;
     }
 
-    public function filter($type, $service, $method)
+    public function __invoke(NovaPacket $novaPacket, ThriftPacket $thriftPacket, $args)
     {
-        if ($type !== TMessageType::CALL) {
-            return false;
-        }
+        $type = $thriftPacket->type;
+        $ip = $novaPacket->ip;
+        $port = $novaPacket->port;
+        $service = $novaPacket->service;
+        $method = $novaPacket->method;
 
-        if (NovaPacketFilter::isHeartbeat($service, $method)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    public function __invoke($type, $ip, $port, $service, $method, $args)
-    {
         if ($this->filter($type, $service, $method)) {
             $className = "\\" . str_replace('.', '\\', ucwords($service, '.'));
             $names = $this->getParamNames($className, $method);
@@ -42,6 +36,19 @@ class NovaCopy
                 swoole_async_write($this->file, $novaCmd, -1);
             }
         }
+    }
+
+    private function filter($type, $service, $method)
+    {
+        if ($type !== TMessageType::CALL) {
+            return false;
+        }
+
+        if (NovaPacketFilter::isHeartbeat($service, $method)) {
+            return false;
+        }
+
+        return true;
     }
 
     private function getParamNames($className, $methodName)

@@ -1,13 +1,16 @@
 <?php
 
-namespace Minimalism\PHPDump\Pcap;
+namespace Minimalism\PHPDump\Nova;
 
 
 use Minimalism\PHPDump\Buffer\Buffer;
+use Minimalism\PHPDump\Pcap\Protocol;
+
 
 /**
- * Class NovaHdr
- * @package Minimalism\PHPDump\Pcap
+ * Class NovaProtocol
+ * @package Minimalism\PHPDump\Nova
+ *
  *
  * #define NOVA_MAGIC              0xdabc
  * #define NOVA_HEADER_COMMON_LEN  37
@@ -34,28 +37,19 @@ use Minimalism\PHPDump\Buffer\Buffer;
  *
  * message body thrift serialize
  */
-class NovaHdr
+class NovaProtocol implements Protocol
 {
     // const SIZE = nova_header_size;
     const MAX_PACKET_SIZE = 1024 * 1024 * 2;
     const MSG_SIZE_LEN = 4;
     const NOVA_HEADER_COMMON_LEN = 37;
 
-    public $service;
-    public $method;
-    public $ip;
-    public $port;
-    public $seq;
-    public $attach;
-    public $thriftBin;
-
-    public static function detect(Buffer $recordBuffer)
+    public function getName()
     {
-        $hl = self::NOVA_HEADER_COMMON_LEN;
-        return $recordBuffer->readableBytes() >= $hl && is_nova_packet($recordBuffer->get($hl));
+        return "Nova";
     }
 
-    public static function isReceiveCompleted(Buffer $connBuffer, Pcap $pcap)
+    public function isReceiveCompleted(Buffer $connBuffer)
     {
         // 4byte nova msg_size
         if ($connBuffer->readableBytes() < self::MSG_SIZE_LEN) {
@@ -73,7 +67,13 @@ class NovaHdr
         return true;
     }
 
-    public static function unpack(Buffer $connBuffer, Pcap $pcap)
+    public function detect(Buffer $recordBuffer)
+    {
+        $hl = self::NOVA_HEADER_COMMON_LEN;
+        return $recordBuffer->readableBytes() >= $hl && is_nova_packet($recordBuffer->get($hl));
+    }
+
+    public function unpack(Buffer $connBuffer)
     {
         if ($connBuffer->readableBytes() < self::MSG_SIZE_LEN) {
             sys_abort("buffer is too small to read nova msg size");
@@ -86,24 +86,24 @@ class NovaHdr
 
         $nova_data = $connBuffer->read($msg_size);
 
-        $self = new static;
+        $packet = new NovaPacket();
 
         // if ($msg_size < nova_header_size)
         // is_nova_packet($data)
         $ok = nova_decode($nova_data,
-            $self->service,
-            $self->method,
-            $self->ip,
-            $self->port,
-            $self->seq,
-            $self->attach,
-            $self->thriftBin);
+            $packet->service,
+            $packet->method,
+            $packet->ip,
+            $packet->port,
+            $packet->seq,
+            $packet->attach,
+            $packet->thriftBin);
 
-        if ($ok) {
+        if (!$ok) {
             sys_abort("nova_decode fail, hex: " . bin2hex($nova_data));
         }
-        $self->ip = long2ip($self->ip);
+        $packet->ip = long2ip($packet->ip);
 
-        return $self;
+        return $packet;
     }
 }

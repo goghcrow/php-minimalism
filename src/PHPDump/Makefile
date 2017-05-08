@@ -1,7 +1,7 @@
 include config.mk
 include sources.mk
 
-.PHONY: clean check phar
+.PHONY: clean phar
 
 load.php: $(SOURCES)
 	$(PHP) make-loader.php $^ > $@
@@ -16,4 +16,3 @@ clean:
 
 check: load.php
 	$(PHP) $(PHPUNIT) -c phpunit.xml
-

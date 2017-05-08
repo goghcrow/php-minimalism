@@ -10,7 +10,7 @@ if (!isset($argv[3])) {
     exit(2);
 }
 
-$phar = new Phar($argv[1]);
+$phar = new Phar("/Users/chuxiaofeng/Documents/zan-dev-doc/" . $argv[1]);
 
 foreach (array_slice($argv, 2) as $file) {
     $phar->addFile(__DIR__ . "/$file", $file);

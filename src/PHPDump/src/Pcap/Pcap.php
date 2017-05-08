@@ -24,32 +24,39 @@ class Pcap
     public $uC;
 
     /**
-     * @var Buffer $buffer pcap buffer
-     */
-    public $buffer;
-
-    /**
      * @var PcapHdr
      */
     public $pcap_hdr;
 
-    public $novaPacketHandler;
+    /**
+     * @var Buffer $buffer pcap buffer
+     */
+    private $buffer;
 
     /**
-     * @var Buffer[] $novaConnsBuffers
+     * @var Connection[]
      *
      * srcIp:scrPort-dstIp:dstPort => MemoryBuffer
      * 每条虚拟连接一个Buffer, 用于处理粘包
      */
-    public $novaConnsBuffers = [];
+    private $connections = [];
 
     // TODO 计算 tcp segment 真实长度, 计算是否捕获完整
-    public $lastSeqLen = [];
+    // private $lastSeqLen = [];
 
-    public function __construct(Buffer $buffer, callable $novaPacketHandler)
+    /**
+     * @var Protocol[]
+     */
+    public static $protocols = [];
+
+    public function __construct(Buffer $buffer)
     {
         $this->buffer = $buffer;
-        $this->novaPacketHandler = $novaPacketHandler;
+    }
+
+    public static function registerProtocol(Protocol $protocol)
+    {
+        static::$protocols[] = $protocol;
     }
 
     private function unpackGlobalHdr()
@@ -59,9 +66,9 @@ class Pcap
         }
     }
 
-    private function unpackPacketHdr()
+    private function unpackRecordHdr()
     {
-        return PacketHdr::unpack($this->buffer, $this);
+        return RecordHdr::unpack($this->buffer, $this);
     }
 
     private function unpackLinuxSLL(Buffer $recordBuffer)
@@ -79,19 +86,9 @@ class Pcap
         return TCPHdr::unpack($recordBuffer, $this);
     }
 
-    private function unpackNova(Buffer $connBuffer)
-    {
-        return NovaHdr::unpack($connBuffer, $this);
-    }
-
     private function isRecordReceiveCompleted()
     {
-        return PacketHdr::isReceiveCompleted($this->buffer, $this);
-    }
-
-    private function isNovaReceiveCompleted(Buffer $connBuffer)
-    {
-        return NovaHdr::isReceiveCompleted($connBuffer, $this);
+        return RecordHdr::isReceiveCompleted($this->buffer, $this);
     }
 
     public function captureLoop()
@@ -102,7 +99,7 @@ class Pcap
         while ($this->isRecordReceiveCompleted()) {
 
             /* 1. Read packet header */
-            $rec_hdr = $this->unpackPacketHdr();
+            $rec_hdr = $this->unpackRecordHdr();
 
             /* 2. Read packet raw data */
             $incl_len = $rec_hdr->incl_len;
@@ -147,38 +144,24 @@ class Pcap
             $dstPort = $tcp_hdr->destination_port;
 
             $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
-            if (!isset($this->novaConnsBuffers[$connKey])) {
-                // fitler nova packet： buffer size < 37时候， 这里的判断有点问题，
-                if (NovaHdr::detect($recordBuffer)) {
-                    $this->novaConnsBuffers[$connKey] = BufferFactory::make();
-                } else {
-                    continue;
+
+            if (isset($this->connections[$connKey])) {
+                $connection = $this->connections[$connKey];
+                if ($recordBuffer->readableBytes() > 0) {
+                    // move bytes
+                    $connection->buffer->write($recordBuffer->readFull());
+                    $connection->loopAnalyze();
                 }
-            }
-
-            /** @var Buffer $connBuffer */
-            $connBuffer = $this->novaConnsBuffers[$connKey];
-
-            // move bytes
-            $connBuffer->write($recordBuffer->readFull());
-
-            // 这里有个问题: 如果tcpdump 捕获的数据不全
-            // 需要使用对端回复的ip分节的 ack-1 来确认此条ip分节的长度
-            // 从而检查到接受数据是否有问题, 这里简化处理, 没有检测
-
-            while (true) {
-                if (!$this->isNovaReceiveCompleted($connBuffer)) {
-                    continue 2;
-                }
-
-                // TODO refactor
-                $novaPacket = $this->unpackNova($connBuffer);
-                try {
-                    $fn = $this->novaPacketHandler;
-                    $fn($novaPacket, $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
-                } catch (\Exception $ex) {
-                    echo $ex, "\n";
-                    sys_abort("handle nova pack fail");
+            } else {
+                // 检查该连接应用层协议
+                foreach (static::$protocols as $protocol) {
+                    if ($protocol->detect($recordBuffer)) {
+                        $this->connections[$connKey] = new Connection(
+                            $srcIp, $srcPort, $dstIp, $dstPort,
+                            $protocol,
+                            $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
+                        break;
+                    }
                 }
             }
         }

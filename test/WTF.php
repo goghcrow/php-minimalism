@@ -1,5 +1,41 @@
 <?php
 
+class A
+{
+    private $flag;
+
+    public function __construct()
+    {
+        $this->flag = false;
+
+        $this->init();
+    }
+
+    public function init()
+    {
+        // debug here
+        if ($this->flag) {
+            return;
+        }
+
+        $this->flag = true;
+        echo "init\n";
+    }
+
+    public function __debugInfo()
+    {
+        $this->flag = true;
+        return [
+            "flag" => false,
+        ];
+    }
+}
+
+new A();
+exit;
+
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 function λ()
 {

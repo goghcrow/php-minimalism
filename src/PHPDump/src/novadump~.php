@@ -1,9 +1,14 @@
 #!/usr/bin/env php
 <?php
-namespace Minimalism\PHPDump;
+namespace _;
 
-use Minimalism\PHPDump\Terminal as T;
+use _\Terminal as T;
 
+//$filter = new NovaPacketFilter(null,null);
+//$handler = new NovaPacketHandler($filter, null);
+//$novadump = new NovaDump($handler);
+//$novadump->readFile("/Users/chuxiaofeng/Documents/php-minimalism/src/PHPDump/src/scrm.pcap");
+//exit;
 
 $usage = <<<USAGE
 Usage: 

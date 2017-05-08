@@ -2,102 +2,126 @@
 
 namespace Minimalism\PHPDump;
 
-
-use Minimalism\Buffer\Buffer;
-use Minimalism\PHPDump\Buffer\BufferFactory;
+use Minimalism\PHPDump\Nova\NovaLocalCodec;
+use Minimalism\PHPDump\Nova\NovaCopy;
+use Minimalism\PHPDump\Nova\NovaPacket;
+use Minimalism\PHPDump\Nova\NovaPacketFilter;
+use Minimalism\PHPDump\Nova\NovaProtocol;
 use Minimalism\PHPDump\Pcap\Pcap;
 
-class NovaDump
-{
-    /**
-     * @var Buffer
-     */
-    public $buffer;
+$usage = <<<USAGE
+Usage: 
+    读取tcpdump pcap流或pcap文件, 实时解析nova请求, 支持tcpdump表达式过滤与nova服务过滤, 支持导出nova请求
 
-    public $pcap;
-    /** @var \swoole_process  */
-    public $proc;
-    public $pid;
+    novadump --app=<应用名称> --path=<项目根路径> 
+             -s=<服务fnmatch表达式> -m=<方法fnmatch表达式>
+             --copy=<导出nova请求到nova-cli格式文件>
+             --filter=<tcpdump过滤表达式> 
+             --file=<pcap文件>   
+    
+    [建议] 填写--app= 与 --path= 否则不予解开thrift包, -s -m 过滤函数为fnmatch
+     
+    [example]:
+    
+    # 抓取本机所有nova包, 不解析请求参数与相应
+    novadump
+    
+    # [推荐] 抓取本机pf-api应用的nova服务包 并解析请求参数与相应
+    novadump --app=pf-api --path=/home/www/pf-api
+    
+    # 抓取 host 127.0.0.1 and port 8000 nova包, 不解析请求参数与相应
+    novadump --filter='tcp and host 127.0.0.1 and port 8000'
+    
+    # 抓取 pf-api and host 127.0.0.1 and port 8000 nova包, 解析请求参数与相应
+    novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
+    
+    # 抓取 pf-api and 127.0.0.1：8000 service 匹配 com.youzan.service.* 方法匹配 getBy* 的nova包
+    novadump --app=pf-api --path=/home/www/pf-api --filter='tcp and host 127.0.0.1 and port 8000'
+             -s=com.youzan.service.* -m=getBy*
 
-    public function __construct(callable $novaPacketHandler)
-    {
-        $this->buffer = BufferFactory::make();
-        $this->pcap = new Pcap($this->buffer, $novaPacketHandler);
+    # 从tcpdump pcap文件读取nova包
+    tcpdump -w /path/to/dump.pcap
+    novadump --app=pf-api --path=/home/www/pf-api --file=/path/to/dump.pcap(phar包需要绝对路径)
+    
+    # 抓取 scrm-api nova包并导出
+    novadump.php --app scrm-api --path /home/www/scrm-api/ --copy /path/to/nova.log
+
+    [注意] 1. 暂不支持 PcapNG格式
+          2. 仅仅适用于公司 centos 环境
+             tcpdump version 4.1-PRE-CVS_2016_05_10
+             libpcap version 1.4.0
+             超过65535byte的nova包受限于tcpdump版本捕获字节数不足会导致程序退出
+USAGE;
+
+$self = __FILE__;
+if (isset($argv[1]) && $argv[1] === "install") {
+    `chmod +x $self && cp $self /usr/local/bin/novadump`;
+    exit();
+}
+
+if (isset($argv[1]) && in_array($argv[1], ["help", "-h", "--help"], true)) {
+    echo "\033[1m$usage\033[0m\n";
+    exit(1);
+}
+
+if (trim(`whoami`) !== "root") {
+    sys_abort("请使用root权限运行");
+}
+
+if (PHP_OS === "Darwin") {
+    sys_abort("暂时只支持Linux");
+}
+
+$a = getopt("s:m:", ["app:", "path:", "filter:", "file:", "copy:"]);
+if (isset($a["app"]) && isset($a["path"])) {
+    $appName = $a["app"];
+    $path = $a["path"];
+    NovaLocalCodec::init($appName, $path);
+}
+
+$pcapFile = null;
+$tcpFilter = "";
+$servicePattern = null;
+$methodPattern = null;
+$exportFile = null;
+
+if (isset($a["file"])) {
+    if (!is_readable($a["file"]) || is_dir($a["file"])) {
+        sys_abort("can not read file {$a["file"]}");
     }
+    $pcapFile = $a["file"];
+} else if (isset($a["filter"])) {
+    $tcpFilter = $a["filter"];
+} else {
+    $tcpFilter = "tcp";
+}
 
-    public function tcpdump($filter = "")
-    {
-        $proc = new \swoole_process(function(\swoole_process $proc) use($filter) {
-            $args = ["-i", "any", "-s", "0","-U", "-w", "-"];
+if (isset($a["s"])) {
+    $servicePattern = $a["s"];
+}
 
-            // 旧版本tcpdump -s 0
-            // tcpdump version 4.1-PRE-CVS_2016_05_10
-            // libpcap version 1.4.0
-            // Setting snaplen to 0 sets it to the default of 65535
-            // 但是, 新版本
-            // tcpdump.4.9.0 version 4.9.0
-            // libpcap version 1.8.1
-            // Setting snaplen to 0 sets it to the default of 262144
-            // 因为 -s 0 的snaplen > 65535
-            // -s 0 等于抓取最大值
+if (isset($a["m"])) {
+    $methodPattern = $a["m"];
+}
 
-            if ($filter) {
-                $args[] = $filter;
-            }
-            $proc->exec("/usr/sbin/tcpdump", $args);
-            $proc->exit();
-        }, true, 1);
+if (array_key_exists("copy", $a)) {
+    $exportFile = $a["copy"];
+}
 
-        $this->pid = $proc->start();
-        if ($this->pid === false) {
-            sys_abort("fork fail");
-        }
-        $this->proc = $proc;
-        return $proc->pipe;
-    }
 
-    public function readFile($file)
-    {
-        swoole_async_read($file, function($filename, $content) {
-            if ($content === "") {
-                swoole_event_exit();
-            } else {
-                $this->buffer->write($content);
-                $this->pcap->captureLoop();
-            }
-        });
-    }
+Pcap::registerProtocol(new NovaProtocol());
+$novaFilter = new NovaPacketFilter($servicePattern, $methodPattern);
+NovaPacket::registerBefore($novaFilter);
+if ($exportFile) {
+    $novaCopy = new NovaCopy($exportFile);
+    NovaPacket::registerAfter($novaCopy);
+}
 
-    /**
-     * sudo tcpdump -i any -s 0 -U -w - host 10.9.97.143 and port 8050 | hexdump
-     * sudo tcpdump -i any -s0 -U -w - port 8050 | php novadump.php
-     * @param int|resource $fd
-     */
-    public function readLoop($fd = STDIN)
-    {
-        swoole_event_add($fd, function($fd) {
-            static $i = 0;
 
-            if ($this->proc) {
-                // hack~
-                // !!!! buffer 太小会造成莫名其妙 pack包数据有问题....
-                $recv = $this->proc->read(1024 * 1024 * 2);
-                // swoole_process 将标准错误与标准输出重定向到一起了..这里先pass到两行tcpdump的标准错误输出
-                // tcpdump 新版本 stdout -> stderr -> stderr -> stdout 顺序输出, 应该过滤掉 2, 3
-                if (++$i <= 2) {
-                    sys_echo($recv);
-                    $recv = "";
-                }
-            } else {
-                $recv = stream_get_contents($fd);
-            }
-            // Hex::dump($recv, "vvv/8/6");
-            $this->buffer->write($recv);
-            $this->pcap->captureLoop();
-        });
-
-        register_shutdown_function(function() { `kill -9 {$this->pid}`; });
-        // 控制 register_shutdown_function 执行顺序, 否则 kill 会比event_wait先执行
-        swoole_event_wait();
-    }
+$phpDump = new PHPDump();
+if ($pcapFile) {
+    $phpDump->readFile($pcapFile);
+} else {
+    `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
+    $phpDump->readTcpdump($tcpFilter);
 }

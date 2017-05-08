@@ -14,12 +14,12 @@ class NovaPacketFilter
         $this->methodPattern = strtolower($methodPattern);
     }
 
-    public function matchService($service)
+    private function matchService($service)
     {
         return fnmatch($this->servicePattern, strtolower($service));
     }
 
-    public function matchMethod($method)
+    private function matchMethod($method)
     {
         return fnmatch($this->methodPattern, strtolower($method));
     }
@@ -29,8 +29,11 @@ class NovaPacketFilter
         return $service === "com.youzan.service.test" && ($method === "ping" || $method === "pong");
     }
 
-    public function __invoke($service, $method)
+    public function __invoke(NovaPacket $novaPacket)
     {
+        $service = $novaPacket->service;
+        $method = $novaPacket->method;
+
         $serviceMatched = $this->matchService($service);
         $methodMatched = $this->matchMethod($method);
 

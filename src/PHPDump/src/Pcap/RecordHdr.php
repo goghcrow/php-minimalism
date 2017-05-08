@@ -1,10 +1,4 @@
 <?php
-/**
- * Created by IntelliJ IDEA.
- * User: chuxiaofeng
- * Date: 17/5/7
- * Time: 下午9:38
- */
 
 namespace Minimalism\PHPDump\Pcap;
 
@@ -12,7 +6,7 @@ namespace Minimalism\PHPDump\Pcap;
 use Minimalism\PHPDump\Buffer\Buffer;
 
 /**
- * Class PacketHdr
+ * Class RecordHdr
  * Packet Header
  * @package Minimalism\PHPDump\Pcap
  *
@@ -24,7 +18,7 @@ use Minimalism\PHPDump\Buffer\Buffer;
  * } pcaprec_hdr_t;
  *
  */
-class PacketHdr
+class RecordHdr
 {
     const SIZE = 16;
 
@@ -56,7 +50,7 @@ class PacketHdr
             sys_abort("buffer is too small to read packet header");
         }
 
-        $hdr = $buffer->get(self::SIZE);
+        $hdr = $buffer->read(self::SIZE);
         return self::unpackFromString($hdr, $pcap);
     }
 

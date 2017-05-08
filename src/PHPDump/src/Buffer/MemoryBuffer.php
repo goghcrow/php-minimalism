@@ -137,7 +137,11 @@ class MemoryBuffer implements Buffer
         if ($offset < 0 || $offset + $len > $this->buffer->capacity) {
             throw new \InvalidArgumentException(__METHOD__ . ": offset=$offset, len=$len, capacity={$this->buffer->capacity}");
         }
-        return $this->buffer->write($offset, $bytes);
+        if (strlen($bytes) > 0) {
+            return $this->buffer->write($offset, $bytes);
+        } else {
+            return false;
+        }
     }
 
     private function expand($size)
@@ -151,15 +155,19 @@ class MemoryBuffer implements Buffer
     // IDE Debugger
     public function __debugInfo()
     {
-        return [
-            "string" => $this->__toString(),
-            "capacity" => $this->capacity(),
-            "readerIndex" => $this->readerIndex,
-            "writerIndex" => $this->writerIndex,
-            "prependableBytes" => $this->prependableBytes(),
-            "readableBytes" => $this->readableBytes(),
-            "writableBytes" => $this->writableBytes(),
-        ];
+        if ($this->buffer) {
+            return [
+                "string" => $this->__toString(),
+                "capacity" => $this->capacity(),
+                "readerIndex" => $this->readerIndex,
+                "writerIndex" => $this->writerIndex,
+                "prependableBytes" => $this->prependableBytes(),
+                "readableBytes" => $this->readableBytes(),
+                "writableBytes" => $this->writableBytes(),
+            ];
+        } else {
+            return [];
+        }
     }
 }
 

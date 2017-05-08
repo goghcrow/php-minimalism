@@ -9,6 +9,40 @@ use Minimalism\PHPDump\Buffer\Buffer;
  * Class PcapHdr
  * @package Minimalism\PHPDump\Pcap
  *
+ * Packet structure
+ *
+ * +---------------------------+
+ * |         Packet type       |
+ * |         (2 Octets)        |
+ * +---------------------------+
+ * |        ARPHRD_ type       |
+ * |         (2 Octets)        |
+ * +---------------------------+
+ * | Link-layer address length |
+ * |         (2 Octets)        |
+ * +---------------------------+
+ * |    Link-layer address     |
+ * |         (8 Octets)        |
+ * +---------------------------+
+ * |        Protocol type      |
+ * |         (2 Octets)        |
+ * +---------------------------+
+ * |           Payload         |
+ * .                           .
+ * .                           .
+ * .                           .
+ *
+ * Description
+ *
+ * The packet type field is in network byte order (big-endian); it contains a value that is one of:
+ *
+ * 0, if the packet was specifically sent to us by somebody else;
+ * 1, if the packet was broadcast by somebody else;
+ * 2, if the packet was multicast, but not broadcast, by somebody else;
+ * 3, if the packet was sent to somebody else by somebody else;
+ * 4, if the packet was sent by us.
+ * The ARPHRD_ type field is in network byte order; it contains a Linux ARPHRD_ value for the link-layer device type.
+ *
  * typedef struct pcap_hdr_s {
  *      guint32 magic_number;   // magic number
  *      guint16 version_major;  // major version number
@@ -29,6 +63,9 @@ use Minimalism\PHPDump\Buffer\Buffer;
 class PcapHdr
 {
     const SIZE = 24;
+
+    // http://www.tcpdump.org/linktypes.html
+    const LINKTYPE_LINUX_SLL = 113;
 
     public $magic_number;
     public $version_major;
@@ -77,7 +114,7 @@ class PcapHdr
         $pcap_hdr = unpack(implode($hdr), $buffer->read(20));
         $pcap_hdr["magic_number"] = $magic_number;
 
-        if ($pcap_hdr["network"] !== 113) {
+        if ($pcap_hdr["network"] !== self::LINKTYPE_LINUX_SLL) {
             sys_abort("only support special Linux “cooked” capture");
         }
 

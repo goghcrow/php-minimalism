@@ -14,13 +14,18 @@ class TCodec
         $this->reader = new TBinaryReader($buffer);
     }
 
+    /**
+     * @return ThriftPacket
+     */
     public function decode()
     {
-        list($type, $name, $seqId) = $this->reader->readMessageBegin();
-        $fields = $this->decodeStruct();
+        $packet = new ThriftPacket();
+
+        list($packet->type, $packet->name, $packet->seqId) = $this->reader->readMessageBegin();
+        $packet->fields = $this->decodeStruct();
         $this->reader->readMessageEnd();
 
-        return [$type, $name, $seqId, $fields];
+        return $packet;
     }
 
     private function decodeStruct()
