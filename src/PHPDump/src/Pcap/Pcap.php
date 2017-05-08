@@ -145,14 +145,7 @@ class Pcap
 
             $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
 
-            if (isset($this->connections[$connKey])) {
-                $connection = $this->connections[$connKey];
-                if ($recordBuffer->readableBytes() > 0) {
-                    // move bytes
-                    $connection->buffer->write($recordBuffer->readFull());
-                    $connection->loopAnalyze();
-                }
-            } else {
+            if (!isset($this->connections[$connKey])) {
                 // 检查该连接应用层协议
                 foreach (static::$protocols as $protocol) {
                     if ($protocol->detect($recordBuffer)) {
@@ -162,6 +155,15 @@ class Pcap
                             $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
                         break;
                     }
+                }
+            }
+
+            if (isset($this->connections[$connKey])) {
+                $connection = $this->connections[$connKey];
+                if ($recordBuffer->readableBytes() > 0) {
+                    // move bytes
+                    $connection->buffer->write($recordBuffer->readFull());
+                    $connection->loopAnalyze();
                 }
             }
         }
