@@ -145,26 +145,62 @@ class Pcap
 
             $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
 
-            if (!isset($this->connections[$connKey])) {
-                // 检查该连接应用层协议
-                foreach (static::$protocols as $protocol) {
-                    if ($protocol->detect($recordBuffer)) {
-                        $this->connections[$connKey] = new Connection(
-                            $srcIp, $srcPort, $dstIp, $dstPort,
-                            $protocol,
-                            $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
-                        break;
-                    }
-                }
-            }
+
 
             if (isset($this->connections[$connKey])) {
                 $connection = $this->connections[$connKey];
-                if ($recordBuffer->readableBytes() > 0) {
-                    // move bytes
-                    $connection->buffer->write($recordBuffer->readFull());
-                    $connection->loopAnalyze();
+
+                if ($connection->isDetected()) {
+                    goto loopAnalyze;
+                } else {
+                    foreach (static::$protocols as $protocol) {
+                        $detectedState = $protocol->detect($recordBuffer, $connection);
+                        switch ($detectedState) {
+                            case Protocol::DETECTED:
+                                $connection->setProtocol($protocol);
+                                goto loopAnalyze;
+
+                            case Protocol::DETECT_WAIT:
+                                break;
+                            case Protocol::UNDETECTED:
+                            default:
+                                break;
+                        }
+                    }
                 }
+
+            } else {
+                $connection = new Connection($srcIp, $srcPort, $dstIp, $dstPort, $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
+
+                // 检查该连接应用层协议
+                foreach (static::$protocols as $protocol) {
+                    $detectedState = $protocol->detect($recordBuffer, $connection);
+                    switch ($detectedState) {
+                        case Protocol::DETECTED:
+                            $connection->setProtocol($protocol);
+                            $this->connections[$connKey] = $connection;
+                            goto loopAnalyze;
+
+                        case Protocol::DETECT_WAIT:
+                            // 暂时持有未检测到协议的连接
+                            $this->connections[$connKey] = $connection;
+                            break;
+
+                        case Protocol::UNDETECTED:
+                        default:
+                            // do nothing 继续检测其他协议
+                            break;
+                    }
+                }
+            }
+            return;
+
+
+            loopAnalyze:
+            if ($recordBuffer->readableBytes() > 0) {
+                // move bytes
+                $connection->buffer->write($recordBuffer->read(PHP_INT_MAX));
+                $connection->loopAnalyze();
             }
         }
     }

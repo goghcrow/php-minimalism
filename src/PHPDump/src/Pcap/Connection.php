@@ -3,6 +3,7 @@
 namespace Minimalism\PHPDump\Pcap;
 
 
+use Minimalism\PHPDump\Buffer\Buffer;
 use Minimalism\PHPDump\Buffer\BufferFactory;
 
 class Connection
@@ -12,21 +13,52 @@ class Connection
     public $srcPort;
     public $dstPort;
 
+    /**
+     * @var RecordHdr
+     */
     public $recordHdr;
+
+    /**
+     * @var LinuxSLLHdr
+     */
     public $linuxSLLHdr;
+
+    /**
+     * @var IPHdr
+     */
     public $IPHdr;
+
+    /**
+     * @var TCPHdr
+     */
     public $TCPHdr;
 
+    /**
+     * @var Buffer
+     */
     public $buffer;
 
+    /**
+     * @var Protocol
+     */
     public $protocol;
+
+    /**
+     * 当前连接未解析完成的包
+     *
+     * @var Packet $currentPacket
+     *
+     * 有的协议 在isReceiveCompleted已经尝试parser一次
+     * 可以暂时保存起来
+     * 然后unpack中可以直接获取使用
+     */
+    public $currentPacket;
 
     public function __construct(
         $srcIP,
         $srcPort,
         $dstIP,
         $dstPort,
-        Protocol $protocol,
         RecordHdr $recordHdr,
         LinuxSLLHdr $linuxSLLHdr,
         IPHdr $IPHdr,
@@ -38,14 +70,22 @@ class Connection
         $this->dstIP = $dstIP;
         $this->dstPort = $dstPort;
 
-        $this->protocol = $protocol;
-
         $this->recordHdr = $recordHdr;
         $this->linuxSLLHdr = $linuxSLLHdr;
         $this->IPHdr = $IPHdr;
         $this->TCPHdr = $TCPHdr;
 
         $this->buffer = BufferFactory::make();
+    }
+
+    public function setProtocol(Protocol $protocol)
+    {
+        $this->protocol = $protocol;
+    }
+
+    public function isDetected()
+    {
+        return $this->protocol !== null;
     }
 
     public function loopAnalyze()
@@ -55,9 +95,9 @@ class Connection
         // 从而检查到接受数据是否有问题, 这里简化处理, 没有检测
 
         while (true) {
-            if ($this->protocol->isReceiveCompleted($this->buffer)) {
+            if ($this->protocol->isReceiveCompleted($this)) {
 
-                $packet = $this->protocol->unpack($this->buffer);
+                $packet = $this->protocol->unpack($this);
 
                 if ($packet->beforeAnalyze()) {
                     try {

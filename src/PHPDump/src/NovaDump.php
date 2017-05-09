@@ -2,6 +2,7 @@
 
 namespace Minimalism\PHPDump;
 
+use Minimalism\PHPDump\Http\HttpProtocol;
 use Minimalism\PHPDump\Nova\NovaLocalCodec;
 use Minimalism\PHPDump\Nova\NovaCopy;
 use Minimalism\PHPDump\Nova\NovaPacket;
@@ -109,7 +110,9 @@ if (array_key_exists("copy", $a)) {
 }
 
 
-Pcap::registerProtocol(new NovaProtocol());
+//Pcap::registerProtocol(new NovaProtocol());
+Pcap::registerProtocol(new HttpProtocol());
+
 $novaFilter = new NovaPacketFilter($servicePattern, $methodPattern);
 NovaPacket::registerBefore($novaFilter);
 if ($exportFile) {

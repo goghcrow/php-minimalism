@@ -32,5 +32,7 @@ SOURCES = \
     src/Nova/NovaLocalCodec.php \
     src/Nova/NovaCopy.php \
     src/Nova/NovaPacketFilter.php \
+    src/Http/HttpProtocol.php \
+    src/Http/HttpPacket.php \
     src/PHPDump.php \
     src/novadump.php

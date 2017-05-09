@@ -6,3 +6,14 @@
 6. redis
 7. mysql
 8. pcapng
+
+http : 403 https
+tcp flag FIN 清除buffer
+
+DNS
+
+FPM
+
+copy的host与port不对
+
+GenericService.invoke 特殊处理

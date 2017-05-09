@@ -7,23 +7,28 @@ use Minimalism\PHPDump\Buffer\Buffer;
 
 interface Protocol
 {
+    const DETECTED = 1;
+    const UNDETECTED = 2;
+    const DETECT_WAIT = 3;
+
     public function getName();
 
     /**
-     * @param Buffer $buffer
-     * @return bool
+     * @param Buffer $recordBuffer
+     * @param Connection $connection
+     * @return int DETECTED|UNDETECTED|DETECT_WAIT
      */
-    public function isReceiveCompleted(Buffer $buffer);
+    public function detect(Buffer $recordBuffer, Connection $connection);
 
     /**
-     * @param Buffer $buffer
+     * @param Connection $connection
      * @return bool
      */
-    public function detect(Buffer $buffer);
+    public function isReceiveCompleted(Connection $connection);
 
     /**
-     * @param Buffer $buffer
+     * @param Connection $connection
      * @return Packet
      */
-    public function unpack(Buffer $buffer);
+    public function unpack(Connection $connection);
 }

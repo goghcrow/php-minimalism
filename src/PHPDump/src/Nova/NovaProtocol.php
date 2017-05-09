@@ -4,6 +4,7 @@ namespace Minimalism\PHPDump\Nova;
 
 
 use Minimalism\PHPDump\Buffer\Buffer;
+use Minimalism\PHPDump\Pcap\Connection;
 use Minimalism\PHPDump\Pcap\Protocol;
 
 
@@ -49,8 +50,24 @@ class NovaProtocol implements Protocol
         return "Nova";
     }
 
-    public function isReceiveCompleted(Buffer $connBuffer)
+    public function detect(Buffer $recordBuffer, Connection $connection)
     {
+        $hl = self::NOVA_HEADER_COMMON_LEN;
+        if ($recordBuffer->readableBytes() >= $hl) {
+            if (is_nova_packet($recordBuffer->get($hl))) {
+                return Protocol::DETECTED;
+            } else {
+                return Protocol::UNDETECTED;
+            }
+        } else {
+            return Protocol::DETECT_WAIT;
+        }
+    }
+
+    public function isReceiveCompleted(Connection $connection)
+    {
+        $connBuffer = $connection->buffer;
+
         // 4byte nova msg_size
         if ($connBuffer->readableBytes() < self::MSG_SIZE_LEN) {
             return false;
@@ -67,14 +84,10 @@ class NovaProtocol implements Protocol
         return true;
     }
 
-    public function detect(Buffer $recordBuffer)
+    public function unpack(Connection $connection)
     {
-        $hl = self::NOVA_HEADER_COMMON_LEN;
-        return $recordBuffer->readableBytes() >= $hl && is_nova_packet($recordBuffer->get($hl));
-    }
+        $connBuffer = $connection->buffer;
 
-    public function unpack(Buffer $connBuffer)
-    {
         if ($connBuffer->readableBytes() < self::MSG_SIZE_LEN) {
             sys_abort("buffer is too small to read nova msg size");
         }

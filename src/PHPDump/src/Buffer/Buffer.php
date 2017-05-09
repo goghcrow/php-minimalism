@@ -5,13 +5,11 @@ namespace Minimalism\PHPDump\Buffer;
 
 interface Buffer
 {
-    public function get($len);
-
     public function readableBytes();
 
-    public function read($len);
+    public function get($len);
 
-    public function readFull();
+    public function read($len);
 
     public function write($bytes);
 }

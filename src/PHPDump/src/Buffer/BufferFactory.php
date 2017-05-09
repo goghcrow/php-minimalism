@@ -5,6 +5,11 @@ namespace Minimalism\PHPDump\Buffer;
 
 class BufferFactory
 {
+    /**
+     * @param string $type
+     * @param int $size
+     * @return Buffer
+     */
     public static function make($type = "memory", $size = 8192)
     {
         switch ($type) {

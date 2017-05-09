@@ -4,6 +4,7 @@ namespace Minimalism\PHPDump\Http;
 
 
 use Minimalism\PHPDump\Buffer\Buffer;
+use Minimalism\PHPDump\Pcap\Connection;
 use Minimalism\PHPDump\Pcap\Packet;
 use Minimalism\PHPDump\Pcap\Protocol;
 
@@ -91,6 +92,28 @@ use Minimalism\PHPDump\Pcap\Protocol;
  * Host = uri-host [ ":" port ]
  *
  *
+ *
+ * length := 0
+ * read chunk-size, chunk-ext (if any), and CRLF
+ * while (chunk-size > 0) {
+ *      read chunk-data and CRLF
+ *      append chunk-data to decoded-body
+ *      length := length + chunk-size
+ *      read chunk-size, chunk-ext (if any), and CRLF
+ * }
+ * read trailer field
+ * while (trailer field is not empty) {
+ *      if (trailer field is allowed to be sent in a trailer) {
+ *           append trailer field to existing header fields
+ *      }
+ *      read trailer-field
+ * }
+ * Content-Length := length
+ * Remove "chunked" from Transfer-Encoding
+ * Remove Trailer from existing header fields
+ *
+ *
+ *
  * OLD:
  * ==================================================================
  * HTTP-message   = Request | Response     ; HTTP/1.1 messages
@@ -161,24 +184,188 @@ class HttpProtocol implements Protocol
 {
     const CRLF = "\r\n";
     const CRLF2 = "\r\n\r\n";
+    const MAX_HEADER_SIZE = 1024 * 8 + 4;
 
+    private static $maxMethodSize;
     private static $methods = [
-        "GET",
-        "HEAD",
-        "POST",
-        "PUT",
-        "DELETE",
-        "TRACE",
-        "OPTIONS",
-        "CONNECT",
-        "PATCH",
+        "GET"       => 3,
+        "HEAD"      => 4,
+        "POST"      => 4,
+        "PUT"       => 3,
+        "DELETE"    => 6,
+        "TRACE"     => 5,
+        "OPTIONS"   => 7,
+        "CONNECT"   => 7,
+        "PATCH"     => 5,
     ];
+
+    public function __construct()
+    {
+        if (self::$maxMethodSize === null) {
+            $t = array_map("strlen", array_keys(self::$methods));
+            rsort($t);
+            self::$maxMethodSize = $t[0];
+        }
+    }
 
     public function getName()
     {
         return "HTTP";
     }
 
+    /**
+     * @param Buffer $buffer
+     * @param Connection $connection
+     * @return bool
+     */
+    public function detect(Buffer $buffer, Connection $connection)
+    {
+        /* TODO
+        $TCPHdr = $connection->TCPHdr;
+        $isHTTPS = false;
+        if ($TCPHdr->source_port === 443 || $TCPHdr->destination_port === 443) {
+            $isHTTPS = true;
+        }
+
+        $isHTTP = false;
+        if ($TCPHdr->source_port === 80 || $TCPHdr->destination_port === 80) {
+            $isHTTP = true;
+        }
+        */
+
+        if ($buffer->readableBytes() < self::$maxMethodSize) {
+            return Protocol::DETECT_WAIT;
+        }
+
+
+        $t = $buffer->get(self::$maxMethodSize);
+
+        if (substr($t, 0, 4) === "HTTP") {
+            return Protocol::DETECTED;
+        } else {
+            foreach (self::$methods as $method => $len) {
+                if (substr($t, 0, $len) === $method) {
+                    return Protocol::DETECTED;
+                }
+            }
+            return Protocol::UNDETECTED;
+        }
+    }
+
+    /**
+     * @param Connection $connection
+     * @return bool
+     */
+    public function isReceiveCompleted(Connection $connection)
+    {
+        /* @var $packet HttpPacket */
+
+        $buffer = $connection->buffer;
+
+        if ($packet = $connection->currentPacket) {
+            if ($packet->state === HttpPacket::STATE_BODY_FIN) {
+                assert($connection->currentPacket);
+                return true;
+            }
+
+            assert($packet->state === HttpPacket::STATE_HEADER_FIN);
+            if ($packet->isChunked) {
+                return self::parseChunked($buffer, $packet);
+            } else {
+                assert(isset($packet->header["Content-Length"]));
+                if (!isset($packet->header["Content-Length"])) {
+                    print_r($packet);
+                    echo "____________________\n";
+                }
+                $contentLen = intval($packet->header["Content-Length"]);
+                if ($buffer->readableBytes() >= $contentLen) {
+                    $packet->body = $buffer->read($contentLen);
+                    $packet->finishParsingBody();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+        } else {
+            // 检测是否收到完整的header
+            $raw = $buffer->get(self::MAX_HEADER_SIZE);
+            if (strpos($raw, self::CRLF2) === false) {
+                return false; // wait
+            }
+
+            $packet = self::parseHeader($connection);
+
+            // TODO 这里需要假设都有body
+            // 没有content-length继续读...
+            if ($this->hasBody($packet)) {
+                if ($packet->isChunked) {
+                    $packet->header["Content-Length"] = 0;
+                    return self::parseChunked($buffer, $packet);
+                } else {
+                    $header = $packet->header;
+                    if (isset($header["Content-Length"])) {
+                        $contentLen = intval($header["Content-Length"]);
+                        if ($buffer->readableBytes() >= $contentLen) {
+                            $packet->body = $buffer->read($contentLen);
+                            $packet->finishParsingBody();
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        print_r($packet);
+                        sys_abort("http missing content-length");
+                    }
+                }
+            } else {
+                $state = $this->detect($buffer, $connection);
+                switch ($state) {
+                    case Protocol::DETECTED:
+                        return true;
+                        break;
+                    case Protocol::UNDETECTED:
+                        print_r($packet);
+                        sys_abort("malformed http message:" . $buffer->read(PHP_INT_MAX));
+                        break;
+                    case Protocol::DETECT_WAIT:
+                    default:
+                        return false;
+
+                }
+            }
+        }
+    }
+
+    /**
+     * @param Connection $connection
+     * @return Packet
+     */
+    public function unpack(Connection $connection)
+    {
+        // 直接从当前连接获取完整的包
+
+        /* @var $packet HttpPacket */
+        $packet = $connection->currentPacket;
+        $connection->currentPacket = null;
+
+        assert($packet !== null);
+        assert($packet->state === HttpPacket::STATE_BODY_FIN);
+
+        if ($packet->isGzip) {
+            $packet->body = gzdeflate($packet->body);
+        } else if ($packet->isDeflate) {
+            $packet->body = gzinflate($packet->body); // ?!
+        }
+        return $packet;
+    }
+
+    /**
+     * @param HttpPacket $packet
+     * @return bool
+     *
+     * NOTICE: 如果有违反RFC的情况，这里会出错
+     */
     private function hasBody(HttpPacket $packet)
     {
         if ($packet->type === HttpPacket::REQUEST) {
@@ -189,83 +376,26 @@ class HttpProtocol implements Protocol
         assert(false);
     }
 
-    /**
-     * @param Buffer $connBuffer
-     * @return bool
-     */
-    public function isReceiveCompleted(Buffer $connBuffer)
+    private static function parseHeader(Connection $connection)
     {
-        $connBuffer->readableBytes();
-        $raw = $connBuffer->get(PHP_INT_MAX);
-        if (strpos($raw, self::CRLF2) === false) {
-            return false; // wait
-        }
+        $buffer = $connection->buffer;
 
-        $packet = self::parseHeader($raw);
+        // 读取全部parseHeader
+        $raw = $buffer->read(PHP_INT_MAX);
 
-        if ($this->hasBody($packet)) {
-            // TODO chunked
-            if (isset($packet["Content-Length"])) {
-                $contentLen = intval($packet["Content-Length"]);
-                if ($contentLen > strlen($packet->body)) {
-                    return false; // wait
-                } else {
-                    return true;
-                }
-            } else {
-                sys_abort("http missing content-length");
-            }
-        } else {
-            return true;
-        }
-    }
-
-    /**
-     * @param Buffer $buffer
-     * @return bool
-     */
-    public function detect(Buffer $buffer)
-    {
-        return false;
-        // TODO
-        "HTTP/";
-        // TODO: Implement detect() method.
-    }
-
-    /**
-     * @param Buffer $connBuffer
-     * @return Packet
-     */
-    public function unpack(Buffer $connBuffer)
-    {
-        $raw = $connBuffer->readFull();
-        $packet = self::parseHeader($raw);
-
-        if ($this->hasBody($packet)) {
-            $contentLen = intval($packet["Content-Length"]);
-            $packet->body = substr($packet->body, 0, $contentLen);
-
-            $left = substr($packet->body, $contentLen);
-            $connBuffer->write($left);
-        } else {
-            $connBuffer->write($packet->body);
-            unset($packet->body);
-        }
-
-        return $packet;
-    }
-
-    private static function parseHeader($raw)
-    {
         $packet = new HttpPacket();
         assert(strpos($raw, self::CRLF2) !== false);
 
-        list($headerStr, $packet->body) = explode("\r\n\r\n", $raw, 2);
+        list($headerStr, $_/*$packet->body*/) = explode(self::CRLF2, $raw, 2);
+        $buffer->write($_); // body 重新写回buffer
+
         $lines = explode(self::CRLF, $headerStr);
         if (empty($lines)) {
             sys_abort("malformed http start line: $headerStr");
         }
 
+
+        /* {{{ decodeFirstLine */
         $line = explode(" ", $lines[0], 3);
         if (count($line) !== 3) {
             sys_abort("malformed http start line: $headerStr");
@@ -273,6 +403,8 @@ class HttpProtocol implements Protocol
         if (empty($line[0]) || empty($line[1]) || empty($line[2])) {
             sys_abort("malformed http start line: $headerStr");
         }
+        /* }}} */
+
 
         if (substr($line[0], 0, 4) === "HTTP") {
             $packet->type = HttpPacket::RESPONSE;
@@ -285,6 +417,7 @@ class HttpProtocol implements Protocol
         }
         unset($lines[0]);
 
+
         foreach ($lines as $line) {
             $r = explode(':', trim($line), 2);
             if (count($r) !== 2) { // v其实可选
@@ -293,6 +426,78 @@ class HttpProtocol implements Protocol
             $packet->header[trim(ucwords($r[0], "-"))] = trim($r[1]);
         }
 
+
+        $packet->finishParsingHeader($connection);
+
         return $packet;
+    }
+
+    private static function parseChunked(Buffer $buffer, HttpPacket $packet)
+    {
+        $raw = $buffer->get(PHP_INT_MAX);
+
+        while (true) {
+            $pos = strpos($raw, self::CRLF);
+            if ($pos === false) {
+                return false;
+            } else {
+                $raw = substr($raw, $pos + 2);
+                $chunkLine = $buffer->read($pos);
+
+                assert($buffer->readableBytes() >= 2);
+                $crlf = $buffer->read(2);
+                assert($crlf === self::CRLF);
+
+                if ($crlf !== self::CRLF) {
+                    echo "1\n";
+                    print_r($packet);
+                    var_dump($crlf . $buffer->read(PHP_INT_MAX));
+                }
+
+                $chunkLineItems = explode(";", $chunkLine);
+                if (empty($chunkLineItems)) {
+                    sys_abort("malformed http chunk line: $chunkLine");
+                }
+                $chunkSize = hexdec(trim($chunkLineItems[0]));
+                var_dump("~~~~~~~~~~~~~~~~~~~~~~~~~~~$chunkLineItems[0]~~~~~~~~~~~~~~~~~~~~~~~~");
+                var_dump("~~~~~~~~~~~~~~~~~~~~~~~~~~~$chunkSize~~~~~~~~~~~~~~~~~~~~~~~~");
+                unset($chunkLineItems[0]);
+
+                foreach ($chunkLineItems as $line) {
+                    $r = explode(':', trim($line), 2);
+                    if (count($r) !== 2) { // v其实可选
+                        continue;
+                    }
+                    $packet->chunkExt[trim(ucwords($r[0], "-"))] = trim($r[1]);
+                }
+
+                $lastChunk = $chunkSize === 0;
+                if ($lastChunk) {
+                    // TODO: read chunkedTrailer
+                    $crlf = $buffer->read(2);
+                    assert($crlf === self::CRLF);
+                    if ($crlf !== self::CRLF) {
+                        echo "2\n";
+                        print_r($packet);
+                        var_dump($crlf . $buffer->read(PHP_INT_MAX));
+                    }
+                    // append to header
+                    // Remove "chunked" from Transfer-Encoding
+                    // Remove Trailer from existing header fields
+                    $packet->finishParsingBody();
+                    return true;
+                } else {
+                    if ($buffer->readableBytes() >= $chunkSize) {
+                        $packet->header["Content-Length"] += $chunkSize;
+                        // TODO gzip + chunk 每一个块单独解压缩？！
+                        $packet->body .= $buffer->read($chunkSize);
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        assert(false);
     }
 }
