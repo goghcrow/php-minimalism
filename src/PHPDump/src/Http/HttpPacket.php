@@ -57,9 +57,9 @@ class HttpPacket extends Packet
     public function analyze(Connection $connection)
     {
         if ($this->type == self::REQUEST) {
-//            sys_echo(json_encode($this, JSON_PRETTY_PRINT));
+            sys_echo(json_encode($this, JSON_PRETTY_PRINT));
         } else if ($this->type === self::RESPONSE) {
-//            sys_echo(json_encode($this, JSON_PRETTY_PRINT));
+            sys_echo(json_encode($this, JSON_PRETTY_PRINT));
         }
     }
 

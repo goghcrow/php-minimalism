@@ -193,7 +193,7 @@ class Pcap
                     }
                 }
             }
-            return;
+            continue;
 
 
             loopAnalyze:

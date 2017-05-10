@@ -321,17 +321,15 @@ class HttpProtocol implements Protocol
             } else {
                 $state = $this->detect($buffer, $connection);
                 switch ($state) {
+                    case Protocol::DETECT_WAIT:
                     case Protocol::DETECTED:
+                    default:
+                        $packet->finishParsingBody();
                         return true;
                         break;
                     case Protocol::UNDETECTED:
                         print_r($packet);
                         sys_abort("malformed http message:" . $buffer->read(PHP_INT_MAX));
-                        break;
-                    case Protocol::DETECT_WAIT:
-                    default:
-                        return false;
-
                 }
             }
         }
@@ -435,32 +433,22 @@ class HttpProtocol implements Protocol
     private static function parseChunked(Buffer $buffer, HttpPacket $packet)
     {
         $raw = $buffer->get(PHP_INT_MAX);
+        xdebug_break();
 
         while (true) {
+            $raw = $buffer->get(PHP_INT_MAX);
             $pos = strpos($raw, self::CRLF);
             if ($pos === false) {
                 return false;
             } else {
-                $raw = substr($raw, $pos + 2);
                 $chunkLine = $buffer->read($pos);
-
-                assert($buffer->readableBytes() >= 2);
-                $crlf = $buffer->read(2);
-                assert($crlf === self::CRLF);
-
-                if ($crlf !== self::CRLF) {
-                    echo "1\n";
-                    print_r($packet);
-                    var_dump($crlf . $buffer->read(PHP_INT_MAX));
-                }
+                self::readCRLF($buffer);
 
                 $chunkLineItems = explode(";", $chunkLine);
                 if (empty($chunkLineItems)) {
                     sys_abort("malformed http chunk line: $chunkLine");
                 }
                 $chunkSize = hexdec(trim($chunkLineItems[0]));
-                var_dump("~~~~~~~~~~~~~~~~~~~~~~~~~~~$chunkLineItems[0]~~~~~~~~~~~~~~~~~~~~~~~~");
-                var_dump("~~~~~~~~~~~~~~~~~~~~~~~~~~~$chunkSize~~~~~~~~~~~~~~~~~~~~~~~~");
                 unset($chunkLineItems[0]);
 
                 foreach ($chunkLineItems as $line) {
@@ -474,13 +462,7 @@ class HttpProtocol implements Protocol
                 $lastChunk = $chunkSize === 0;
                 if ($lastChunk) {
                     // TODO: read chunkedTrailer
-                    $crlf = $buffer->read(2);
-                    assert($crlf === self::CRLF);
-                    if ($crlf !== self::CRLF) {
-                        echo "2\n";
-                        print_r($packet);
-                        var_dump($crlf . $buffer->read(PHP_INT_MAX));
-                    }
+                    self::readCRLF($buffer);
                     // append to header
                     // Remove "chunked" from Transfer-Encoding
                     // Remove Trailer from existing header fields
@@ -491,6 +473,8 @@ class HttpProtocol implements Protocol
                         $packet->header["Content-Length"] += $chunkSize;
                         // TODO gzip + chunk 每一个块单独解压缩？！
                         $packet->body .= $buffer->read($chunkSize);
+                        self::readCRLF($buffer);
+                        continue;
                     } else {
                         return false;
                     }
@@ -499,5 +483,12 @@ class HttpProtocol implements Protocol
         }
 
         assert(false);
+    }
+
+    private static function readCRLF(Buffer $buffer)
+    {
+        assert($buffer->readableBytes() >= 2);
+        $crlf = $buffer->read(2);
+        assert($crlf === self::CRLF);
     }
 }
