@@ -2,6 +2,8 @@
 
 namespace Minimalism\PHPDump;
 
+use Minimalism\PHPDump\Http\HttpCopy;
+use Minimalism\PHPDump\Http\HttpPacket;
 use Minimalism\PHPDump\Http\HttpProtocol;
 use Minimalism\PHPDump\Nova\NovaLocalCodec;
 use Minimalism\PHPDump\Nova\NovaCopy;
@@ -18,7 +20,8 @@ Usage:
              -s=<服务fnmatch表达式> -m=<方法fnmatch表达式>
              --copy=<导出nova请求到nova-cli格式文件>
              --filter=<tcpdump过滤表达式> 
-             --file=<pcap文件>   
+             --file=<pcap文件>
+             --protocol=<逗号分隔协议列表,默认nova，支持nova,http>
     
     [建议] 填写--app= 与 --path= 否则不予解开thrift包, -s -m 过滤函数为fnmatch
      
@@ -73,7 +76,7 @@ if (PHP_OS === "Darwin") {
     sys_abort("暂时只支持Linux");
 }
 
-$a = getopt("s:m:", ["app:", "path:", "filter:", "file:", "copy:"]);
+$a = getopt("s:m:", ["app:", "path:", "filter:", "file:", "copy:", "protocol:"]);
 if (isset($a["app"]) && isset($a["path"])) {
     $appName = $a["app"];
     $path = $a["path"];
@@ -110,14 +113,29 @@ if (array_key_exists("copy", $a)) {
 }
 
 
-//Pcap::registerProtocol(new NovaProtocol());
-Pcap::registerProtocol(new HttpProtocol());
+$protocolMap = [
+    "nova" => new NovaProtocol(),
+    "http" => new HttpProtocol(),
+];
+
+$protocols = isset($a["protocol"]) ? $a["protocol"] : "nova";
+$protocols = array_map("trim", explode(",", $protocols));
+foreach ($protocols as $protocol) {
+    if (isset($protocolMap[$protocol])) {
+        Pcap::registerProtocol($protocolMap[$protocol]);
+    }
+}
 
 $novaFilter = new NovaPacketFilter($servicePattern, $methodPattern);
 NovaPacket::registerBefore($novaFilter);
 if ($exportFile) {
     $novaCopy = new NovaCopy($exportFile);
     NovaPacket::registerAfter($novaCopy);
+}
+
+if ($exportFile) {
+    $httpCopy = new HttpCopy($exportFile);
+    HttpPacket::registerAfter($httpCopy);
 }
 
 

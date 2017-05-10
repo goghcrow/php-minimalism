@@ -1,19 +1,14 @@
-1. tee pcap 包
-2. -v -vv -vvv
-3. linux ssl address
-4. 超过 65535 包检测
-5. http
-6. redis
-7. mysql
-8. pcapng
+tee pcap 包
+-v -vv -vvv
+linux ssl address 解码错误
+超过 65535 包检测
+pcapng
+tcp flag FIN 清除buffer， 2. 处理 http 1.0 或者 close 可以无content-length 断开连接即可，读数据读到连接断开 ！！！
+http filter
 
-http : 403 https
-tcp flag FIN 清除buffer
+support protocol
 
-DNS
-
+dns
+redis
+mysql
 FPM
-
-copy的host与port不对
-
-GenericService.invoke 特殊处理

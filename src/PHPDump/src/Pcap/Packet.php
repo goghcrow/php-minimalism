@@ -37,18 +37,16 @@ abstract class Packet
         return true;
     }
 
-    public function afterAnalyze(...$args)
+    public function afterAnalyze()
     {
         $terminators = isset(self::$terminators[static::class]) ? self::$terminators[static::class] : [];
         foreach ($terminators as $copyTee) {
-            $copyTee(...$args);
+            $copyTee($this);
         }
     }
 
     /**
      * @param Connection $connection
-     * @return array|null copy 函数 args
-     *  返回null 不需要执行copy, 返回array 执行copy
      */
     abstract public function analyze(Connection $connection);
 }

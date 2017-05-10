@@ -8,11 +8,6 @@ use Minimalism\PHPDump\Buffer\BufferFactory;
 
 class Connection
 {
-    public $srcIP;
-    public $dstIP;
-    public $srcPort;
-    public $dstPort;
-
     /**
      * @var RecordHdr
      */
@@ -54,22 +49,8 @@ class Connection
      */
     public $currentPacket;
 
-    public function __construct(
-        $srcIP,
-        $srcPort,
-        $dstIP,
-        $dstPort,
-        RecordHdr $recordHdr,
-        LinuxSLLHdr $linuxSLLHdr,
-        IPHdr $IPHdr,
-        TCPHdr $TCPHdr
-    )
+    public function __construct(RecordHdr $recordHdr, LinuxSLLHdr $linuxSLLHdr, IPHdr $IPHdr, TCPHdr $TCPHdr)
     {
-        $this->srcIP = $srcIP;
-        $this->srcPort = $srcPort;
-        $this->dstIP = $dstIP;
-        $this->dstPort = $dstPort;
-
         $this->recordHdr = $recordHdr;
         $this->linuxSLLHdr = $linuxSLLHdr;
         $this->IPHdr = $IPHdr;
@@ -101,10 +82,8 @@ class Connection
 
                 if ($packet->beforeAnalyze()) {
                     try {
-                        $copyArgs = $packet->analyze($this);
-                        if ($copyArgs !== null) {
-                            $packet->afterAnalyze(...$copyArgs);
-                        }
+                        $packet->analyze($this);
+                        $packet->afterAnalyze();
                     } catch (\Exception $ex) {
                         echo $ex, "\n";
                         $protocolName = $this->protocol->getName();

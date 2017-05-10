@@ -6,7 +6,8 @@
     }
   ],
   "require": {
-    "php": "^5.6 || ^7.0"
+    "php": "^5.6 || ^7.0",
+    "yz-swoole": "^3.0"
   },
   "autoload": {
     "files": [

@@ -3,7 +3,6 @@
 namespace Minimalism\PHPDump\Nova;
 
 
-use Minimalism\PHPDump\Buffer\Hex;
 use Minimalism\PHPDump\Pcap\Connection;
 use Minimalism\PHPDump\Pcap\Packet;
 use Minimalism\PHPDump\Thrift\ThriftPacket;
@@ -20,6 +19,18 @@ class NovaPacket extends Packet
     public $attach;
     public $thriftBin;
 
+    public $dstIp;
+    public $dstPort;
+
+    /**
+     * @var ThriftPacket
+     */
+    public $thriftPacket;
+
+    /**
+     * @var array
+     */
+    public $thriftLocalArgs;
 
     public function analyze(Connection $connection)
     {
@@ -30,8 +41,6 @@ class NovaPacket extends Packet
         $port = $this->port;
         $attach = $this->attach;
         $thriftBin = $this->thriftBin;
-
-        $isHeartbeat = NovaPacketFilter::isHeartbeat($service, $method);
 
         $srcIp = $connection->IPHdr->source_ip;
         $dstIp = $connection->IPHdr->destination_ip;
@@ -59,11 +68,10 @@ class NovaPacket extends Packet
             sys_echo("attach $_attach", $sec, $usec);
         }
 
-        if ($isHeartbeat) {
-
-        } else {
-            $thriftPacket = ThriftPacket::unpack($thriftBin);
-            $fieldsJson = T::format(json_encode($thriftPacket->fields), T::DIM);
+        $isHeartbeat = NovaPacketFilter::isHeartbeat($service, $method);
+        if ($isHeartbeat === false) {
+            $this->thriftPacket = ThriftPacket::unpack($thriftBin);
+            $fieldsJson = T::format(json_encode($this->thriftPacket->fields), T::DIM);
 
             // nova包头已经包含了 thrift 包中的name, 这里不予显示
             // $thriftPacket->name
@@ -71,19 +79,16 @@ class NovaPacket extends Packet
             // $thriftPacket->seqId
 
             if (NovaLocalCodec::$enable) {
-                $args = NovaLocalCodec::dumpThrift($this, $thriftPacket);
+                $this->thriftLocalArgs = NovaLocalCodec::dumpThrift($this, $this->thriftPacket);
                 sys_echo($fieldsJson);
-                echo "\n";
-                return [$this,  $thriftPacket, $args];
             } else {
                 // TODO -v Hex::dump($thriftBin, "vvv/8/6");
-                $msgType = T::format(TMessageType::getName($thriftPacket->type), T::FG_YELLOW, T::BRIGHT);
+                $msgType = T::format(TMessageType::getName($this->thriftPacket->type), T::FG_YELLOW, T::BRIGHT);
                 sys_echo($msgType);
                 sys_echo($fieldsJson);
             }
         }
 
         echo "\n";
-        return null;
     }
 }

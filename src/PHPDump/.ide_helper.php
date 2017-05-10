@@ -51,3 +51,21 @@ namespace Kdt\Iron\Nova\Protocol {
         public function decode($thriftBin, $_, $_) { return []; }
     }
 }
+
+namespace Com\Youzan\Nova\Framework\Generic\Service {
+    class GenericRequest
+    {
+        /**
+         * @var string
+         */
+        public $serviceName = null;
+        /**
+         * @var string
+         */
+        public $methodName = null;
+        /**
+         * @var string
+         */
+        public $methodParams = null;
+    }
+}

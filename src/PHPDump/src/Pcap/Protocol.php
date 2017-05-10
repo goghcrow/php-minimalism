@@ -3,7 +3,6 @@
 namespace Minimalism\PHPDump\Pcap;
 
 
-use Minimalism\PHPDump\Buffer\Buffer;
 
 interface Protocol
 {
@@ -14,11 +13,10 @@ interface Protocol
     public function getName();
 
     /**
-     * @param Buffer $recordBuffer
      * @param Connection $connection
      * @return int DETECTED|UNDETECTED|DETECT_WAIT
      */
-    public function detect(Buffer $recordBuffer, Connection $connection);
+    public function detect(Connection $connection);
 
     /**
      * @param Connection $connection

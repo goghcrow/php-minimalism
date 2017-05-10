@@ -214,25 +214,12 @@ class HttpProtocol implements Protocol
     }
 
     /**
-     * @param Buffer $buffer
      * @param Connection $connection
      * @return bool
      */
-    public function detect(Buffer $buffer, Connection $connection)
+    public function detect(Connection $connection)
     {
-        /* TODO
-        $TCPHdr = $connection->TCPHdr;
-        $isHTTPS = false;
-        if ($TCPHdr->source_port === 443 || $TCPHdr->destination_port === 443) {
-            $isHTTPS = true;
-        }
-
-        $isHTTP = false;
-        if ($TCPHdr->source_port === 80 || $TCPHdr->destination_port === 80) {
-            $isHTTP = true;
-        }
-        */
-
+        $buffer = $connection->buffer;
         if ($buffer->readableBytes() < self::$maxMethodSize) {
             return Protocol::DETECT_WAIT;
         }
@@ -273,10 +260,6 @@ class HttpProtocol implements Protocol
                 return self::parseChunked($buffer, $packet);
             } else {
                 assert(isset($packet->header["Content-Length"]));
-                if (!isset($packet->header["Content-Length"])) {
-                    print_r($packet);
-                    echo "____________________\n";
-                }
                 $contentLen = intval($packet->header["Content-Length"]);
                 if ($buffer->readableBytes() >= $contentLen) {
                     $packet->body = $buffer->read($contentLen);
@@ -314,12 +297,22 @@ class HttpProtocol implements Protocol
                             return false;
                         }
                     } else {
-                        print_r($packet);
-                        sys_abort("http missing content-length");
+                        // http 1.0 或者 close 可以无content-length 断开连接即可，无粘包问题
+                        $isHttp10 = $packet->httpVer === "HTTP/1.0";
+                        $isConnectionClosed = isset($packet->header["Connection"]) && strtolower($packet->header["Connection"]) === "close";
+
+                        if ($isHttp10 || $isConnectionClosed) {
+                            // 这里怎么表示连接结束 ?!
+                            // TODO 读取 tcp segment 中的 fin 来处理这里的逻辑
+                            return true;
+                        } else {
+                            print_r($packet);
+                            sys_abort("http missing content-length");
+                        }
                     }
                 }
             } else {
-                $state = $this->detect($buffer, $connection);
+                $state = $this->detect($connection);
                 switch ($state) {
                     case Protocol::DETECT_WAIT:
                     case Protocol::DETECTED:
@@ -351,11 +344,32 @@ class HttpProtocol implements Protocol
         assert($packet->state === HttpPacket::STATE_BODY_FIN);
 
         if ($packet->isGzip) {
-            $packet->body = gzdeflate($packet->body);
+            $packet->body = $this->gzDecode($packet->body);
         } else if ($packet->isDeflate) {
-            $packet->body = gzinflate($packet->body); // ?!
+            $packet->body = gzinflate($packet->body); // TODO test ?!
         }
         return $packet;
+    }
+
+    /**
+     * WTF
+     * @param $str
+     * @return string
+     * gzencode() uses the GZIP file format, the same as the gzip command line tool. This file format has a header containing optional metadata, DEFLATE compressed data, and footer containing a CRC32 checksum and length check.
+     * gzcompress() uses the ZLIB format. It has a shorter header serving only to identify the compression format, DEFLATE compressed data, and a footer containing an ADLER32 checksum.
+     * gzdeflate() uses the raw DEFLATE algorithm on its own, which is the basis for both of the other formats.
+     */
+    private function gzDecode($str)
+    {
+        $r = gzdecode($str);
+        if ($r === false) {
+            $r = gzinflate($str);
+            if ($r === false) {
+                $r = gzuncompress($str);
+            }
+            // gzinflate(substr($str,10,-8)); ?? wtf
+        }
+        return $r;
     }
 
     /**
@@ -381,7 +395,7 @@ class HttpProtocol implements Protocol
         // 读取全部parseHeader
         $raw = $buffer->read(PHP_INT_MAX);
 
-        $packet = new HttpPacket();
+        $packet = new HttpPacket($connection);
         assert(strpos($raw, self::CRLF2) !== false);
 
         list($headerStr, $_/*$packet->body*/) = explode(self::CRLF2, $raw, 2);
@@ -421,20 +435,17 @@ class HttpProtocol implements Protocol
             if (count($r) !== 2) { // v其实可选
                 continue;
             }
-            $packet->header[trim(ucwords($r[0], "-"))] = trim($r[1]);
+            $packet->header[trim(ucwords(strtolower($r[0]), "-"))] = trim($r[1]);
         }
 
 
-        $packet->finishParsingHeader($connection);
+        $packet->finishParsingHeader();
 
         return $packet;
     }
 
     private static function parseChunked(Buffer $buffer, HttpPacket $packet)
     {
-        $raw = $buffer->get(PHP_INT_MAX);
-        xdebug_break();
-
         while (true) {
             $raw = $buffer->get(PHP_INT_MAX);
             $pos = strpos($raw, self::CRLF);
@@ -489,6 +500,10 @@ class HttpProtocol implements Protocol
     {
         assert($buffer->readableBytes() >= 2);
         $crlf = $buffer->read(2);
-        assert($crlf === self::CRLF);
+        // assert($crlf === self::CRLF);
+        if ($crlf !== self::CRLF) {
+            debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+            sys_abort("malformed chunk message: " . $buffer->read(PHP_INT_MAX));
+        }
     }
 }

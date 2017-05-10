@@ -34,5 +34,6 @@ SOURCES = \
     src/Nova/NovaPacketFilter.php \
     src/Http/HttpProtocol.php \
     src/Http/HttpPacket.php \
+    src/Http/HttpCopy.php \
     src/PHPDump.php \
     src/novadump.php

@@ -50,11 +50,13 @@ class NovaProtocol implements Protocol
         return "Nova";
     }
 
-    public function detect(Buffer $recordBuffer, Connection $connection)
+    public function detect(Connection $connection)
     {
+        $buffer = $connection->buffer;
+
         $hl = self::NOVA_HEADER_COMMON_LEN;
-        if ($recordBuffer->readableBytes() >= $hl) {
-            if (is_nova_packet($recordBuffer->get($hl))) {
+        if ($buffer->readableBytes() >= $hl) {
+            if (is_nova_packet($buffer->get($hl))) {
                 return Protocol::DETECTED;
             } else {
                 return Protocol::UNDETECTED;
@@ -116,6 +118,8 @@ class NovaProtocol implements Protocol
             sys_abort("nova_decode fail, hex: " . bin2hex($nova_data));
         }
         $packet->ip = long2ip($packet->ip);
+        $packet->dstIp = $connection->IPHdr->destination_ip;
+        $packet->dstPort = $connection->TCPHdr->destination_port;
 
         return $packet;
     }

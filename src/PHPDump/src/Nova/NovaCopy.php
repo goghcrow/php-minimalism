@@ -3,7 +3,6 @@
 namespace Minimalism\PHPDump\Nova;
 
 
-use Minimalism\PHPDump\Thrift\ThriftPacket;
 use Minimalism\PHPDump\Thrift\TMessageType;
 
 
@@ -11,16 +10,21 @@ class NovaCopy
 {
     public $file;
 
+    const GENERIC_SERVICE = "com.youzan.nova.framework.generic.service.GenericService";
+
     public function __construct($file)
     {
         $this->file = $file;
     }
 
-    public function __invoke(NovaPacket $novaPacket, ThriftPacket $thriftPacket, $args)
+    public function __invoke(NovaPacket $novaPacket)
     {
+        $thriftPacket = $novaPacket->thriftPacket;
+        $args = $novaPacket->thriftLocalArgs;
+
         $type = $thriftPacket->type;
-        $ip = $novaPacket->ip;
-        $port = $novaPacket->port;
+        $ip = $novaPacket->dstIp;
+        $port = $novaPacket->dstPort;
         $service = $novaPacket->service;
         $method = $novaPacket->method;
 
@@ -30,10 +34,20 @@ class NovaCopy
             if ($names === null) {
 
             } else {
-                $jsonArgs = json_encode(array_combine($names, $args));
+                if ($service === self::GENERIC_SERVICE) {
+                    $args = array_combine($names, $args);
+                    /* @var \Com\Youzan\Nova\Framework\Generic\Service\GenericRequest */
+                    $request = $args["request"];
+                    $service = $request->serviceName;
+                    $method = $request->methodName;
+                    $jsonArgs = $request->methodParams; // TODO 重新打包, 复杂参数被打包两次，这里解开打一次
+                } else {
+                    $jsonArgs = json_encode(array_combine($names, $args));
+                }
                 $novaCmd = "nova -h=$ip -p=$port -m=$service.$method -a '$jsonArgs'\n";
                 echo $novaCmd;
                 swoole_async_write($this->file, $novaCmd, -1);
+
             }
         }
     }
