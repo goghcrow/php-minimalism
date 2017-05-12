@@ -302,9 +302,16 @@ class HttpProtocol implements Protocol
                         $isConnectionClosed = isset($packet->header["Connection"]) && strtolower($packet->header["Connection"]) === "close";
 
                         if ($isHttp10 || $isConnectionClosed) {
-                            // 这里怎么表示连接结束 ?!
-                            // TODO 读取 tcp segment 中的 fin 来处理这里的逻辑
-                            return true;
+                            // 延迟到连接关闭
+                            $connection->on(Connection::EVT_CLOSE, function() use($connection) {
+                                if ($connection->currentPacket) {
+                                    /* @var HttpPacket $packet */
+                                    $packet = $connection->currentPacket;
+                                    $packet->finishParsingBody();
+                                    $connection->doAnalyze();
+                                }
+                            });
+                            return false;
                         } else {
                             print_r($packet);
                             sys_abort("http missing content-length");
@@ -406,7 +413,6 @@ class HttpProtocol implements Protocol
             sys_abort("malformed http start line: $headerStr");
         }
 
-
         /* {{{ decodeFirstLine */
         $line = explode(" ", $lines[0], 3);
         if (count($line) !== 3) {
@@ -416,7 +422,6 @@ class HttpProtocol implements Protocol
             sys_abort("malformed http start line: $headerStr");
         }
         /* }}} */
-
 
         if (substr($line[0], 0, 4) === "HTTP") {
             $packet->type = HttpPacket::RESPONSE;
@@ -429,7 +434,6 @@ class HttpProtocol implements Protocol
         }
         unset($lines[0]);
 
-
         foreach ($lines as $line) {
             $r = explode(':', trim($line), 2);
             if (count($r) !== 2) { // v其实可选
@@ -437,7 +441,6 @@ class HttpProtocol implements Protocol
             }
             $packet->header[trim(ucwords(strtolower($r[0]), "-"))] = trim($r[1]);
         }
-
 
         $packet->finishParsingHeader();
 
@@ -482,7 +485,6 @@ class HttpProtocol implements Protocol
                 } else {
                     if ($buffer->readableBytes() >= $chunkSize) {
                         $packet->header["Content-Length"] += $chunkSize;
-                        // TODO gzip + chunk 每一个块单独解压缩？！
                         $packet->body .= $buffer->read($chunkSize);
                         self::readCRLF($buffer);
                         continue;

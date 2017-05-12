@@ -86,7 +86,7 @@ class TCPHdr
 
         // 计算options 长度
         $options_len = $tcp["offset"] * 4 - 20;
-        $recordBuffer->read($options_len); // ignoring options
+        $options = $recordBuffer->read($options_len); // ignoring options
 
         $self = new static;
 

@@ -49,6 +49,13 @@ class Connection
      */
     public $currentPacket;
 
+    /**
+     * @var callable[]
+     */
+    private $events;
+
+    const EVT_CLOSE = 1;
+
     public function __construct(RecordHdr $recordHdr, LinuxSLLHdr $linuxSLLHdr, IPHdr $IPHdr, TCPHdr $TCPHdr)
     {
         $this->recordHdr = $recordHdr;
@@ -69,6 +76,19 @@ class Connection
         return $this->protocol !== null;
     }
 
+    public function on($evt, callable $cb)
+    {
+        $this->events[$evt] = $cb;
+    }
+
+    public function trigger($evt, ...$args)
+    {
+        if (isset($this->events[$evt])) {
+            $cb = $this->events[$evt];
+            $cb(...$args);
+        }
+    }
+
     public function loopAnalyze()
     {
         // 这里有个问题: 如果tcpdump 捕获的数据不全
@@ -77,22 +97,25 @@ class Connection
 
         while (true) {
             if ($this->protocol->isReceiveCompleted($this)) {
-
-                $packet = $this->protocol->unpack($this);
-
-                if ($packet->beforeAnalyze()) {
-                    try {
-                        $packet->analyze($this);
-                        $packet->afterAnalyze();
-                    } catch (\Exception $ex) {
-                        echo $ex, "\n";
-                        $protocolName = $this->protocol->getName();
-                        sys_abort("protocol $protocolName pack analyze fail");
-                    }
-                }
-
+                $this->doAnalyze();
             } else {
                 break;
+            }
+        }
+    }
+
+    public function doAnalyze()
+    {
+        $packet = $this->protocol->unpack($this);
+
+        if ($packet->beforeAnalyze()) {
+            try {
+                $packet->analyze($this);
+                $packet->afterAnalyze();
+            } catch (\Exception $ex) {
+                echo $ex, "\n";
+                $protocolName = $this->protocol->getName();
+                sys_abort("protocol $protocolName pack analyze fail");
             }
         }
     }

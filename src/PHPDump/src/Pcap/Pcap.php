@@ -138,11 +138,6 @@ class Pcap
             /* 5. unpack tcp segment */
             $tcp_hdr = $this->unpackTcpHdr($recordBuffer);
 
-            if ($recordBuffer->readableBytes() === 0) {
-                continue;
-            }
-
-
             /* 6. detect and analyze protocol  */
             $srcIp = $ip_hdr->source_ip;
             $dstIp = $ip_hdr->destination_ip;
@@ -151,6 +146,19 @@ class Pcap
 
             $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
 
+            // trigger close event
+            if ($tcp_hdr->flag_FIN) {
+                if (isset($this->connections[$connKey])) {
+                    $connection = $this->connections[$connKey];
+                    $connection->trigger(Connection::EVT_CLOSE);
+                    unset($this->connections[$connKey]); // 关闭之后移除连接
+                    continue;
+                }
+            }
+
+            if ($recordBuffer->readableBytes() === 0) {
+                continue;
+            }
 
             if (isset($this->connections[$connKey])) {
                 $connection = $this->connections[$connKey];

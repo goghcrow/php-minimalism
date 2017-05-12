@@ -53,6 +53,8 @@ use Minimalism\PHPDump\Buffer\Buffer;
  *      guint32 network;        // data link type
  * } pcap_hdr_t;
  *
+ * I4 I2 I2 i4 I4 I4 I4
+ *
  * 注意: tcpdump 产生的是一种Linux “cooked” capture 的 linktype
  * network --> linktype
  * http://www.tcpdump.org/linktypes.html
