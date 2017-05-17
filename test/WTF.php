@@ -1,5 +1,29 @@
 <?php
 
+
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+
+
+
+exit;
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+function int2Bytes($int)
+{
+    return pack("L", $int);
+}
+
+function int2BytesArray($int)
+{
+    return unpack("C*", pack("L", $int));
+}
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+
 /*
 opcache.enable=1
 opcache.enable_cli=1
@@ -202,12 +226,12 @@ call_user_func([Call::class, "method\0trunked"]);
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-class A
+class _
 {
 
 }
 
-class B extends A {
+class B extends _ {
     public $public = 1;
     protected $protected = 2;
     private $private = 3;
@@ -219,7 +243,7 @@ $c = function() {
     // $this->private;
 };
 
-$c = $c->bindTo(new B, A::class);
+$c = $c->bindTo(new B, _::class);
 $c();
 
 

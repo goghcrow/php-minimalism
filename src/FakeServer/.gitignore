@@ -1,0 +1,5 @@
+.idea/
+vendor/
+test/coverage/
+fakeserver.phar
+load.php

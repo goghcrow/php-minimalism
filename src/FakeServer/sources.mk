@@ -1,0 +1,13 @@
+# Sources are in order such that sequentially loading them fully loads the
+# library without triggering the autoloading mechanism
+SOURCES = \
+    src/functions.php \
+    src/Buffer/Buffer.php \
+    src/Buffer/StringBuffer.php \
+    src/Buffer/MemoryBuffer.php \
+    src/Buffer/BinaryStream.php \
+    src/Buffer/BufferFactory.php \
+    src/Buffer/Hex.php \
+    src/MySQL/FakeMySQLServer.php \
+    src/MySQL/MySQLConnection.php \
+    src/MySQL/MySQLProtocol.php

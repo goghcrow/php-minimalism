@@ -1,6 +1,6 @@
 <?php
 
-namespace Minimalism\PHPDump\Buffer;
+namespace Minimalism\FakeServer\Buffer;
 
 use swoole_buffer as SwooleBuffer;
 

@@ -4,9 +4,10 @@ use Minimalism\PHPDump\Util\T;
 
 function sys_echo($s, $sec = null, $usec = null) {
     if ($sec === null) {
-        $sec = time();
+        $time = date("H:i:s");
+    } else {
+        $time = date("H:i:s", $sec);
     }
-    $time = date("H:i:s", $sec);
     if ($sec !== null && $usec !== null) {
         $time .= ".$usec";
     }
@@ -14,7 +15,7 @@ function sys_echo($s, $sec = null, $usec = null) {
 }
 
 function sys_error($s) {
-    $time = date("H:i:s", time());
+    $time = date("H:i:s");
     $s = T::format($s, T::FG_RED);
     fprintf(STDERR, "$time $s\n");
 }
