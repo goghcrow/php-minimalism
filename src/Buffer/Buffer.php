@@ -14,4 +14,6 @@ interface Buffer
     public function readFull();
 
     public function write($bytes);
+
+    public function prepend($bytes);
 }

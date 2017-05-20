@@ -12,10 +12,11 @@ namespace Minimalism\FakeServer\Buffer;
  * @method string read($len)
  * @method string readFull()
  * @method bool write($bytes)
+ * @method bool prepend($bytes)
  */
 class BinaryStream
 {
-    private $buffer;
+    protected $buffer;
 
     public function __construct(Buffer $buffer)
     {

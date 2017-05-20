@@ -24,7 +24,8 @@ class BinaryStream
 
     public function __call($name, $args)
     {
-        $fn = $this->buffer->$name;
+        /** @var callable $fn */
+        $fn = [$this->buffer, $name];
         return $fn(...$args);
     }
 

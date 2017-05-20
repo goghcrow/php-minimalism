@@ -21,7 +21,8 @@ assert($buffer->__toString() === "23456");
 assert($buffer->read(2) === "23");
 $buffer->write("789");
 assert($buffer->__toString() === "456789");
-
+$buffer->prepend("123");
+assert($buffer->__toString() === "123456789");
 
 $buffer = new MemoryBuffer(5);
 $buffer->write("1234");
@@ -29,20 +30,30 @@ assert($buffer->read(1) === "1");
 assert($buffer->__toString() === "234");
 $buffer->write("56");
 assert($buffer->__toString() === "23456");
-assert($buffer->writableBytes() === 0);
-assert($buffer->capacity() === 5);
+assert($buffer->writableBytes() === 1);
+assert($buffer->capacity() === 10);
 assert($buffer->read(2) === "23");
-assert($buffer->prependableBytes() === 2);
-assert($buffer->writableBytes() === 0);
+assert($buffer->prependableBytes() === 6);
+assert($buffer->writableBytes() === 1);
 $buffer->write("789");
-assert($buffer->prependableBytes() === 0);
+assert($buffer->prependableBytes() === 4);
 assert($buffer->readableBytes() === 6);
-assert($buffer->writableBytes() === 6);
-assert($buffer->capacity() === 12);
+assert($buffer->writableBytes() === 0);
+assert($buffer->capacity() === 10);
+
+$buffer = new MemoryBuffer(8);
+$buffer->write("5678");
+$buffer->prepend("34");
+assert($buffer->__toString() === "345678");
+assert($buffer->prependableBytes() === 2);
+$buffer->write(9);
+assert($buffer->prependableBytes() === 4);
+assert($buffer->writableBytes() === 3);
+//echo $buffer->capacity();
+exit;
 
 
 // ObjectPool::create(new Binary(new MemoryBuffer(8192)), 3000);
-
 
 // 性能测试: !!! 关闭xdebug
 

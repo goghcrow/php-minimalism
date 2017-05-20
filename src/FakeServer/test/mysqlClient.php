@@ -6,19 +6,34 @@
 //var_dump($r);
 //exit;
 
-$mysql = new \swoole_mysql();
+function connect_to_fake_serv()
+{
+    $mysql = new \swoole_mysql();
 
-$server = [
-    "host" => "127.0.0.1",
-    "port" => 7777,
-    "user" => "root",
-    "password" => "123456",
-    "database" => "test"
-];
+    $server = [
+        "host" => "127.0.0.1",
+        "port" => 7777,
+        "user" => "root",
+        "password" => "123456",
+        "database" => "test"
+    ];
 
-$mysql->on("close", function() { echo "close\n"; });
+    $mysql->on("close", function() {
+        echo "close\n\n";
+        connect_to_fake_serv();
+    });
 
-$mysql->connect($server, function ($db, $r) {
-    var_dump($db);
-    var_dump($r);
-});
+    $mysql->connect($server, function (\swoole_mysql $mysql, $r) {
+        // echo $mysql->connect_errno, "\n";
+        assert($r === true);
+        echo "connected\n";
+        // var_dump($db);
+        // var_dump($r);
+
+       $mysql->query("select 1", function(\swoole_mysql $mysql, $r) {
+          var_dump($r);
+       });
+    });
+}
+
+connect_to_fake_serv();

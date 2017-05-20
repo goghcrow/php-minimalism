@@ -8,6 +8,9 @@ SOURCES = \
     src/Buffer/BinaryStream.php \
     src/Buffer/BufferFactory.php \
     src/Buffer/Hex.php \
-    src/MySQL/FakeMySQLServer.php \
+    src/MySQL/MySQLCommand.php \
+    src/MySQL/MySQLField.php \
+    src/MySQL/MySQLBinaryStream.php \
     src/MySQL/MySQLConnection.php \
-    src/MySQL/MySQLProtocol.php
+    src/MySQL/FakeMySQLServer.php \
+    src/main.php

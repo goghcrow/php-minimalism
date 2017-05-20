@@ -6,6 +6,9 @@
  * Time: 下午2:22
  */
 
+$secret = "EQZGCJBRGASGU422GBXW4ZLDJVXEQT3FJNKWMUSHHFAVSZKJMY2TQWKDO4ZC43TVI5TEWOLCJUYVQZSJMI4XM22XKF4U43LF1";
+$argv[1] = $secret;
+
 if (!isset($argv[1])) {
     echo <<<USAGE
 Usage

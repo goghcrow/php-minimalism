@@ -21,17 +21,19 @@ use swoole_buffer as SwooleBuffer;
  */
 class MemoryBuffer implements Buffer
 {
-    private $buffer;
+    const kCheapPrepend = 4;
+    const kInitialSize = 8192;
 
-    private $readerIndex;
+    protected $buffer;
 
-    private $writerIndex;
+    protected $readerIndex;
 
-    public function __construct($size = 1024)
+    protected $writerIndex;
+
+    public function __construct($size = self::kInitialSize)
     {
         $this->buffer = new SwooleBuffer($size);
-        $this->readerIndex = 0;
-        $this->writerIndex = 0;
+        $this->reset();
     }
 
     public function readableBytes()
@@ -96,15 +98,15 @@ class MemoryBuffer implements Buffer
         }
 
         // expand
-        if ($len > ($this->prependableBytes() + $this->writableBytes())) {
+        if ($len > ($this->prependableBytes() + $this->writableBytes() - self::kCheapPrepend)) {
             $this->expand(($this->readableBytes() + $len) * 2);
         }
 
-        // copy-move
-        if ($this->readerIndex !== 0) {
-            $this->rawWrite(0, $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex));
-            $this->writerIndex -= $this->readerIndex;
-            $this->readerIndex = 0;
+        // copy-move 内部腾挪
+        if ($this->readerIndex !== self::kCheapPrepend) {
+            $this->rawWrite(self::kCheapPrepend, $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex));
+            $this->writerIndex = $this->writerIndex - $this->readerIndex + self::kCheapPrepend;
+            $this->readerIndex = self::kCheapPrepend;
         }
 
         $this->rawWrite($this->writerIndex, $bytes);
@@ -112,10 +114,26 @@ class MemoryBuffer implements Buffer
         return true;
     }
 
+    public function prepend($bytes)
+    {
+        if ($bytes === "") {
+            return false;
+        }
+
+        $size = $this->prependableBytes();
+        $len = strlen($bytes);
+        if ($len > $size) {
+            throw new \InvalidArgumentException("no space to prepend [len=$len, size=$size]");
+        }
+        $this->rawWrite($size - $len, $bytes);
+        $this->readerIndex -= $len;
+        return true;
+    }
+
     public function reset()
     {
-        $this->readerIndex = 0;
-        $this->writerIndex = 0;
+        $this->readerIndex = static::kCheapPrepend;
+        $this->writerIndex = static::kCheapPrepend;
     }
 
     public function __toString()
@@ -137,7 +155,11 @@ class MemoryBuffer implements Buffer
         if ($offset < 0 || $offset + $len > $this->buffer->capacity) {
             throw new \InvalidArgumentException(__METHOD__ . ": offset=$offset, len=$len, capacity={$this->buffer->capacity}");
         }
-        return $this->buffer->write($offset, $bytes);
+        if ($bytes === "") {
+            return false;
+        } else {
+            return $this->buffer->write($offset, $bytes);
+        }
     }
 
     private function expand($size)
@@ -148,11 +170,11 @@ class MemoryBuffer implements Buffer
         return $this->buffer->expand($size);
     }
 
-    // IDE Debugger
     public function __debugInfo()
     {
         return [
             "string" => $this->__toString(),
+            "hex" => bin2hex($this->__toString()),
             "capacity" => $this->capacity(),
             "readerIndex" => $this->readerIndex,
             "writerIndex" => $this->writerIndex,
