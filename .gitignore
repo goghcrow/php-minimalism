@@ -261,3 +261,4 @@ src/Coroutine
 test/Config/config
 src/tools/#internal
 .ide-helper
+.tmp
