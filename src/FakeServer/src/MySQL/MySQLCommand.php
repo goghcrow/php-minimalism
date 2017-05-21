@@ -5,6 +5,7 @@ namespace Minimalism\FakeServer\MySQL;
 
 interface MySQLCommand
 {
+
     const COM_SLEEP               = 0x00; // （内部线程状态）    （无）
     const COM_QUIT                = 0x01; // 关闭连接    mysql_close
     const COM_INIT_DB             = 0x02; // 切换数据库   mysql_select_db
@@ -42,8 +43,8 @@ interface MySQLCommand
     public function onFieldList($table, $column);       // 查询某表的字段（列）信息，等同于SQL语句SHOW [FULL] FIELDS FROM ...
     public function onCreateDB($database);              // 创建数据库，该消息已过时，而被SQL语句CREATE DATABASE代替
     public function onDropDB($database);                // 删除数据库，该消息已过时，而被SQL语句DROP DATABASE代替。
-    public function onRefresh($flag);                   // 清除缓存，等同于SQL语句FLUSH，或是执行mysqladmin flush-foo命令时发送该消息
-    public function onShutdown($flag);                  // 停止MySQL服务。执行mysqladmin shutdown命令时发送该消息。
+    public function onRefresh($flags);                  // 清除缓存，等同于SQL语句FLUSH，或是执行mysqladmin flush-foo命令时发送该消息
+    public function onShutdown($flags);                 // 停止MySQL服务。执行mysqladmin shutdown命令时发送该消息。
     public function onStatistics();                     // 查看MySQL服务的统计信息（例如运行时间、每秒查询次数等）。执行mysqladmin status命令时发送该消息，无参数。
     public function onProcessInfo();                    // 获取当前活动的线程（连接）列表。等同于SQL语句SHOW PROCESSLIST，或是执行mysqladmin processlist命令时发送该消息，无参数。
     public function onConnect();                        //
@@ -53,7 +54,7 @@ interface MySQLCommand
     public function onTime();                           //
     public function onDelayedInsert();                  //
     public function onChangeUser($username, $password, $database, $charset);            // 在不断连接的情况下重新登陆，该操作会销毁MySQL服务器端的会话上下文（包括临时表、会话变量等）。有些连接池用这种方法实现清除会话上下文。
-    public function onBinlogDump($offset, $flag, $slaveId, $fileName);                  // TODO 该消息是备份连接时由从服务器向主服务器发送的最后一个请求，主服务器收到后，会响应一系列的报文，每个报文都包含一个二进制日志事件。如果主服务器出现故障时，会发送一个EOF报文。
+    public function onBinlogDump($offset, $flags, $slaveId, $fileName);                  // TODO 该消息是备份连接时由从服务器向主服务器发送的最后一个请求，主服务器收到后，会响应一系列的报文，每个报文都包含一个二进制日志事件。如果主服务器出现故障时，会发送一个EOF报文。
     public function onTableDump($database, $table);     // 将数据表从主服务器复制到从服务器中，执行SQL语句LOAD TABLE ... FROM MASTER时发送该消息。目前该消息已过时，不再使用。
     public function onConnectOut();                     //
     public function onRegisterSlave($slaveId, $masterIP, $masterUsername, $masterPassword, $masterPort, $level, $masterId);  // 在从服务器report_host变量设置的情况下，当备份连接时向主服务器发送的注册消息。
@@ -64,6 +65,6 @@ interface MySQLCommand
                                                         // 用于发送超长字符串类型的数据（调用mysql_send_long_data函数）
     public function onStmtClose($stmtId);               // 销毁预处理语句。
     public function onStmtRest($stmtId);                // 将预处理语句的参数缓存清空。多数情况和COM_LONG_DATA一起使用。
-    public function onSetOption($flag);                 // 设置语句选项，选项值为/include/mysql_com.h头文件中定义的enum_mysql_set_option枚举类型：
+    public function onSetOption($flags);                // 设置语句选项，选项值为/include/mysql_com.h头文件中定义的enum_mysql_set_option枚举类型：
     public function onStmtFetch($stmtId, $rows);        // 获取预处理语句的执行结果（一次可以获取多行数据）。
 }

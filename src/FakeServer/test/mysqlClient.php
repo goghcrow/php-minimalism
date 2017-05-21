@@ -6,6 +6,9 @@
 //var_dump($r);
 //exit;
 
+// 连接池分支 server 主动关闭会触发coredump！！！
+
+
 function connect_to_fake_serv()
 {
     $mysql = new \swoole_mysql();

@@ -6,6 +6,7 @@ namespace Minimalism\FakeServer\MySQL;
 /**
  * Class FakeMySQLServer
  * @package Minimalism\FakeServer\MySQL
+ * 参考: https://metacpan.org/source/PHILIPS/DBIx-MyServer-0.42
  */
 class FakeMySQLServer
 {
@@ -157,9 +158,6 @@ class FakeMySQLServer
 
     public function onReceive(\swoole_server $swooleServer, $fd, $fromId, $data)
     {
-        echo $data, "\n";
-        echo bin2hex($data), "\n\n";
-
         $connection = $this->openSession($fd);
         $connection->write($data);
 
@@ -179,7 +177,9 @@ class FakeMySQLServer
         if (isset($this->session[$fd])) {
             $connection = $this->session[$fd];
         } else {
-            $connection = new MySQLConnection($this, $fd);
+            $clientInfo = $this->swooleServer->getClientInfo($fd);
+            $remoteHost = $clientInfo["remote_ip"];
+            $connection = new MySQLConnection($this, $fd, $remoteHost);
             $connection->action();
             $this->session[$fd] = $connection;
         }

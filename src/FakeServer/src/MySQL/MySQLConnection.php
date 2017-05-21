@@ -14,40 +14,60 @@ class MySQLConnection
     private $inputBuffer;
     private $outputBuffer;
     private $seq;
+    private $salt;
+
+    public $remoteHost;
+    public $username;
+    public $charset;
+    public $database;
 
     const STATE_BEFORE_GREET = 1;
     const STATE_BEFORE_LOGIN = 2;
     const STATE_AFTER_LOGIN = 3;
+    const STATE_BEFORE_RESPONSE = 4;
+    const STATE_AFTER_RESPONSE = 5;
 
-    public function __construct(FakeMySQLServer $mysqlServer, $fd)
+    public function __construct(FakeMySQLServer $mysqlServer, $fd, $remoteHost)
     {
         $this->mysqlServer = $mysqlServer;
         $this->fd = $fd;
+        $this->remoteHost = $remoteHost;
 
         $this->inputBuffer = new MySQLBinaryStream(BufferFactory::make());
         $this->outputBuffer = new MySQLBinaryStream(BufferFactory::make());
         $this->state = self::STATE_BEFORE_GREET;
         $this->seq = -1;
+
+        $this->salt = openssl_random_pseudo_bytes(8);
     }
 
     public function action()
     {
         switch ($this->state) {
             case self::STATE_BEFORE_GREET:
-                // TODO join('',map { chr(int(33 + rand(94))) } (1..20))
-                $salt = openssl_random_pseudo_bytes(8); // TODO 8 ? 20
-                $this->sendGreetingPacket($salt);
                 $this->state = self::STATE_BEFORE_LOGIN;
+                $this->sendGreetingPacket();
                 break;
 
             case self::STATE_BEFORE_LOGIN:
                 $this->seq++;
                 $loginData = $this->readAuthorizationPacket();
+                $this->username = $loginData["username"];
+                $this->charset = $loginData["charset"];
+                $this->database = $loginData["schema"];
                 $this->trigger("login", $this, $loginData);
                 break;
 
             case self::STATE_AFTER_LOGIN:
+            case self::STATE_AFTER_RESPONSE:
+                $this->state = self::STATE_BEFORE_RESPONSE;
                 $this->readCommand();
+                break;
+
+            case self::STATE_BEFORE_RESPONSE:
+                fprintf(STDERR, "ERROR STATE\n");
+                // TODO: server上一条消息未回复， 收到client下一条消息
+                $this->close();
                 break;
 
             default:
@@ -55,36 +75,47 @@ class MySQLConnection
         }
     }
 
+    public function sendOK($message = "", $affectedRows = 0, $lastInsertId = 0, $warningCount = 0)
+    {
+        $this->outputBuffer->writeResponseOK($message, $affectedRows, $lastInsertId, $warningCount);
+        $this->sendPacket();
+        $this->resetSeqAndState();
+    }
+
+    public function sendError($message = "Unknown MySQL error", $errno = 2000, $sqlstate = "HY000")
+    {
+        $this->outputBuffer->writeResponseERR($message, $errno, $sqlstate);
+        $this->sendPacket();
+        $this->resetSeqAndState();
+    }
+
+    public function authorize($pwd)
+    {
+        // $this->remoteHost // $this->database // $this->salt
+    }
+    
     public function authorizeOK()
     {
-        $this->responseOK();
+        $this->sendOK();
         $this->state = self::STATE_AFTER_LOGIN;
     }
 
     public function authorizeERR()
     {
-        $this->responseERR("Authorization failed.", 1044, 28000);
+        $this->sendError("Authorization failed.", 1044, 28000);
         $this->mysqlServer->closeSession($this->fd);
     }
 
-    public function responseOK($message = "", $affectedRows = 0, $lastInsertId = 0, $warningCount = 0)
+    public function sendErrorUnsupported($command)
     {
-        $this->outputBuffer->writeResponseOK($message, $affectedRows, $lastInsertId, $warningCount);
-        $this->sendPacket();
-        $this->resetSeq();
+        $cmdName = $this->getCommandName($command);
+        $this->sendError("Command $cmdName not supported.", 1235, 42000);
     }
 
-    public function responseERR($message = "Unknown MySQL error", $errno = 2000, $sqlstate = "HY000")
+    public function sendErrorPrepared($command)
     {
-        $this->outputBuffer->writeResponseERR($message, $errno, $sqlstate);
-        $this->sendPacket();
-        $this->resetSeq();
-    }
-
-    private function sendGreetingPacket($salt)
-    {
-        $this->outputBuffer->writeGreetingPacket($salt);
-        $this->sendPacket();
+        $cmdName = $this->getCommandName($command);
+        $this->sendError("Prepared statement command $cmdName not supported.", 1295, "HY100");
     }
 
     public function readPacket()
@@ -94,24 +125,6 @@ class MySQLConnection
             $this->action();
         }
         return $len;
-    }
-
-    private function readAuthorizationPacket()
-    {
-        return $this->inputBuffer->readAuthorizationPacket();
-    }
-
-    private function readCommand()
-    {
-        list($cmd, $args) = $this->inputBuffer->readCommand();
-        switch ($cmd) {
-            case MySQLCommand::COM_QUERY:
-                $this->trigger("query", $this, $args["sql"]);
-                break;
-
-            default:
-                $this->trigger("command", $this, $cmd, $args);
-        }
     }
 
     public function getCommandName($cmd)
@@ -144,7 +157,7 @@ class MySQLConnection
      * [Row Data]    行数据（多个）
      * [EOF]    数据结束
      */
-    public function writeResultSet(array $fields, array $values, $headerExt = null, $isBinData = false)
+    public function sendResultSet(array $fields, array $values, $headerExt = null, $isBinData = false)
     {
         $this->outputBuffer->writeResultSetHeader(count($fields), $headerExt);
         $this->sendPacket();
@@ -171,7 +184,7 @@ class MySQLConnection
             $this->sendPacket();
         }
 
-        $this->resetSeq();
+        $this->resetSeqAndState();
     }
 
     /**
@@ -191,7 +204,7 @@ class MySQLConnection
      * [Field]    与Result Set消息结构相同
      * [EOF]
      */
-    public function writePrepare($stmtId, array $fields, array $parameters, $warningCount = 0)
+    public function sendPrepare($stmtId, array $fields, array $parameters, $warningCount = 0)
     {
         $this->outputBuffer->writePrepareOK($stmtId, $fields, $parameters, $warningCount);
         $this->sendPacket();
@@ -214,17 +227,7 @@ class MySQLConnection
             $this->sendPacket();
         }
 
-        $this->resetSeq();
-    }
-
-    public function write($bin)
-    {
-        return $this->inputBuffer->write($bin);
-    }
-
-    private function resetSeq()
-    {
-        return $this->seq = 0;
+        $this->resetSeqAndState();
     }
 
     public function close($force = false)
@@ -235,28 +238,85 @@ class MySQLConnection
         }
     }
 
-    public function send($data)
+    public function write($bin)
     {
-        return $this->mysqlServer->swooleServer->send($this->fd, $data);
+        return $this->inputBuffer->write($bin);
     }
 
-    public function trigger($evtName, ...$args)
+    public function setDatabase($database)
     {
-        $action = $this->mysqlServer->eventHandler[$evtName];
-        $action(...$args);
+        $this->database = $database;
     }
 
-    /**
-     * header: 3bytes len + 1byte seq
-     * body: n bytes
-     *
-     * len: 用于标记当前请求消息的实际数据长度值，以字节为单位，占用3个字节，最大值为 0xFFFFFF，即接近 16 MB 大小（比16MB少1个字节）。
-     * seq: 在一次完整的请求/响应交互过程中，用于保证消息顺序的正确，每次客户端发起请求时，序号值都会从0开始计算。
-     * body: 消息体用于存放请求的内容及响应的数据，长度由消息头中的长度值决定。
-     */
+    private function sendGreetingPacket()
+    {
+        $this->outputBuffer->writeGreetingPacket($this->salt);
+        $this->sendPacket();
+    }
+
+    private function readAuthorizationPacket()
+    {
+        return $this->inputBuffer->readAuthorizationPacket();
+    }
+
+    private function readCommand()
+    {
+        list($cmd, $args) = $this->inputBuffer->readCommand();
+        switch ($cmd) {
+            case MySQLCommand::COM_QUIT:
+                $this->mysqlServer->closeSession($this->fd);
+                break;
+
+            case MySQLCommand::COM_QUERY:
+                $this->trigger("query", $this, $args["sql"]);
+                break;
+
+            case MySQLCommand::COM_PING:
+                $this->sendOK();
+                break;
+
+            case MySQLCommand::COM_INIT_DB:
+                $database = $args["database"];
+                if ($this->trigger("query", $this, "USE $database")) {
+                    $this->database = $database;
+                }
+                break;
+
+            case MySQLCommand::COM_CREATE_DB:
+                $database = $args["database"];
+                $this->trigger("query", $this, "CREATE DATABASE $database");
+                break;
+
+            case MySQLCommand::COM_DROP_DB:
+                $database = $args["database"];
+                $this->trigger("query", $this, "DROP DATABASE $database");
+                break;
+
+            default:
+                $this->trigger("command", $this, $cmd, $args);
+        }
+    }
+
+    private function trigger($evtName, ...$args)
+    {
+        $evHandler = $this->mysqlServer->eventHandler;
+        if (isset($evHandler[$evtName])) {
+            $action = $evHandler[$evtName];
+            $action(...$args);
+        } else {
+            $this->sendError("Internal Error");
+        }
+    }
+
     private function sendPacket()
     {
         $this->outputBuffer->prependHeader(++$this->seq);
-        $this->send($this->outputBuffer->readFull());
+        return $this->mysqlServer->swooleServer->send($this->fd, $this->outputBuffer->readFull());
+    }
+
+    private function resetSeqAndState()
+    {
+        $this->seq = 0;
+        $this->state = self::STATE_AFTER_RESPONSE;
     }
 }

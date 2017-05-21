@@ -128,6 +128,17 @@ class MySQLBinaryStream extends BinaryStream
         return unpack("V", $this->buffer->read(3) . "\0\0")[1];
     }
 
+    /**
+     * @param int $seq
+     * @return bool
+     *
+     * header: 3bytes len + 1byte seq
+     * body: n bytes
+     *
+     * len: 用于标记当前请求消息的实际数据长度值，以字节为单位，占用3个字节，最大值为 0xFFFFFF，即接近 16 MB 大小（比16MB少1个字节）。
+     * seq: 在一次完整的请求/响应交互过程中，用于保证消息顺序的正确，每次客户端发起请求时，序号值都会从0开始计算。
+     * body: 消息体用于存放请求的内容及响应的数据，长度由消息头中的长度值决定。
+     */
     public function prependHeader($seq)
     {
         return $this->prepend(substr(pack('V', $this->readableBytes()), 0, 3) . pack('C', $seq % 256));
@@ -154,23 +165,7 @@ class MySQLBinaryStream extends BinaryStream
 
     public function readLengthCodedBinary()
     {
-        // TODO
 //        $firstChar
-//        if ($length === 0) {
-//            $this->writeUInt8(0x00); // 0x00 or 251
-//        } else if ($length < 251) {
-//            $this->writeUInt8($length);
-//        } else if ($length < 0x10000) {
-//            $this->writeUInt8(252);
-//            $this->writeUInt16LE($length);
-//        } else if ($length < 0x1000000) {
-//            $this->writeUInt8(253);
-//            $this->write3ByteIntLE($length);
-//        } else {
-//            // chr(254) . pack('V', $length >> 32) . pack('V', $length & 0xffffffff);
-//            $this->writeUInt8(254);
-//            $this->writeUInt64LE($length);
-//        }
     }
 
     public function writeLengthCodedString($string)
@@ -328,8 +323,8 @@ class MySQLBinaryStream extends BinaryStream
     {
         $this->writeUInt8(0xff);    // ERR field_count, always = 0xff
         $this->writeUInt16LE($errno);
-        assert(strlen($sqlstate) === 4);
-        $sqlstate = substr($sqlstate, 0, 4);
+        assert(strlen($sqlstate) === 5);
+        $sqlstate = substr($sqlstate, 0, 5);
         $this->write("#$sqlstate"); // sqlstate marker, always #
         $this->writeNullTerminatedString("$message");
     }
