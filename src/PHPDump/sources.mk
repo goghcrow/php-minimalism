@@ -35,5 +35,11 @@ SOURCES = \
     src/Http/HttpProtocol.php \
     src/Http/HttpPacket.php \
     src/Http/HttpCopy.php \
+    src/MySQL/MySQLCommand.php \
+    src/MySQL/MySQLField.php \
+    src/MySQL/MySQLBinaryStream.php \
+    src/MySQL/MySQLProtocol.php \
+    src/MySQL/MySQLPacket.php \
+    src/MySQL/MySQLCopy.php \
     src/PHPDump.php \
     src/novadump.php

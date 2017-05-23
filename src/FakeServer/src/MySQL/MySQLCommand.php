@@ -3,10 +3,15 @@
 namespace Minimalism\FakeServer\MySQL;
 
 
+/**
+ * Interface MySQLCommand
+ * @package Minimalism\FakeServer\MySQL
+ *
+ * https://dev.mysql.com/doc/dev/mysql-server/latest/my__command_8h_source.html
+ */
 interface MySQLCommand
 {
-
-    const COM_SLEEP               = 0x00; // （内部线程状态）    （无）
+    const COM_SLEEP               = 0x00; //（内部线程状态）    （无）
     const COM_QUIT                = 0x01; // 关闭连接    mysql_close
     const COM_INIT_DB             = 0x02; // 切换数据库   mysql_select_db
     const COM_QUERY               = 0x03; // SQL查询请求 mysql_real_query
@@ -35,6 +40,10 @@ interface MySQLCommand
     const COM_STMT_RESET          = 0x1A; // 清除预处理语句参数缓存 mysql_stmt_reset
     const COM_SET_OPTION          = 0x1B; // 设置语句选项  mysql_set_server_option
     const COM_STMT_FETCH          = 0x1C; // 获取预处理语句的执行结果    mysql_stmt_fetch
+    const COM_DAEMON              = 0x1D;
+    const COM_BINLOG_DUMP_GTID    = 0x1E;
+    const COM_RESET_CONNECTION    = 0x1F;
+    const COM_END                 = 0x20;
 
     public function onSleep();                          //
     public function onQuit();                           // 关闭当前连接（客户端退出），无参数。

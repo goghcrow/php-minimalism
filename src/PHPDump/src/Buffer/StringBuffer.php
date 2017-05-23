@@ -18,6 +18,12 @@ class StringBuffer implements Buffer
         return true;
     }
 
+    public function prepend($bytes)
+    {
+        $this->bytes = $bytes . $this->bytes;
+        return true;
+    }
+
     public function get($len)
     {
         return substr($this->bytes, 0, $len);

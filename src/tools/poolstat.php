@@ -108,10 +108,6 @@ function connstat($connDir) {
 }
 
 
-/**
- * Class TcpStat
- * @package Zan\Framework\Components\ZanBox
- */
 class TcpStat
 {
     const SS_NETSTAT_TCP_STATE_MAP = [
@@ -128,6 +124,11 @@ class TcpStat
         "closing"       => "CLOSING",
     ];
 
+    /**
+     * unix socket
+     * @param $path
+     * @return int
+     */
     public static function xCount($path)
     {
         if (PHP_OS === "Darwin") {

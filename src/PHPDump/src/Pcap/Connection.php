@@ -43,7 +43,7 @@ class Connection
      *
      * @var Packet $currentPacket
      *
-     * 有的协议 在isReceiveCompleted已经尝试parser一次
+     * 有的协议(比如http) 在isReceiveCompleted已经尝试parser一次
      * 可以暂时保存起来
      * 然后unpack中可以直接获取使用
      */

@@ -18,7 +18,14 @@ class MySQLBinaryStream extends BinaryStream
 {
     const BANNER = "Fake Mysql Server 1.0";
     const CHARSET = 0x21; /* utf8 COLLATE utf8_general_ci (33) */
-    const MAX_PACKET_LEN = 1024 * 1024 * 16;
+    const MAX_PACKET_LEN = 0xFFFFFF;
+    const MYSQL_ERRMSG_SIZE = 512;
+
+    const PACKET_TYPE_OK = 1;
+    const PACKET_TYPE_ERR = 2;
+    const PACKET_TYPE_EOF = 3;
+    const PACKET_TYPE_CMD = 4;
+    const PACKET_TYPE_RESULT_SET = 5;
 
     /*
      * Server Status: 0x0002
@@ -118,6 +125,73 @@ class MySQLBinaryStream extends BinaryStream
     EOF 报文	0xFE
      */
 
+    /**
+     * TODO 这里判断非常不严谨 !!!
+     * @return int
+     * 返回0 数据不足
+     * 返回-1 不是mysql packet
+     * 返回>0 packet type
+     */
+    public function isMySQLPacket()
+    {
+        return false;
+
+
+        if ($this->buffer->readableBytes() < 5) {
+            return 0;
+        } else {
+            $bin = $this->get(5);
+
+            // 也没办法根据seq与len判断 !!!
+            $seq = unpack("C", substr($bin, 3, 1))[1];
+            $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
+
+
+            $firstPayloadByte = unpack("C", substr($bin, 4, 1))[1];
+
+            return $this->detectPacketType($firstPayloadByte, $len);
+        }
+    }
+
+    public function detectPacketType($byte, $packetLen)
+    {
+        // An OK packet is sent from the server to the client to signal successful completion of a command.
+        // As of MySQL 5.7.5, OK packes are also used to indicate EOF, and EOF packets are deprecated.
+
+        // These rules distinguish whether the packet represents OK or EOF:
+        //  OK: header = 0 and length of packet > 7
+        //  EOF: header = 0xfe and length of packet < 9
+
+        // EOF 0xFE
+        // Warning
+        // The EOF_Packet packet may appear in places where a Protocol::LengthEncodedInteger may appear.
+        // You must check whether the packet length is less than 9 to make sure that it is a EOF_Packet packet.
+        if ($byte === 0x00 && $packetLen > 7) {
+            $packetType = self::PACKET_TYPE_OK;
+        } else if ($byte === 0xFF) {
+            $packetType = self::PACKET_TYPE_ERR;
+        } else if ($byte === 0xFE && $packetLen < 9) {
+            $packetType = self::PACKET_TYPE_EOF;
+        } else if ($byte >= 0x00 && $byte <= 0xFA) { // 0xFA max field
+            // TODO  如何区分 com 与 result_set 包
+            if ($byte > MySQLCommand::COM_END) { // mysql 命令更新后这里就不对了~
+                $packetType = self::PACKET_TYPE_RESULT_SET;
+            } else {
+//                if ($byte === 0x00 && $packetLen === 1) {
+//
+//                }
+//                $this->readLengthCodedBinary();
+//                // 0 com_end
+//                $packetType = self::PACKET_TYPE_CMD;
+//                // TODO or
+//                $packetType = self::PACKET_TYPE_RESULT_SET;
+            }
+        } else {
+            $packetType = -1;
+        }
+        return $packetType;
+    }
+
     public function write3ByteIntLE($i)
     {
         return $this->buffer->write(substr(pack('V', $i), 0, 3));
@@ -165,7 +239,28 @@ class MySQLBinaryStream extends BinaryStream
 
     public function readLengthCodedBinary()
     {
-//        $firstChar
+        $byte = $this->readUInt8();
+        if ($byte === 0 || $byte === 251) {
+            $len = 0;
+        } else if ($byte < 251) {
+            $len = $byte;
+        } else if ($byte === 252) {
+            $len = $this->readUInt16LE();
+        } else if ($byte === 253) {
+            $len = $this->read3ByteIntLE();
+        } else if ($byte === 254) {
+            $len = $this->readUInt64LE();
+        } else {
+            return false;
+        }
+
+        if ($len === 0) {
+            return "";
+        } else if ($len > 0) {
+            return $this->read($len);
+        } else {
+            return false;
+        }
     }
 
     public function writeLengthCodedString($string)
@@ -220,26 +315,27 @@ class MySQLBinaryStream extends BinaryStream
     }
 
     /**
-     * @return int
+     * @param $consumeHeader
+     * @return int 返回0 数据不足
      * 返回0 数据不足
      * 返回-1 数据过长
      * 返回整数，packet长
      */
-    public function tryReadPacketLen()
+    public function isReceiveCompleted($consumeHeader = false)
     {
         if ($this->readableBytes() < 4) {
             return 0;
         } else {
             $bin = $this->get(4);
-            $seq = substr($bin, 3, 1);
+            $seq = unpack("C", substr($bin, 3, 1))[1];
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
-            if ($len <= 0 || $len > self::MAX_PACKET_LEN) {
-                return -1;
-            } else {
-                if ($this->buffer->readableBytes() >= $len + 4) {
+
+            if ($this->buffer->readableBytes() >= $len + 4) {
+                if ($consumeHeader) {
                     $this->buffer->read(4);
-                    return $len;
                 }
+                return $len;
+            } else {
                 return 0;
             }
         }
@@ -299,12 +395,19 @@ class MySQLBinaryStream extends BinaryStream
      */
     public function writeResponseOK($message = "", $affectedRows = 0, $lastInsertId = 0, $warningCount = 0)
     {
+        assert(strlen($message) <= self::MYSQL_ERRMSG_SIZE);
+
         $this->writeUInt8(0x00); // OK always = 0x00
         $this->writeLengthCodedBinary($affectedRows);
         $this->writeLengthCodedBinary($lastInsertId);
         $this->writeUInt16LE(self::SERVER_STATUS_AUTOCOMMIT);
         $this->writeUInt16LE($warningCount);
         $this->writeLengthCodedString($message);
+    }
+
+    public function readResponseOK()
+    {
+
     }
 
     /**
@@ -321,12 +424,19 @@ class MySQLBinaryStream extends BinaryStream
      */
     public function writeResponseERR($message = "Unknown MySQL error", $errno = 2000, $sqlstate = "HY000")
     {
+        assert(strlen($message) <= self::MYSQL_ERRMSG_SIZE);
+
         $this->writeUInt8(0xff);    // ERR field_count, always = 0xff
         $this->writeUInt16LE($errno);
         assert(strlen($sqlstate) === 5);
         $sqlstate = substr($sqlstate, 0, 5);
         $this->write("#$sqlstate"); // sqlstate marker, always #
         $this->writeNullTerminatedString("$message");
+    }
+
+    public function readResponseERR()
+    {
+
     }
 
     /**
@@ -339,11 +449,16 @@ class MySQLBinaryStream extends BinaryStream
      */
     public function writeResultSetHeader($fieldCount, $ext = null)
     {
-        assert($fieldCount >= 0x00 && $fieldCount <= 0xfa);
+        assert($fieldCount >= 0x00 && $fieldCount <= 0xFA);
         $this->writeLengthCodedBinary($fieldCount);
         if ($ext !== null) {
             $this->writeLengthCodedBinary($ext);
         }
+    }
+
+    public function readResultSetHeader()
+    {
+
     }
 
     /**
@@ -389,6 +504,11 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
+    public function readField()
+    {
+
+    }
+
     /**
      * EOF结构用于标识Field和Row Data的结束，在预处理语句中，EOF也被用来标识参数的结束。
      *
@@ -412,6 +532,11 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeUInt8(0xFE);
         $this->writeUInt16LE($warningCount);
         $this->writeUInt16LE($flag);
+    }
+
+    public function readEOF()
+    {
+
     }
 
     /**
@@ -438,6 +563,11 @@ class MySQLBinaryStream extends BinaryStream
             }
             $this->writeLengthCodedString(strval($value));
         }
+    }
+
+    public function readRowData()
+    {
+
     }
 
     /**
@@ -468,6 +598,11 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
+    public function readRowDataBin()
+    {
+
+    }
+
     /**
      *
      * @param int $stmtId
@@ -495,6 +630,11 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeUInt16LE($warningCount);
     }
 
+    public function readPrepareOK()
+    {
+
+    }
+
     /**
      * 预处理语句的值与参数正确对应后，服务器会返回 Parameter 报文。
      *
@@ -512,6 +652,16 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeUInt16LE($parameter->flags);
         $this->writeUInt8($parameter->decimals);
         $this->writeUInt32LE($parameter->length);
+    }
+
+    public function readParameter()
+    {
+
+    }
+
+    public function writeCommand()
+    {
+
     }
 
     public function readCommand()

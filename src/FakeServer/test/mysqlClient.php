@@ -9,6 +9,18 @@
 // 连接池分支 server 主动关闭会触发coredump！！！
 
 
+define("MYSQL_SERVER_HOST", "10.9.34.172");
+define("MYSQL_SERVER_PORT", 3306);
+define("MYSQL_SERVER_USER", "showcase");
+define("MYSQL_SERVER_PWD", "showcase");
+define("MYSQL_SERVER_DB", "showcase");
+
+
+function cb(\swoole_mysql $mysql, $r)
+{
+    var_dump($r);
+}
+
 function connect_to_fake_serv()
 {
     $mysql = new \swoole_mysql();
@@ -19,6 +31,15 @@ function connect_to_fake_serv()
         "user" => "root",
         "password" => "123456",
         "database" => "test"
+    ];
+
+    $server = [
+        "host" => MYSQL_SERVER_HOST,
+        "port" => MYSQL_SERVER_PORT,
+        "user" => MYSQL_SERVER_USER,
+        "password" => MYSQL_SERVER_PWD,
+        "database" => MYSQL_SERVER_DB,
+        "charset" => "utf8mb4",
     ];
 
     $mysql->on("close", function() {
@@ -36,6 +57,7 @@ function connect_to_fake_serv()
        $mysql->query("select 1", function(\swoole_mysql $mysql, $r) {
           var_dump($r);
        });
+//        $mysql->query("select 1", "cb");
     });
 }
 

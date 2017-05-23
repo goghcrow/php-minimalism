@@ -13,6 +13,12 @@ class MySQLConnection
 
     private $inputBuffer;
     private $outputBuffer;
+    /**
+     * Sequence ID / Packet Number
+     * @var int
+     * The sequence-id is incremented with each packet and may wrap around.
+     * It starts at 0 and is reset to 0 when a new command begins in the Command Phase.
+     */
     private $seq;
     private $salt;
 
@@ -21,6 +27,27 @@ class MySQLConnection
     public $charset;
     public $database;
 
+    /**
+     * 摘自 mysql 协议官方文档
+     *
+     * Connection Lifecycle
+     *
+     * The MySQL protocol is a stateful protocol.
+     * When a connection is established the server initiates a Connection Phase.
+     * Once that is performed the connection enters the Command Phase.
+     * The Command Phase ends when the connection terminates.
+     *
+     * The Connection Phase performs these tasks:
+     *  1. exchange the capabilities of client and server
+     *  2. setup SSL communication channel if requested (fakeserver没实现)
+     *  3. authenticate the client against the server
+     *
+     *  It starts with the client connect()ing to the server which may send a ERR packet and finish the g
+     *  or send a Initial Handshake Packet which the client answers with a Handshake Response Packet.
+     *  At this stage client can request SSL connection, in which case an SSL communication channel
+     *  is established before client sends its authentication response.
+     */
+    //
     const STATE_BEFORE_GREET = 1;
     const STATE_BEFORE_LOGIN = 2;
     const STATE_AFTER_LOGIN = 3;
@@ -120,7 +147,7 @@ class MySQLConnection
 
     public function readPacket()
     {
-        $len = $this->inputBuffer->tryReadPacketLen();
+        $len = $this->inputBuffer->isReceiveCompleted(true);
         if ($len > 0) {
             $this->action();
         }
@@ -248,6 +275,13 @@ class MySQLConnection
         $this->database = $database;
     }
 
+    /**
+     * handshake:
+     *  client connect server
+     *  server response greeting packet
+     *  [ssl]
+     *  client send authentication
+     */
     private function sendGreetingPacket()
     {
         $this->outputBuffer->writeGreetingPacket($this->salt);

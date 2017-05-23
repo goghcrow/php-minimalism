@@ -9,7 +9,7 @@ use swoole_buffer as SwooleBuffer;
  * Class Buffer
  *
  * 自动扩容, 从尾部写入数据，从头部读出数据
- * 参考 
+ * 参考
  *
  * +-------------------+------------------+------------------+
  * | prependable bytes |  readable bytes  |  writable bytes  |

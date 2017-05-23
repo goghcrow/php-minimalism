@@ -5,6 +5,7 @@ namespace Minimalism\PHPDump;
 use Minimalism\PHPDump\Http\HttpCopy;
 use Minimalism\PHPDump\Http\HttpPacket;
 use Minimalism\PHPDump\Http\HttpProtocol;
+use Minimalism\PHPDump\MySQL\MySQLProtocol;
 use Minimalism\PHPDump\Nova\NovaLocalCodec;
 use Minimalism\PHPDump\Nova\NovaCopy;
 use Minimalism\PHPDump\Nova\NovaPacket;
@@ -112,6 +113,18 @@ if (array_key_exists("copy", $a)) {
     $exportFile = $a["copy"];
 }
 
+
+if (isset($a["protocol"]) && strtoupper($a["protocol"]) === "MYSQL") {
+    Pcap::registerProtocol(new MySQLProtocol());
+    $phpDump = new PHPDump();
+    if ($pcapFile) {
+        $phpDump->readFile($pcapFile);
+    } else {
+        `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
+        $phpDump->readTcpdump($tcpFilter);
+    }
+    return;
+}
 
 $protocolMap = [
     "nova" => new NovaProtocol(),

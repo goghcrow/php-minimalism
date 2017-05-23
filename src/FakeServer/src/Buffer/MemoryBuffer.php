@@ -170,6 +170,7 @@ class MemoryBuffer implements Buffer
         return $this->buffer->expand($size);
     }
 
+    // IDE Debugger
     public function __debugInfo()
     {
         return [
@@ -184,7 +185,6 @@ class MemoryBuffer implements Buffer
         ];
     }
 }
-
 
 /**
  * swoole_buffer的C实现不是很靠谱
