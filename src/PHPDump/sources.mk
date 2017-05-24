@@ -11,8 +11,8 @@ SOURCES = \
     src/Buffer/BinaryStream.php \
     src/Buffer/BufferFactory.php \
     src/Buffer/Hex.php \
-    src/Pcap/Protocol.php \
-    src/Pcap/Packet.php \
+    src/Pcap/Dissector.php \
+    src/Pcap/PDU.php \
     src/Pcap/PcapHdr.php \
     src/Pcap/RecordHdr.php \
     src/Pcap/EtherHdr.php \
@@ -27,19 +27,20 @@ SOURCES = \
 	src/Thrift/TBinaryReader.php \
 	src/Thrift/TCodec.php \
 	src/Thrift/ThriftPacket.php \
-    src/Nova/NovaProtocol.php \
-    src/Nova/NovaPacket.php \
+    src/Nova/NovaDissector.php \
+    src/Nova/NovaPDU.php \
     src/Nova/NovaLocalCodec.php \
     src/Nova/NovaCopy.php \
     src/Nova/NovaPacketFilter.php \
-    src/Http/HttpProtocol.php \
-    src/Http/HttpPacket.php \
+    src/Http/HttpDissector.php \
+    src/Http/HttpPDU.php \
     src/Http/HttpCopy.php \
+    src/MySQL/MySQLState.php \
     src/MySQL/MySQLCommand.php \
     src/MySQL/MySQLField.php \
     src/MySQL/MySQLBinaryStream.php \
-    src/MySQL/MySQLProtocol.php \
-    src/MySQL/MySQLPacket.php \
+    src/MySQL/MySQLDissector.php \
+    src/MySQL/MySQLPDU.php \
     src/MySQL/MySQLCopy.php \
     src/PHPDump.php \
     src/novadump.php

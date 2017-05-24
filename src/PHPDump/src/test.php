@@ -2,7 +2,7 @@
 
 namespace Minimalism\PHPDump;
 
-use Minimalism\PHPDump\Http\HttpProtocol;
+use Minimalism\PHPDump\Http\HttpDissector;
 use Minimalism\PHPDump\Pcap\Pcap;
 
 ini_set("memory_limit", -1);
@@ -13,7 +13,7 @@ $methodPattern = null;
 $exportFile = null;
 $pcapFile = __DIR__ . "/../log.pcap";
 
-Pcap::registerProtocol(new HttpProtocol());
+Pcap::registerProtocol(new HttpDissector());
 
 
 $phpDump = new PHPDump();

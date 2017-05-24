@@ -45,7 +45,7 @@ class Pcap
     // private $lastSeqLen = [];
 
     /**
-     * @var Protocol[]
+     * @var Dissector[]
      */
     public static $protocols = [];
 
@@ -54,7 +54,7 @@ class Pcap
         $this->buffer = $buffer;
     }
 
-    public static function registerProtocol(Protocol $protocol)
+    public static function registerProtocol(Dissector $protocol)
     {
         static::$protocols[] = $protocol;
     }
@@ -165,7 +165,7 @@ class Pcap
                 $connection->buffer->write($recordBuffer->read(PHP_INT_MAX));
 
                 if ($connection->isDetected()) {
-                    $connection->loopAnalyze();
+                    $connection->loopDissect();
                     continue;
 
                 } else {
@@ -173,14 +173,14 @@ class Pcap
                         $detectedState = $protocol->detect($connection);
 
                         switch ($detectedState) {
-                            case Protocol::DETECTED:
+                            case Dissector::DETECTED:
                                 $connection->setProtocol($protocol);
-                                $connection->loopAnalyze();
+                                $connection->loopDissect();
                                 continue 2;
 
-                            case Protocol::DETECT_WAIT:
+                            case Dissector::DETECT_WAIT:
                                 break;
-                            case Protocol::UNDETECTED:
+                            case Dissector::UNDETECTED:
                             default:
                                 break;
                         }
@@ -196,18 +196,18 @@ class Pcap
                     $detectedState = $protocol->detect($connection);
 
                     switch ($detectedState) {
-                        case Protocol::DETECTED:
+                        case Dissector::DETECTED:
                             $connection->setProtocol($protocol);
                             $this->connections[$connKey] = $connection;
-                            $connection->loopAnalyze();
+                            $connection->loopDissect();
                             continue 2;
 
-                        case Protocol::DETECT_WAIT:
+                        case Dissector::DETECT_WAIT:
                             // 暂时持有未检测到协议的连接
                             $this->connections[$connKey] = $connection;
                             break;
 
-                        case Protocol::UNDETECTED:
+                        case Dissector::UNDETECTED:
                         default:
                             // do nothing 继续检测其他协议
                             break;

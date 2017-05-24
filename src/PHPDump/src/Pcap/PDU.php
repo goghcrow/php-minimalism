@@ -2,8 +2,11 @@
 
 namespace Minimalism\PHPDump\Pcap;
 
-
-abstract class Packet
+/**
+ * Class Packet : Protocol Data Unit
+ * @package Minimalism\PHPDump\Pcap
+ */
+abstract class PDU
 {
     private static $filters = [];
     private static $terminators = [];
@@ -26,7 +29,7 @@ abstract class Packet
         self::$terminators[static::class][] = $terminator;
     }
 
-    public function beforeAnalyze()
+    public function preInspect()
     {
         $filters = isset(self::$filters[static::class]) ? self::$filters[static::class] : [];
         foreach ($filters as $filter) {
@@ -37,7 +40,7 @@ abstract class Packet
         return true;
     }
 
-    public function afterAnalyze()
+    public function postInspect()
     {
         $terminators = isset(self::$terminators[static::class]) ? self::$terminators[static::class] : [];
         foreach ($terminators as $copyTee) {
@@ -48,5 +51,5 @@ abstract class Packet
     /**
      * @param Connection $connection
      */
-    abstract public function analyze(Connection $connection);
+    abstract public function inspect(Connection $connection);
 }

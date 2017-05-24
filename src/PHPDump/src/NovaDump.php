@@ -3,14 +3,14 @@
 namespace Minimalism\PHPDump;
 
 use Minimalism\PHPDump\Http\HttpCopy;
-use Minimalism\PHPDump\Http\HttpPacket;
-use Minimalism\PHPDump\Http\HttpProtocol;
-use Minimalism\PHPDump\MySQL\MySQLProtocol;
+use Minimalism\PHPDump\Http\HttpPDU;
+use Minimalism\PHPDump\Http\HttpDissector;
+use Minimalism\PHPDump\MySQL\MySQLDissector;
 use Minimalism\PHPDump\Nova\NovaLocalCodec;
 use Minimalism\PHPDump\Nova\NovaCopy;
-use Minimalism\PHPDump\Nova\NovaPacket;
+use Minimalism\PHPDump\Nova\NovaPDU;
 use Minimalism\PHPDump\Nova\NovaPacketFilter;
-use Minimalism\PHPDump\Nova\NovaProtocol;
+use Minimalism\PHPDump\Nova\NovaDissector;
 use Minimalism\PHPDump\Pcap\Pcap;
 
 $usage = <<<USAGE
@@ -114,8 +114,25 @@ if (array_key_exists("copy", $a)) {
 }
 
 
+
+// TODO
 if (isset($a["protocol"]) && strtoupper($a["protocol"]) === "MYSQL") {
-    Pcap::registerProtocol(new MySQLProtocol());
+    $mysqlPort = null;
+    $exps = array_map("strtolower", array_map("trim", explode(" ", $tcpFilter)));
+    foreach ($exps as $i => $exp) {
+        if ($exp === "port") {
+            if (isset($exps[$i + 1])) {
+                $mysqlPort = $exps[$i + 1];
+            }
+            break;
+        }
+    }
+    if ($mysqlPort === null) {
+        echo "\033[1m--filter需要加入port\033[0m\n";
+        exit(1);
+    }
+
+    Pcap::registerProtocol(new MySQLDissector($mysqlPort));
     $phpDump = new PHPDump();
     if ($pcapFile) {
         $phpDump->readFile($pcapFile);
@@ -126,9 +143,12 @@ if (isset($a["protocol"]) && strtoupper($a["protocol"]) === "MYSQL") {
     return;
 }
 
+
+
+
 $protocolMap = [
-    "nova" => new NovaProtocol(),
-    "http" => new HttpProtocol(),
+    "nova" => new NovaDissector(),
+    "http" => new HttpDissector(),
 ];
 
 $protocols = isset($a["protocol"]) ? $a["protocol"] : "nova";
@@ -140,15 +160,15 @@ foreach ($protocols as $protocol) {
 }
 
 $novaFilter = new NovaPacketFilter($servicePattern, $methodPattern);
-NovaPacket::registerBefore($novaFilter);
+NovaPDU::registerBefore($novaFilter);
 if ($exportFile) {
     $novaCopy = new NovaCopy($exportFile);
-    NovaPacket::registerAfter($novaCopy);
+    NovaPDU::registerAfter($novaCopy);
 }
 
 if ($exportFile) {
     $httpCopy = new HttpCopy($exportFile);
-    HttpPacket::registerAfter($httpCopy);
+    HttpPDU::registerAfter($httpCopy);
 }
 
 

@@ -5,7 +5,7 @@ namespace Minimalism\PHPDump\Nova;
 
 use Minimalism\PHPDump\Buffer\Buffer;
 use Minimalism\PHPDump\Pcap\Connection;
-use Minimalism\PHPDump\Pcap\Protocol;
+use Minimalism\PHPDump\Pcap\Dissector;
 
 
 /**
@@ -38,7 +38,7 @@ use Minimalism\PHPDump\Pcap\Protocol;
  *
  * message body thrift serialize
  */
-class NovaProtocol implements Protocol
+class NovaDissector implements Dissector
 {
     // const SIZE = nova_header_size;
     const MAX_PACKET_SIZE = 1024 * 1024 * 2;
@@ -57,12 +57,12 @@ class NovaProtocol implements Protocol
         $hl = self::NOVA_HEADER_COMMON_LEN;
         if ($buffer->readableBytes() >= $hl) {
             if (is_nova_packet($buffer->get($hl))) {
-                return Protocol::DETECTED;
+                return Dissector::DETECTED;
             } else {
-                return Protocol::UNDETECTED;
+                return Dissector::UNDETECTED;
             }
         } else {
-            return Protocol::DETECT_WAIT;
+            return Dissector::DETECT_WAIT;
         }
     }
 
@@ -86,7 +86,7 @@ class NovaProtocol implements Protocol
         return true;
     }
 
-    public function unpack(Connection $connection)
+    public function dissect(Connection $connection)
     {
         $connBuffer = $connection->buffer;
 
@@ -101,7 +101,7 @@ class NovaProtocol implements Protocol
 
         $nova_data = $connBuffer->read($msg_size);
 
-        $packet = new NovaPacket();
+        $packet = new NovaPDU();
 
         // if ($msg_size < nova_header_size)
         // is_nova_packet($data)

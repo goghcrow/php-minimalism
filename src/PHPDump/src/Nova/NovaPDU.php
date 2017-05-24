@@ -4,12 +4,12 @@ namespace Minimalism\PHPDump\Nova;
 
 
 use Minimalism\PHPDump\Pcap\Connection;
-use Minimalism\PHPDump\Pcap\Packet;
+use Minimalism\PHPDump\Pcap\PDU;
 use Minimalism\PHPDump\Thrift\ThriftPacket;
 use Minimalism\PHPDump\Thrift\TMessageType;
 use Minimalism\PHPDump\Util\T;
 
-class NovaPacket extends Packet
+class NovaPDU extends PDU
 {
     public $service;
     public $method;
@@ -32,7 +32,7 @@ class NovaPacket extends Packet
      */
     public $thriftLocalArgs;
 
-    public function analyze(Connection $connection)
+    public function inspect(Connection $connection)
     {
         $seq = $this->seq;
         $service = $this->service;

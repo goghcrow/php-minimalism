@@ -32,7 +32,7 @@ class NovaLocalCodec
         new static($appName, $appPath);
     }
 
-    public static function dumpThrift(NovaPacket $novaPacket, ThriftPacket $thriftPacket)
+    public static function dumpThrift(NovaPDU $novaPacket, ThriftPacket $thriftPacket)
     {
         $type = $thriftPacket->type;
         $service = $novaPacket->service;

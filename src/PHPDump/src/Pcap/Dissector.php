@@ -4,7 +4,7 @@ namespace Minimalism\PHPDump\Pcap;
 
 
 
-interface Protocol
+interface Dissector
 {
     const DETECTED = 1;
     const UNDETECTED = 2;
@@ -26,7 +26,7 @@ interface Protocol
 
     /**
      * @param Connection $connection
-     * @return Packet
+     * @return PDU
      */
-    public function unpack(Connection $connection);
+    public function dissect(Connection $connection);
 }

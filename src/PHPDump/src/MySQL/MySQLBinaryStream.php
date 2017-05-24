@@ -1,9 +1,8 @@
 <?php
 
-namespace Minimalism\FakeServer\MySQL;
+namespace Minimalism\PHPDump\MySQL;
 
-
-use Minimalism\FakeServer\Buffer\BinaryStream;
+use Minimalism\PHPDump\Buffer\BinaryStream;
 
 
 /**

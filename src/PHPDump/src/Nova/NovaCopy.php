@@ -17,7 +17,7 @@ class NovaCopy
         $this->file = $file;
     }
 
-    public function __invoke(NovaPacket $novaPacket)
+    public function __invoke(NovaPDU $novaPacket)
     {
         $thriftPacket = $novaPacket->thriftPacket;
         $args = $novaPacket->thriftLocalArgs;

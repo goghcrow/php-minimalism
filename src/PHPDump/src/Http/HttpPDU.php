@@ -4,7 +4,7 @@ namespace Minimalism\PHPDump\Http;
 
 
 use Minimalism\PHPDump\Pcap\Connection;
-use Minimalism\PHPDump\Pcap\Packet;
+use Minimalism\PHPDump\Pcap\PDU;
 use Minimalism\PHPDump\Util\T;
 
 
@@ -12,7 +12,7 @@ use Minimalism\PHPDump\Util\T;
  * Class HttpPacket
  * @package Minimalism\PHPDump\Http
  */
-class HttpPacket extends Packet
+class HttpPDU extends PDU
 {
     const REQUEST = 1;
     const RESPONSE = 2;
@@ -53,7 +53,7 @@ class HttpPacket extends Packet
         $this->chunkExt = [];
     }
 
-    public function analyze(Connection $connection)
+    public function inspect(Connection $connection)
     {
         $srcIp = $connection->IPHdr->source_ip;
         $dstIp = $connection->IPHdr->destination_ip;

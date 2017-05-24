@@ -5,8 +5,8 @@ namespace Minimalism\PHPDump\Http;
 
 use Minimalism\PHPDump\Buffer\Buffer;
 use Minimalism\PHPDump\Pcap\Connection;
-use Minimalism\PHPDump\Pcap\Packet;
-use Minimalism\PHPDump\Pcap\Protocol;
+use Minimalism\PHPDump\Pcap\PDU;
+use Minimalism\PHPDump\Pcap\Dissector;
 
 
 /**
@@ -180,7 +180,7 @@ use Minimalism\PHPDump\Pcap\Protocol;
  *
  * Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
  */
-class HttpProtocol implements Protocol
+class HttpDissector implements Dissector
 {
     const CRLF = "\r\n";
     const CRLF2 = "\r\n\r\n";
@@ -221,21 +221,21 @@ class HttpProtocol implements Protocol
     {
         $buffer = $connection->buffer;
         if ($buffer->readableBytes() < self::$maxMethodSize) {
-            return Protocol::DETECT_WAIT;
+            return Dissector::DETECT_WAIT;
         }
 
 
         $t = $buffer->get(self::$maxMethodSize);
 
         if (substr($t, 0, 4) === "HTTP") {
-            return Protocol::DETECTED;
+            return Dissector::DETECTED;
         } else {
             foreach (self::$methods as $method => $len) {
                 if (substr($t, 0, $len) === $method) {
-                    return Protocol::DETECTED;
+                    return Dissector::DETECTED;
                 }
             }
-            return Protocol::UNDETECTED;
+            return Dissector::UNDETECTED;
         }
     }
 
@@ -245,17 +245,17 @@ class HttpProtocol implements Protocol
      */
     public function isReceiveCompleted(Connection $connection)
     {
-        /* @var $packet HttpPacket */
+        /* @var $packet HttpPDU */
 
         $buffer = $connection->buffer;
 
         if ($packet = $connection->currentPacket) {
-            if ($packet->state === HttpPacket::STATE_BODY_FIN) {
+            if ($packet->state === HttpPDU::STATE_BODY_FIN) {
                 assert($connection->currentPacket);
                 return true;
             }
 
-            assert($packet->state === HttpPacket::STATE_HEADER_FIN);
+            assert($packet->state === HttpPDU::STATE_HEADER_FIN);
             if ($packet->isChunked) {
                 return self::parseChunked($buffer, $packet);
             } else {
@@ -305,10 +305,10 @@ class HttpProtocol implements Protocol
                             // 延迟到连接关闭
                             $connection->on(Connection::EVT_CLOSE, function() use($connection) {
                                 if ($connection->currentPacket) {
-                                    /* @var HttpPacket $packet */
+                                    /* @var HttpPDU $packet */
                                     $packet = $connection->currentPacket;
                                     $packet->finishParsingBody();
-                                    $connection->doAnalyze();
+                                    $connection->doDissect();
                                 }
                             });
                             return false;
@@ -321,13 +321,13 @@ class HttpProtocol implements Protocol
             } else {
                 $state = $this->detect($connection);
                 switch ($state) {
-                    case Protocol::DETECT_WAIT:
-                    case Protocol::DETECTED:
+                    case Dissector::DETECT_WAIT:
+                    case Dissector::DETECTED:
                     default:
                         $packet->finishParsingBody();
                         return true;
                         break;
-                    case Protocol::UNDETECTED:
+                    case Dissector::UNDETECTED:
                         print_r($packet);
                         sys_abort("malformed http message:" . $buffer->read(PHP_INT_MAX));
                 }
@@ -337,18 +337,18 @@ class HttpProtocol implements Protocol
 
     /**
      * @param Connection $connection
-     * @return Packet
+     * @return PDU
      */
-    public function unpack(Connection $connection)
+    public function dissect(Connection $connection)
     {
         // 直接从当前连接获取完整的包
 
-        /* @var $packet HttpPacket */
+        /* @var $packet HttpPDU */
         $packet = $connection->currentPacket;
         $connection->currentPacket = null;
 
         assert($packet !== null);
-        assert($packet->state === HttpPacket::STATE_BODY_FIN);
+        assert($packet->state === HttpPDU::STATE_BODY_FIN);
 
         if ($packet->isGzip) {
             $packet->body = $this->gzDecode($packet->body);
@@ -380,16 +380,16 @@ class HttpProtocol implements Protocol
     }
 
     /**
-     * @param HttpPacket $packet
+     * @param HttpPDU $packet
      * @return bool
      *
      * NOTICE: 如果有违反RFC的情况，这里会出错
      */
-    private function hasBody(HttpPacket $packet)
+    private function hasBody(HttpPDU $packet)
     {
-        if ($packet->type === HttpPacket::REQUEST) {
+        if ($packet->type === HttpPDU::REQUEST) {
             return in_array($packet->method, ["POST", "PUT", "CONNECT", "PATCH", "OPTIONS"], true);
-        } else if ($packet->type === HttpPacket::RESPONSE) {
+        } else if ($packet->type === HttpPDU::RESPONSE) {
             return $packet->method !== "HEAD";
         }
         assert(false);
@@ -402,7 +402,7 @@ class HttpProtocol implements Protocol
         // 读取全部parseHeader
         $raw = $buffer->read(PHP_INT_MAX);
 
-        $packet = new HttpPacket($connection);
+        $packet = new HttpPDU($connection);
         assert(strpos($raw, self::CRLF2) !== false);
 
         list($headerStr, $_/*$packet->body*/) = explode(self::CRLF2, $raw, 2);
@@ -424,11 +424,11 @@ class HttpProtocol implements Protocol
         /* }}} */
 
         if (substr($line[0], 0, 4) === "HTTP") {
-            $packet->type = HttpPacket::RESPONSE;
+            $packet->type = HttpPDU::RESPONSE;
             $packet->statusLine = trim($lines[0]);
             list($packet->httpVer, $packet->statusCode, $packet->reasonPhrase) = $line;
         } else {
-            $packet->type = HttpPacket::REQUEST;
+            $packet->type = HttpPDU::REQUEST;
             $packet->requestLine = trim($lines[0]);
             list($packet->method, $packet->uri, $packet->httpVer) = $line;
         }
@@ -447,7 +447,7 @@ class HttpProtocol implements Protocol
         return $packet;
     }
 
-    private static function parseChunked(Buffer $buffer, HttpPacket $packet)
+    private static function parseChunked(Buffer $buffer, HttpPDU $packet)
     {
         while (true) {
             $raw = $buffer->get(PHP_INT_MAX);

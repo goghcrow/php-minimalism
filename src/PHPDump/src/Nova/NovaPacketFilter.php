@@ -29,7 +29,7 @@ class NovaPacketFilter
         return $service === "com.youzan.service.test" && ($method === "ping" || $method === "pong");
     }
 
-    public function __invoke(NovaPacket $novaPacket)
+    public function __invoke(NovaPDU $novaPacket)
     {
         $service = $novaPacket->service;
         $method = $novaPacket->method;

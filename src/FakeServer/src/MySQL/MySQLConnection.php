@@ -19,7 +19,7 @@ class MySQLConnection
      * The sequence-id is incremented with each packet and may wrap around.
      * It starts at 0 and is reset to 0 when a new command begins in the Command Phase.
      */
-    private $seq;
+    private $packetNum;
     private $salt;
 
     public $remoteHost;
@@ -63,7 +63,7 @@ class MySQLConnection
         $this->inputBuffer = new MySQLBinaryStream(BufferFactory::make());
         $this->outputBuffer = new MySQLBinaryStream(BufferFactory::make());
         $this->state = self::STATE_BEFORE_GREET;
-        $this->seq = -1;
+        $this->packetNum = -1;
 
         $this->salt = openssl_random_pseudo_bytes(8);
     }
@@ -77,7 +77,7 @@ class MySQLConnection
                 break;
 
             case self::STATE_BEFORE_LOGIN:
-                $this->seq++;
+                $this->packetNum++;
                 $loginData = $this->readAuthorizationPacket();
                 $this->username = $loginData["username"];
                 $this->charset = $loginData["charset"];
@@ -344,13 +344,13 @@ class MySQLConnection
 
     private function sendPacket()
     {
-        $this->outputBuffer->prependHeader(++$this->seq);
+        $this->outputBuffer->prependHeader(++$this->packetNum);
         return $this->mysqlServer->swooleServer->send($this->fd, $this->outputBuffer->readFull());
     }
 
     private function resetSeqAndState()
     {
-        $this->seq = 0;
+        $this->packetNum = 0;
         $this->state = self::STATE_AFTER_RESPONSE;
     }
 }

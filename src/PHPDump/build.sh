@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+rm -rf load.php
+rm -rf novadump.phar
+make load.php
+make phar
+cp novadump.phar ~/Documents/zan-dev-doc/

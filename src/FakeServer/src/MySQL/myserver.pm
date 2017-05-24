@@ -519,9 +519,50 @@ sub getClientCharset {
 	return $myserver->[MYSERVER_CLIENT_CHARSET];
 }
 
+sub _createPacket {
+	my ($myserver, $data) = @_;
+	my $header;
+	$header .= substr(pack('V',length($data)),0,3);
+	$header .= chr($myserver->[MYSERVER_PACKET_COUNT]++ % 256);
+	return $header.$data;
+}
 
+sub _sendPacket {
+	my ($myserver, $payload) = @_;
+	return $myserver->_writeData($myserver->_createPacket($payload));
+}
 
+sub _writeData {
+	my ($myserver, $data) = @_;
+	return syswrite($myserver->[MYSERVER_SOCKET], $data);
+}
 
+sub sendOK {
+### Sending OK...
+	my ($myserver, $message, $affected_rows, $insert_id, $warning_count) = @_;
+#### $message
+#### $affected_rows
+#### $insert_id
+#### $warning_count
+
+	my $data;
+
+	$affected_rows = 0 if not defined $affected_rows;
+	$warning_count = 0 if not defined $warning_count;
+
+	$data .= "\0"; # Field Count, always 0
+	$data .= $myserver->_lengthCodedBinary($affected_rows);
+	$data .= $myserver->_lengthCodedBinary($insert_id);
+	$data .= pack('v', SERVER_STATUS_AUTOCOMMIT);
+	$data .= pack('v', $warning_count);
+	$data .= $myserver->_lengthCodedString($message);
+
+	my $send_result = $myserver->_sendPacket($data);
+
+	$myserver->[MYSERVER_PACKET_COUNT] = 0;
+
+	return $send_result;
+}
 
 sub newDefinition {
 	my $myserver = shift;
@@ -677,6 +718,154 @@ sub sendEOF {
 	return $result;
 }
 
+sub handshake {
+### Handshaking...
+	my $myserver = shift;
+
+        my $server_result = $myserver->sendServerHello();
+
+	return undef if $server_result < 1;
+
+ 	my ($username, $database) = $myserver->readClientHello();
+
+	return undef if not defined $username;
+
+	my $remote_host;
+
+	eval {
+		my $hersockaddr = getpeername($myserver->getSocket());
+		my ($port, $iaddr) = sockaddr_in($hersockaddr);
+		$remote_host = inet_ntoa($iaddr);
+	};
+
+	$remote_host = '127.0.0.1' if (not defined $remote_host) || ($remote_host eq '');
+
+	my $authorize_result = $myserver->authorize($remote_host, $username, $database);
+
+	if (defined $authorize_result) {
+		$myserver->sendOK();
+	} else {
+                $myserver->sendError("Authorization failed.",1044, 28000);
+	}
+
+	return $authorize_result;
+
+}
+
+sub sendServerHello {
+### Sending Server Hello...
+	my $myserver = shift;
+
+	my $payload = chr(10); # Protocol version
+
+	if (defined $myserver->[MYSERVER_BANNER]) {
+		$payload .= $myserver->[MYSERVER_BANNER]."\0";	# Server string
+	} else {
+		$payload .= ref($myserver)." ".$VERSION."\0";	# e.g. 'DBIx::Myparse 0.81'
+	}
+
+	$payload .= pack('V', $myserver->[MYSERVER_THREAD_ID]);
+
+	$payload .= substr($myserver->[MYSERVER_SALT],0,8)."\0";
+
+	# Server capabilities
+	$payload .= pack('v', CLIENT_LONG_PASSWORD | CLIENT_CONNECT_WITH_DB | CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION);
+
+	my $charset = defined $myserver->[MYSERVER_SERVER_CHARSET] ? chr($myserver->[MYSERVER_SERVER_CHARSET]) : chr(0x21); # latin1
+	$payload .= $charset;
+
+	$payload .= pack('v', SERVER_STATUS_AUTOCOMMIT);	# Server status
+
+	$payload .= "\0" x 13;				# Unused space
+
+	$payload .= substr($myserver->[MYSERVER_SALT],8)."\0";
+
+	return $myserver->_sendPacket($payload);
+}
+
+sub _readPacket {
+### Reading Packet...
+	my $myserver = shift;
+
+	my ($header, $header_read_result);
+
+	$header_read_result = sysread($myserver->[MYSERVER_SOCKET], $header, 4);
+
+	if (not defined $header_read_result) {
+		return undef;
+	} elsif ($header_read_result == 0) {
+		# EOF
+		return undef;
+	} elsif ($header_read_result < 4) {
+		# Incomplete read
+		return undef;
+	}
+
+	my $packet_length = unpack('V', substr($header, 0, 3)."\0");
+
+	my ($all_data, $data_read_result);
+	my $total_read = 0;
+	while () {
+		my $data_read_result = sysread($myserver->[MYSERVER_SOCKET], my $packet_data, $packet_length);
+		$all_data .= $packet_data;
+		$total_read = $total_read + $data_read_result;
+		return undef if not defined $data_read_result;
+		last if $data_read_result == 0;
+		last if $total_read >= $packet_length;
+	}
+
+	$myserver->[MYSERVER_PACKET_COUNT]++;
+	return $all_data;
+}
+
+sub readClientHello {
+### Reading Client Hello...
+
+	# http://dev.mysql.com/doc/internals/en/the-packet-header.html
+
+	my $myserver = shift;
+	my $data = $myserver->_readPacket();
+	return undef if not defined $data;
+
+	my $ptr = 0;
+
+	my $client_flags = substr($data, $ptr, 4);
+	$ptr = $ptr + 4;
+
+	my $max_packet_size = substr($data, $ptr, 4);
+	$ptr = $ptr + 4;
+
+	my $charset_number = substr($data, $ptr, 1);
+	$myserver->[MYSERVER_CLIENT_CHARSET] = ord($charset_number);
+	$ptr++;
+
+	my $filler1 = substr($data, $ptr, 23);
+	$ptr = $ptr + 23;
+
+	my $username_end = index($data, "\0", $ptr);
+	my $username = substr($data, $ptr, $username_end - $ptr);
+	$ptr = $username_end + 1;
+
+	my $scramble_buff;
+
+	my $scramble_length = ord(substr($data, $ptr, 1));
+	$ptr++;
+
+	if ($scramble_length > 0) {
+		$myserver->[MYSERVER_SCRAMBLE] = substr($data, $ptr, $scramble_length);
+		$ptr = $ptr + $scramble_length;
+	}
+
+	my $database;
+
+	my $database_end = index( $data, "\0", $ptr);
+	if ($database_end != -1 ) {
+		$database = substr($data, $ptr, $database_end - $ptr);
+	}
+
+	return ($username, $database);
+
+}
 
 sub readCommand {
 ### Reading Client Command...
@@ -688,7 +877,49 @@ sub readCommand {
 	);
 }
 
+sub _lengthCodedString {
+	my ($myserver, $string) = @_;
+	return chr(0) if (not defined $string);
+	return chr(253).substr(pack('V',length($string)),0,3).$string;
+}
 
+sub _lengthCodedBinary {
+	my ($myserver, $number) = @_;
+	if (not defined $number) {
+		return chr(251);
+	} elsif ($number < 251) {
+		return chr($number);
+	} elsif ($number < 0x10000) {
+		return chr(252).pack('v', $number);
+	} elsif ($number < 0x1000000) {
+		return chr(253).substr(pack('V', $number), 0, 3);
+	} else {
+		return chr(254).pack('V', $number >> 32).pack('V', $number & 0xffffffff);
+	}
+}
+
+sub sendError() {
+### Sending Error ...
+	my ($myserver, $message, $errno, $sqlstate) = @_;
+#### $errno
+#### $sqlstate
+#### $message
+	# http://dev.mysql.com/doc/internals/en/error-packet.html
+
+	$message = 'Unknown MySQL error' if not defined $message;
+	$errno = 2000 if not defined $errno;
+	$sqlstate = 'HY000' if not defined $sqlstate;
+
+	my $payload = chr(0xff);		# field_count, always = 0xff
+	$payload .= pack('v', $errno);
+	$payload .= '#';				# sqlstate marker, always #
+	$payload .= $sqlstate;
+	$payload .= $message."\0";
+
+	my $send_result = $myserver->_sendPacket($payload);
+	$myserver->[MYSERVER_PACKET_COUNT] = 0;
+	return $send_result;
+}
 
 # ====================================
 
@@ -761,4 +992,378 @@ sub processCommand {
 	return $outcome;
 }
 
+sub comSleep {
+	my $myserver = shift;
+	return $myserver->sendErrorUnsupported("COM_SLEEP");
+}
 
+sub comQuit {
+	return undef;
+#	die "Unhandled COM_QUIT command; default action is to die()";
+}
+
+sub comInitDb {
+	my ($myserver, $database) = @_;
+	my $parser = $myserver->getParser();
+	$parser->setDatabase($database) if defined $parser;
+	return $myserver->comQuery("USE $database");
+}
+
+sub comQuery {
+### Processing Query ...
+	my ($myserver, $query_text) = @_;
+#### $query_text
+	print "Q: $query_text\n";
+	my $parser = $myserver->getParser();
+	if (not defined $parser) {
+		return $myserver->sendError('0', "Default comQuery() handler requires a DBIx::MyParse object.",0,0);
+	}
+
+	my $query = $parser->parse($query_text);
+	my $command = $query->getCommand();
+
+	if ($command eq 'SQLCOM_ERROR') {
+		return $myserver->sqlcomError($query, $query_text);
+	} elsif ($command eq 'SQLCOM_SELECT') {
+	        my $orig_command = $query->getOrigCommand();
+
+	        if (
+			($orig_command ne 'SQLCOM_SHOW_DATABASES') &&
+			($orig_command ne 'SQLCOM_SHOW_TABLES') &&
+			($orig_command ne 'SQLCOM_SHOW_TABLE_STATUS') &&
+			($orig_command ne 'SQLCOM_SHOW_FIELDS')
+		) {
+			return $myserver->sqlcomSelect($query, $query_text);
+		}
+
+		my $schema_select = $query->getSchemaSelect();
+		my $db_name = $schema_select->getDatabaseName();
+
+	        if ($orig_command eq 'SQLCOM_SHOW_DATABASES') {
+	                return $myserver->sqlcomShowDatabases($query, $query_text);
+	        } elsif ($orig_command eq 'SQLCOM_SHOW_TABLES') {
+	                return $myserver->sqlcomShowTables($query, $query_text, $db_name, $query->getWild());
+	        } elsif ($orig_command eq 'SQLCOM_SHOW_TABLE_STATUS') {
+	                return $myserver->sqlcomShowTableStatus($query, $query_text, $db_name, $query->getWild());
+		} elsif ($orig_command eq 'SQLCOM_SHOW_FIELDS') {
+			return $myserver->sqlcomShowFields($query, $query_text, $db_name, $schema_select->getTableName());
+		}
+	} elsif ($command eq 'SQLCOM_INSERT') {
+		return $myserver->sqlcomInsert($query, $query_text);
+	} elsif ($command eq 'SQLCOM_INSERT_SELECT') {
+		return $myserver->sqlcomInsertSelect($query, $query_text);
+	} elsif ($command eq 'SQLCOM_REPLACE') {
+		return $myserver->sqlcomReplace($query, $query_text);
+	} elsif ($command eq 'SQLCOM_REPLACE_SELECT') {
+		return $myserver->sqlcomReplaceSelect($query, $query_text);
+	} elsif ($command eq 'SQLCOM_UPDATE') {
+		return $myserver->sqlcomUpdate($query, $query_text);
+	} elsif ($command eq 'SQLCOM_UPDATE_MULTI') {
+		return $myserver->sqlcomUpdateMulti($query, $query_text);
+	} elsif ($command eq 'SQLCOM_DELETE') {
+		return $myserver->sqlcomDelete();
+	} elsif ($command eq 'SQLCOM_DELETE_MULTI') {
+		return $myserver->sqlcomDeleteMulti($query, $query_text);
+	} elsif ($command eq 'SQLCOM_BEGIN') {
+		return $myserver->sqlcomBegin($query, $query_text);
+	} elsif ($command eq 'SQLCOM_COMMIT') {
+		return $myserver->sqlcomCommit($query, $query_text);
+	} elsif ($command eq 'SQLCOM_ROLLBACK') {
+		return $myserver->sqlcomRollback($query, $query_text);
+	} elsif ($command eq 'SQLCOM_SAVEPOINT') {
+		return $myserver->sqlcomSavepoint($query, $query_text);
+	} elsif ($command eq 'SQLCOM_ROLLBACK_TO_SAVEPOINT') {
+		return $myserver->sqlcomRollbackToSavepoint($query, $query_text);
+	} elsif ($command eq 'SQLCOM_DROP_TABLE') {
+		return $myserver->sqlcomDropTable($query, $query_text);
+	} elsif ($command eq 'SQLCOM_RENAME_TABLE') {
+		return $myserver->sqlcomRenameTable($query, $query_text);
+	} elsif (
+		($command eq 'SQLCOM_CHANGE_DB') ||
+		($command eq 'SQLCOM_CREATE_DB') ||
+		($command eq 'SQLCOM_DROP_DB')
+	) {
+		my $schema_select = $query->getSchemaSelect();
+		my $db_name = $schema_select->getDatabaseName();
+		return $myserver->sqlcomChangeDb($query, $query_text, $db_name) if $command eq 'SQLCOM_CHANGE_DB';
+		return $myserver->sqlcomCreateDb($query, $query_text, $db_name) if $command eq 'SQLCOM_CREATE_DB';
+		return $myserver->sqlcomDropDb($query, $query_text, $db_name) if $command eq 'SQLCOM_DROP_DB';
+	} else {
+		return $myserver->sendErrorUnsupported($command);
+	}
+}
+sub sqlcomError {
+### Sending SQL Error
+	my ($myserver, $query, $query_text) = @_;
+	my $error = $query->getError();
+	my $errstr = $query->getErrstr();
+	return $myserver->sendError("$error: $errstr", $query->getErrno(), $query->getSQLState());
+}
+
+sub sqlcomSelect {
+### SQL Select
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomShowDatabases {
+### SQL Show Databases
+	return $_[0]->sendErrorUnsupported($_[1]->getOrigCommand());
+}
+
+sub sqlcomShowTables {
+### SQL Show Tables
+	return $_[0]->sendErrorUnsupported($_[1]->getOrigCommand());
+}
+
+sub sqlcomShowTableStatus {
+	return $_[0]->sendErrorUnsupported($_[1]->getOrigCommand());
+}
+
+sub sqlcomShowFields {
+	return $_[0]->sendErrorUnsupported($_[1]->getOrigCommand());
+}
+
+sub sqlcomInsert {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomInsertSelect {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomReplace {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomReplaceSelect {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomUpdate {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomUpdateMulti {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomDelete {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomDeleteMulti {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomBegin {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomCommit {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomRollback {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomSavepoint {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomRollbackToSavepoint {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomDropDb {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomDropTable {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomRenameTable {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomChangeDb {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub sqlcomCreateDb {
+	return $_[0]->sendErrorUnsupported($_[1]->getCommand());
+}
+
+sub comFieldList {
+	my $myserver = shift;
+	return $myserver->sendErrorUnsupported("COM_FIELD_LIST");
+}
+
+sub comCreateDb {
+	my ($myserver, $database) = @_;
+	return $myserver->comQuery("CREATE DATABASE $database");
+}
+
+sub comDropDb {
+	my $myserver = shift;
+	return $myserver->sendErrorUnsupported("COM_DROP_DB");
+}
+
+sub comShutdown {
+	my $myserver = shift;
+	die "Unhandled COM_SHUTDOWN command; default action is to die()";
+	return undef;
+}
+
+sub comStatistics {
+	my $myserver = shift;
+	return $myserver->_sendPacket("My PID is $$");
+}
+
+sub comProcessInfo {
+	my $myserver = shift;
+	return $myserver->sendErrorUnsupported("COM_PROCESS_INFO");
+}
+
+sub comProcessKill {
+	my ($myserver, $data) = @_;
+	my $pid = unpack('V', $data);
+	if ($$ == $pid) {
+		kill(15, $pid);
+		return 1;
+	} else {
+		$myserver->sendError("ER_SPECIFIC_ACCESS_DENIED_ERROR: by default you can kill only your own PID.",1227, 42000);
+		return 1;
+	}
+}
+
+sub comDebug {
+	my $myserver = shift;
+	return $myserver->sendErrorUnsupported("COM_DEBUG");
+}
+
+sub comPing {
+	my $myserver = shift;
+	return $myserver->sendOK();
+}
+
+sub comStmtPrepare {
+	return $_[0]->_sendErrorPrepared("COM_STMT_PREPARE");
+}
+
+sub comStmtExecute {
+	return $_[0]->_sendErrorPrepared("COM_STMT_EXECUTE");
+}
+
+sub comStmtSendLongData {
+	return $_[0]->_sendErrorPrepared("COM_STMT_SEND_LONG_DATA");
+}
+
+sub comStmtClose {
+	return $_[0]->_sendErrorPrepared("COM_STMT_CLOSE");
+}
+
+sub comStmtReset {
+	return $_[0]->_sendErrorPrepared("COM_STMT_RESET");
+}
+
+sub comStmtFetch {
+	return $_[0]->_sendErrorPrepared("COM_STMT_FETCH");
+}
+
+sub _sendErrorPrepared {
+	my ($myserver, $command) = @_;
+	carp ref($myserver)." Prepared statement command $command not supported.";
+	return $myserver->sendError(ref($myserver).": Prepared statement command $command not supported.",1295, 'HY100');
+}
+
+sub sendErrorUnsupported {
+	my ($myserver, $command) = @_;
+	carp ref($myserver)." Unhandled command: $command";
+	return $myserver->sendError(ref($myserver).": Command $command not supported.",1235, 42000);
+}
+
+
+sub authorize {
+### Authorizing...
+	my ($myserver, $remote_host, $username, $database) = @_;
+#### $remote_host
+#### $username
+#### $database
+	warn "using default authorize($remote_host, $username).";
+
+	if (($remote_host eq '127.0.0.1') || ($remote_host =~ m{^192\.168})) {
+		return 1;
+	} else {
+		$myserver->sendError("Default authorize() only allows localhost connections regardless of username or password. Your host is $remote_host.",1044, 28000);
+		return undef;
+	}
+}
+
+sub passwordMatches {
+### Checking Password...
+	my ($myserver, $password) = @_;
+#### $password
+
+	my $ctx = Digest::SHA1->new;
+	$ctx->reset;
+	$ctx->add($password);
+	my $stage1 = $ctx->digest;
+
+	$ctx->reset;
+	$ctx->add($stage1);
+	my $stage2 = $ctx->digest;
+
+	$ctx->reset;
+	$ctx->add($myserver->[MYSERVER_SALT]);
+	$ctx->add($stage2);
+	my $result = $ctx->digest;
+
+	return undef if ($password ne '') && (not defined $myserver->[MYSERVER_SCRAMBLE]);
+
+	return 1 if $myserver->_xor($result, $stage1) eq $myserver->[MYSERVER_SCRAMBLE];
+
+	return undef;
+}
+
+sub _xor {
+	my ($myserver, $s1, $s2) = @_;
+	my $l = length($s1) - 1;
+	my $result = '';
+	for my $i (0..$l) {
+		$result .= pack 'C', (unpack('C', substr($s1, $i, 1)) ^ unpack('C', substr($s2, $i, 1)));
+	}
+	return $result;
+}
+
+1;
+
+=head1 AUTHOR
+
+Philip Stoev, E<lt>philip@stoev.org<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2006 by Philip Stoev
+
+This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License Agreement.
+
+Please note that that the MySQL Protocol is proprietary and is also
+covered by the GNU General Public License. Please see
+
+http://dev.mysql.com/doc/internals/en/licensing-notice.html
+
+If you have any licensing doubts, please contact MySQL AB directly.
+
+=head1 SEE ALSO AND THANKS
+
+The following sources of information have been very helpful in creating
+this module:
+
+http://dev.mysql.com/doc/internals/en/client-server-protocol.html
+
+http://www.redferni.uklinux.net/mysql/MySQL-Protocol.html
+
+=cut
