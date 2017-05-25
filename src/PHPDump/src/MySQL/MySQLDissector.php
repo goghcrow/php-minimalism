@@ -47,7 +47,6 @@ class MySQLDissector implements Dissector
         }
     }
 
-
     /**
      * @param Connection $connection
      * @return int DETECTED|UNDETECTED|DETECT_WAIT
@@ -63,17 +62,6 @@ class MySQLDissector implements Dissector
             return Dissector::DETECTED;
         }
 
-        /*
-        $stream = new MySQLBinaryStream($connection->buffer);
-        $state = $stream->isMySQLPacket();
-        if ($state === -1) {
-            return Protocol::UNDETECTED;
-        } else if ($state === 0) {
-            return Protocol::DETECT_WAIT;
-        } else {
-            return Protocol::DETECTED;
-        }
-        */
     }
 
     /**
@@ -107,41 +95,22 @@ class MySQLDissector implements Dissector
 
                 $this->state = MySQLState::LOGIN;
             } else {
-                // sys_echo("Server Response");
-
-                // An OK packet is sent from the server to the client to signal successful completion of a command.
-                // As of MySQL 5.7.5, OK packes are also used to indicate EOF, and EOF packets are deprecated.
-
-                // These rules distinguish whether the packet represents OK or EOF:
-                //  OK: header = 0 and length of packet > 7
-                //  EOF: header = 0xfe and length of packet < 9
-
-                // EOF 0xFE
-                // Warning
-                // The EOF_Packet packet may appear in places where a Protocol::LengthEncodedInteger may appear.
-                // You must check whether the packet length is less than 9 to make sure that it is a EOF_Packet packet.
-                /**
-                响应报文类型	第1个字节取值范围
-                OK 响应报文	0x00
-                Error 响应报文	0xFF
-                Result Set 报文	0x01 - 0xFA
-                Field 报文	0x01 - 0xFA
-                Row Data 报文	0x01 - 0xFA
-                EOF 报文	0xFE
-                 */
-
-                $code = $stream->readUInt8();
+                $code = unpack("C", $stream->get(1))[1];
+//                $code = $stream->readUInt8();
                 $lenRemaining = $len - 1;
-                if ($code === 0xFF/*ERR*/) {
+                if ($code === 0xFF) {
+                    // ERR
                     sys_echo("Server Response ERR");
-                    $stream->readResponseERR();
+                    // $stream->readResponseERR(); // TODO
+                    $stream->read($len); // SKIP
                     $this->state = MySQLState::REQUEST;
                 } else if ($code === 0x00) {
-                    // OK
+                    // OK OR ResultSetHeaderFieldCount
                     if ($this->state === MySQLState::RESPONSE_PREPARE) {
+                        assert(false); // proxy 不支持prepare语句, 所以这里应该不会走到
                         sys_echo("Server Response Prepare OK");
                         // $stream->readPrepareOK(); // TODO 这里必须读出来
-                        $stream->read($lenRemaining); // SKIP
+                        $stream->read($len); // SKIP
 //                        if (stmt_num_params > 0) {
 //                            $this->state = MySQLState::PREPARED_PARAMETERS;
 //                        } else if (stmt_num_fields > 0) {
@@ -152,20 +121,17 @@ class MySQLDissector implements Dissector
                     } else if ($lenRemaining > $stream->getLengthCodedBinaryLen()) {
                         sys_echo("Server Response OK");
                         // $stream->readResponseOK(); // TODO
-                        $stream->read($lenRemaining); // SKIP
+                        $stream->read($len); // SKIP
                         $this->state = MySQLState::REQUEST;
                     } else {
                         list($fieldCount, $ext) = $stream->readResultSetHeader();
                         sys_echo("Server Response ResultSetHeader, fieldCount=$fieldCount");
                     }
-
-                } else if ($code === 0xFE && $len < 9) {
+                } else if ($code === 0xFE && $lenRemaining < 9) {
                     /*EOF*/
                     sys_echo("Server Response EOF");
                     if ($lenRemaining > 0) {
-                        echo "===============================================\n";
-                        var_dump(strlen($lenRemaining));
-                        $stream->read($lenRemaining); // SKIP
+                        list($this->serverStatus, $flags) = $stream->readEOF();
                     }
                     switch ($this->state) {
                         case MySQLState::FIELD_PACKET:
@@ -196,17 +162,14 @@ class MySQLDissector implements Dissector
                             break;
 
                         default:
+                            assert(false);
                             $this->state = MySQLState::REQUEST;
                     }
                 } else {
                     switch ($this->state) {
                         case MySQLState::RESPONSE_MESSAGE:
                             sys_echo("Server Response Message");
-                            if ($lenRemaining > 0) {
-
-                            }
-                            // TODO
-                            echo $stream->read($lenRemaining), "\n"; // SKIP
+                            $stream->read($len); // SKIP
                             $this->state = MySQLState::REQUEST;
                             break;
 
@@ -224,29 +187,29 @@ class MySQLDissector implements Dissector
                         case MySQLState::RESPONSE_SHOW_FIELDS:
                         case MySQLState::RESPONSE_PREPARE:
                         case MySQLState::PREPARED_PARAMETERS:
-                        sys_echo("Server Response Field");
-                            $stream->readField(); // TODO
-                            echo $stream->read($lenRemaining), "\n"; // SKIP
+                            sys_echo("Server Response Field");
+                            $field = $stream->readField($len);
+                            print_r($field);
                             break;
 
                         case MySQLState::ROW_PACKET:
                             sys_echo("Server Response Row");
-                            $stream->readRowData(); // TODO
-                            $stream->read($lenRemaining); // SKIP
+                            $row = $stream->readRowData(); // TODO
+                            $stream->read($len); // SKIP
                             break;
 
                         case MySQLState::PREPARED_FIELDS:
                             sys_echo("Server Response Field");
-                            $stream->readField(); // TODO
-                            $stream->read($lenRemaining); // SKIP
+                            $field = $stream->readField($len);
+                            print_r($field);
                             break;
 
                         case MySQLState::AUTH_SWITCH_REQUEST:
-                            $stream->read($lenRemaining); // SKIP
+                            $stream->read($len); // SKIP
                             break;
 
                         default:
-                            $stream->read($lenRemaining); // SKIP
+                            $stream->read($len); // SKIP
                             $this->state = MySQLState::UNDEFINED;
                     }
                 }
@@ -260,9 +223,8 @@ class MySQLDissector implements Dissector
 
                 $this->state = MySQLState::RESPONSE_OK;
             } else {
-                sys_echo("Request");
                 list($cmd, $args) = $stream->readCommand();
-                print_r($cmd);
+                sys_echo("Request $cmd");
                 print_r($args);
 
                 switch ($cmd) {
@@ -295,10 +257,6 @@ class MySQLDissector implements Dissector
                         $this->state = MySQLState::RESPONSE_PREPARE;
                         break;
 
-                    case MySQLCommand::COM_STMT_CLOSE:
-                        $this->state = MySQLState::REQUEST;
-                        break;
-
                     case MySQLCommand::COM_FIELD_LIST:
                         $this->state = MySQLState::RESPONSE_SHOW_FIELDS;
                         break;
@@ -308,6 +266,7 @@ class MySQLDissector implements Dissector
                     case MySQLCommand::COM_TABLE_DUMP:
                     case MySQLCommand::COM_CONNECT_OUT:
                     case MySQLCommand::COM_REGISTER_SLAVE:
+                    case MySQLCommand::COM_STMT_CLOSE:
                         $this->state = MySQLState::REQUEST;
                         break;
 

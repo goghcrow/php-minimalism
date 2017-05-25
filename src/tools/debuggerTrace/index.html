@@ -866,6 +866,7 @@
       }.bind(this))
 
       ws.addEventListener('message', function (evt) {
+
         // 处理粘包
         this.buffer.writeArrayBuffer(evt.data)
 

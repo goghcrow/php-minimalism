@@ -45,11 +45,11 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit(1);
 }
 
-$attach = [];
+$attach = new \stdClass();
 if (isset($a['e'])) {
     $attach = json_decode($a['e'], true);
     if ($attach === null) {
-        $attach = [];
+        $attach = new \stdClass();
     }
     if (json_last_error() !== JSON_ERROR_NONE) {
         echo "\033[1;31m", "-e attachment参数有误: ", json_last_error_msg(), "\033[0m\n";
