@@ -6,6 +6,12 @@ namespace Minimalism\PHPDump\Pcap;
 use Minimalism\PHPDump\Buffer\Buffer;
 use Minimalism\PHPDump\Buffer\BufferFactory;
 
+/**
+ * Class Connection
+ * @package Minimalism\PHPDump\Pcap
+ *
+ * 单方向连接
+ */
 class Connection
 {
     /**
@@ -36,7 +42,7 @@ class Connection
     /**
      * @var Dissector
      */
-    public $protocol;
+    public $dissector;
 
     /**
      * 当前连接未解析完成的包
@@ -55,6 +61,7 @@ class Connection
     private $events;
 
     const EVT_CLOSE = 1;
+    const EVT_RESPONSE = 2;
 
     public function __construct(RecordHdr $recordHdr, LinuxSLLHdr $linuxSLLHdr, IPHdr $IPHdr, TCPHdr $TCPHdr)
     {
@@ -66,26 +73,35 @@ class Connection
         $this->buffer = BufferFactory::make();
     }
 
-    public function setProtocol(Dissector $protocol)
+    public function setDissector(Dissector $dissector)
     {
-        $this->protocol = $protocol;
+        $this->dissector = $dissector;
     }
 
     public function isDetected()
     {
-        return $this->protocol !== null;
+        return $this->dissector !== null;
     }
 
-    public function on($evt, callable $cb)
+    public function on($evt, callable $cb, $once = false)
     {
-        $this->events[$evt] = $cb;
+        $this->events[$evt] = [$cb, $once];
     }
 
     public function trigger($evt, ...$args)
     {
         if (isset($this->events[$evt])) {
-            $cb = $this->events[$evt];
-            $cb(...$args);
+            list($cb, $once) = $this->events[$evt];
+
+            try {
+                $cb(...$args);
+            } catch (\Exception $ex) {
+                echo $ex, "\n";
+            }
+
+            if ($once) {
+                unset($this->events[$evt]);
+            }
         }
     }
 
@@ -96,7 +112,7 @@ class Connection
         // 从而检查到接受数据是否有问题, 这里简化处理, 没有检测
 
         while (true) {
-            if ($this->protocol->isReceiveCompleted($this)) {
+            if ($this->dissector->isReceiveCompleted($this)) {
                 $this->doDissect();
             } else {
                 break;
@@ -106,16 +122,18 @@ class Connection
 
     public function doDissect()
     {
-        $pdu = $this->protocol->dissect($this);
+        $pdu = $this->dissector->dissect($this);
 
-        if ($pdu->preInspect()) {
-            try {
-                $pdu->inspect($this);
-                $pdu->postInspect();
-            } catch (\Exception $ex) {
-                echo $ex, "\n";
-                $protocolName = $this->protocol->getName();
-                sys_abort("protocol $protocolName pack analyze fail");
+        if ($pdu instanceof PDU) {
+            if ($pdu->preInspect()) {
+                try {
+                    $pdu->inspect($this);
+                    $pdu->postInspect();
+                } catch (\Exception $ex) {
+                    echo $ex, "\n";
+                    $dissector = $this->dissector->getName();
+                    sys_abort("dissector $dissector dissect fail");
+                }
             }
         }
     }

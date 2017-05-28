@@ -20,10 +20,12 @@ class MySQLCopy
 
     public function __invoke(MySQLPDU $mySQLPacket)
     {
-        if (/*$mySQLPacket->packetType === MySQLBinaryStream::PACKET_TYPE_CMD
-            && */$mySQLPacket->cmdType === MySQLCommand::COM_QUERY) {
-            $sql = $mySQLPacket->payload;
-            swoole_async_write($this->file, $sql, -1);
+        if ($mySQLPacket->pktType === MySQLPDU::PKT_CMD) {
+            list($cmd, $args) = $mySQLPacket->payload;
+            if ($cmd === MySQLCommand::COM_QUERY) {
+                $sql = $args["sql"];
+                swoole_async_write($this->file, $sql, -1);
+            }
         }
     }
 }

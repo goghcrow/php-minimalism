@@ -157,10 +157,35 @@ class MySQLBinaryStream extends BinaryStream
         return $this->prepend(substr(pack('V', $this->readableBytes()), 0, 3) . pack('C', $packetNum % 256));
     }
 
+    // length coded binary: a variable-length number
+    // Length Coded String: a variable-length string.
+    // Used instead of Null-Terminated String,
+    // especially for character strings which might contain '/0' or might be very long.
+    // The first part of a Length Coded String is a Length Coded Binary number (the length);
+    // the second part of a Length Coded String is the actual data. An example of a short
+    // Length Coded String is these three hexadecimal bytes: 02 61 62, which means "length = 2, contents = 'ab'".
+
+    /**
+    Value Of     # Of Bytes  Description
+    First Byte   Following
+    ----------   ----------- -----------
+    0-250        0           = value of first byte
+    251          0           column value = NULL
+    only appropriate in a Row Data Packet
+    252          2           = value of following 16-bit word
+    253          3           = value of following 24-bit word
+    254          8           = value of following 64-bit word
+     */
+
+    // One may ask why the 1 byte length is limited to 251, when the first reserved value in the
+    // net_store_length( ) is 252. The code 251 has a special meaning. It indicates that there is
+    // no length value or data following the code, and the value of the field is the SQL
+
     public function writeLengthCodedBinary($length)
     {
+        // 251 null
         if ($length === 0) {
-            $this->writeUInt8(0x00); // 0x00 or 251
+            $this->writeUInt8(0x00);
         } else if ($length < 251) {
             $this->writeUInt8($length);
         } else if ($length < 0x10000) {
@@ -168,11 +193,9 @@ class MySQLBinaryStream extends BinaryStream
             $this->writeUInt16LE($length);
         } else if ($length < 0x1000000) {
             $this->writeUInt8(253);
-            // TODO !!!
-            // $this->write3ByteIntLE($length);
-            $this->writeUInt32LE($length);
+             $this->write3ByteIntLE($length);
+//            $this->writeUInt32LE($length);
         } else {
-            // chr(254) . pack('V', $length >> 32) . pack('V', $length & 0xffffffff);
             $this->writeUInt8(254);
             $this->writeUInt64LE($length);
         }
@@ -187,10 +210,10 @@ class MySQLBinaryStream extends BinaryStream
             case 252:
                 return 3;
             case 253:
-                return 5;
+                return 4; // 5?
             case 254:
                 return 9;
-            default:
+            default: // < 251
                 return 1;
         }
     }
@@ -200,14 +223,15 @@ class MySQLBinaryStream extends BinaryStream
         $prefix = $this->readUInt8();
         switch ($prefix) {
             case 251:
-                return $prefix;
+                return 0;
             case 252:
                 return $this->readUInt16LE();
             case 253:
-                return $this->readUInt32LE();
+                return $this->read3ByteIntLE();
+//                return $this->readUInt32LE();
             case 254:
                 return $this->readUInt64LE();
-            default:
+            default: // < 251
                 return $prefix;
         }
     }
@@ -217,14 +241,22 @@ class MySQLBinaryStream extends BinaryStream
         if (empty($string)) {
             $this->writeUInt8(0);
         } else {
-            $this->writeUInt8(253);
-            $this->write3ByteIntLE(strlen($string));
+            $len = strlen($string);
+            $this->writeLengthCodedBinary($len);
             $this->write($string);
+
+//            $this->writeUInt8(253);
+//            $this->write3ByteIntLE(strlen($string));
+//            $this->write($string);
         }
     }
 
     public function readLengthCodedString()
     {
+        $len = $this->readLengthCodedBinary();
+        return $this->read($len);
+
+
         $c = $this->readUInt8();
         if ($c === 0) {
             return "";
@@ -232,8 +264,29 @@ class MySQLBinaryStream extends BinaryStream
             $strlen = $this->read3ByteIntLE();
             return $this->read($strlen);
         } else {
-            assert(false);
-            return "";
+            return $this->read($c);
+        }
+    }
+
+    public function readLengthCodedStringReturnLen(&$return)
+    {
+        $ll = $this->getLengthCodedBinaryLen();
+        $binLen = $this->readLengthCodedBinary();
+        $return = $this->read($binLen);
+        return $ll + $binLen;
+
+// TODO
+        $c = $this->readUInt8();
+        if ($c === 0) {
+            $return = "";
+            return 1;
+        } else if ($c === 253) {
+            $strlen = $this->read3ByteIntLE();
+            $return = $this->read($strlen);
+            return 1 + 3 + $strlen;
+        } else {
+            $return = $this->read($c);
+            return 1 + $c;
         }
     }
 
@@ -276,7 +329,7 @@ class MySQLBinaryStream extends BinaryStream
             return 0;
         } else {
             $bin = $this->get(4);
-            $seq = unpack("C", substr($bin, 3, 1))[1];
+            $packetNum = unpack("C", substr($bin, 3, 1))[1];
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
 
             if ($this->buffer->readableBytes() >= $len + 4) {
@@ -295,7 +348,7 @@ class MySQLBinaryStream extends BinaryStream
      */
     public function writeGreetingPacket($salt)
     {
-        $this->writeUInt8(10); // Protocol
+        $this->writeUInt8(0x0A); // Protocol
         $this->writeNullTerminatedString(static::BANNER); // Banner
         $this->writeUInt32LE(getmypid()); // Thread ID
         $this->writeNullTerminatedString($salt); // Salt
@@ -359,7 +412,7 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeLengthCodedString($message);
     }
 
-    public function readResponseOK()
+    public function readResponseOK($len)
     {
 
     }
@@ -410,11 +463,15 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readResultSetHeader()
+    public function readResultSetHeader($packetLen)
     {
+        $left = $packetLen - $this->getLengthCodedBinaryLen();
         $fieldCount = $this->readLengthCodedBinary();
-        // TODO 检测 ext信息
-        $ext = null;
+        if ($left > 0) {
+            $ext = $this->readLengthCodedBinary();
+        } else {
+            $ext = null;
+        }
 
         return [ $fieldCount, $ext ];
     }
@@ -456,22 +513,41 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeUInt8($field->type);
         $this->writeUInt16LE($field->flags);
         $this->writeUInt8($field->decimals);
-        $this->writeUInt16LE(0);
+        $this->writeUInt16LE(0); // Reserved.
         if ($field->default !== null) {
             $this->writeLengthCodedString($field->default);
         }
     }
 
-    public function readField()
+    public function readField($len)
     {
+        $field = new MySQLField();
 
+        $len -= $this->readLengthCodedStringReturnLen($field->catalog);
+        $len -= $this->readLengthCodedStringReturnLen($field->database);
+        $len -= $this->readLengthCodedStringReturnLen($field->table);
+        $len -= $this->readLengthCodedStringReturnLen($field->originalTable);
+        $len -= $this->readLengthCodedStringReturnLen($field->name);
+        $len -= $this->readLengthCodedStringReturnLen($field->originalName);
+        $filter1 = $this->readUInt8(); $len -= 1;
+        $field->charset = $this->readUInt16LE(); $len -= 2;
+        $field->length = $this->readUInt32LE(); $len -= 4;
+        $field->type = $this->readUInt8(); $len -= 1;
+        $field->flags = $this->readUInt16LE(); $len -= 2;
+        $field->decimals = $this->readUInt8(); $len -= 1;
+        $filter2 = $this->readUInt16LE(); $len -= 2;
+        if ($len > 0) {
+            $field->default = $this->readLengthCodedString();
+        }
+
+        return $field;
     }
 
     /**
      * EOF结构用于标识Field和Row Data的结束，在预处理语句中，EOF也被用来标识参数的结束。
      *
      * @param int $warningCount
-     * @param $flag
+     * @param $flags
      *
      * 字节	说明
      * 1	EOF值（0xFE）
@@ -484,18 +560,38 @@ class MySQLBinaryStream extends BinaryStream
      *
      * 附：EOF结构的相关处理函数：
      * 服务器：protocol.cc源文件中的send_eof函数
+     *
+     * • End-of-field information data in a result set
+     * • End-of-row data in a result set
+     * • Server acknowledgment of COM_SHUTDOWN
+     * • Server reporting success in response to COM_SET_OPTION and COM_DEBUG
+     * • Request for the old-style credentials during authenticat
      */
-    public function writeEOF($warningCount = 0, $flag = 0)
+    public function writeEOF($warningCount = 0, $flags = 0)
     {
         $this->writeUInt8(0xFE);
+        // 4.1 之前没有以下字段
         $this->writeUInt16LE($warningCount);
-        $this->writeUInt16LE($flag);
+        $this->writeUInt16LE($flags);
     }
 
     public function readEOF()
     {
-
+        assert($this->readUInt8() === 0XFE);
+        $serverStatus = $this->readUInt16LE();
+        $flags = $this->readUInt16LE();
+        return [$serverStatus, $flags];
     }
+
+
+    /**
+     * Following the field definition sequence of packets, the server sends the actual rows of
+    data, one packet per row. Each row data packet consists of a sequence of values
+    stored in the standard field data format. When reporting the result of a regular query
+    (sent with COM_QUERY), the field data is converted to the string format. When using a
+    prepared statement (COM_PREPARE), the field data is sent in its native format with the
+    low byte first
+     */
 
     /**
      * 在Result Set消息中，会包含多个Row Data结构，每个Row Data结构又包含多个字段值，这些字段值组成一行数据。
@@ -523,9 +619,16 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readRowData()
+    public function readRowData($len)
     {
+        $row = [];
+        while ($len > 0) {
+            $len -= $this->readLengthCodedStringReturnLen($field);
+            $row[] = $field;
+            unset($field);
+        }
 
+        return $row;
     }
 
     /**

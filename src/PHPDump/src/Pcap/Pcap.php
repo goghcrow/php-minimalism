@@ -174,7 +174,7 @@ class Pcap
 
                         switch ($detectedState) {
                             case Dissector::DETECTED:
-                                $connection->setProtocol($protocol);
+                                $connection->setDissector($protocol);
                                 $connection->loopDissect();
                                 continue 2;
 
@@ -197,7 +197,7 @@ class Pcap
 
                     switch ($detectedState) {
                         case Dissector::DETECTED:
-                            $connection->setProtocol($protocol);
+                            $connection->setDissector($protocol);
                             $this->connections[$connKey] = $connection;
                             $connection->loopDissect();
                             continue 2;

@@ -26,7 +26,7 @@ interface Dissector
 
     /**
      * @param Connection $connection
-     * @return PDU
+     * @return PDU|null
      */
     public function dissect(Connection $connection);
 }
