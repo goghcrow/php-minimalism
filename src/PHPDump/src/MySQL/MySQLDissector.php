@@ -209,8 +209,8 @@ class MySQLDissector implements Dissector
                 $this->state = MySQLState::REQUEST;
 
                 // sys_echo("Server Response ERR");
-                // $stream->readResponseERR($len); // TODO
-                $packet->payload = $stream->read($packetLen); // SKIP
+                $packet->payload = $stream->readResponseERR($packetLen);
+                // $packet->payload = $stream->read($packetLen); // SKIP
                 $packet->pktType = MySQLPDU::PKT_ERR;
                 $connection->currentPacket = null;
                 return $packet;
@@ -240,8 +240,8 @@ class MySQLDissector implements Dissector
                     $this->state = MySQLState::REQUEST;
 
                     // sys_echo("Server Response OK");
-                    // $stream->readResponseOK($len); // TODO
-                    $packet->payload = $stream->read($packetLen); // SKIP
+                    $packet->payload = $stream->readResponseOK($packetLen);
+                    // $packet->payload = $stream->read($packetLen); // SKIP
                     $packet->pktType = MySQLPDU::PKT_OK;
                     $connection->currentPacket = null;
                     return $packet;

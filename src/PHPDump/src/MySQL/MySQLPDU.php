@@ -49,27 +49,24 @@ class MySQLPDU extends PDU
             case static::PKT_CMD:
                 list($cmd, $args) = $this->payload;
                 if ($cmd === MySQLCommand::COM_QUERY) {
-                    echo $args["sql"], "\n";
+                    sys_echo("$src > $dst {$args["sql"]}", $sec, $usec);
                 }
                 break;
             case static::PKT_RESULT:
                 $res = $this->payload;
                 list($fieldCount, $ext) = $res["header"];
                 $r = $this->formatResult($res["fields"], $res["rows"]);
-                echo json_encode($r), "\n\n";
+                $r = T::format(json_encode($r), T::DIM);
+                sys_echo("$src > $dst $r", $sec, $usec);
+                echo "\n";
                 break;
 
             case static::PKT_OK:
-                // TODO affected rows |lasted insert id
-                // TODO pkt
-                echo "OK\n\n";
-                break;
-
             case static::PKT_ERR:
-                // TODO pkt
-                echo "ERR\n\n";
+                $r = T::format(json_encode($this->payload), T::DIM);
+                sys_echo("$src > $dst $r", $sec, $usec);
                 break;
-
+            
             default:
 
         }
