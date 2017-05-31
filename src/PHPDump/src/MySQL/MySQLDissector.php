@@ -39,12 +39,12 @@ class MySQLDissector implements Dissector
         return "MySQL";
     }
 
-    private function isResponse(Connection $connection)
+    private function isRequest(Connection $connection)
     {
         if ($connection->TCPHdr->destination_port === $this->mysqlServerPort) {
-            return false;
-        } else {
             return true;
+        } else {
+            return false;
         }
     }
 
@@ -87,11 +87,12 @@ class MySQLDissector implements Dissector
         $packetLen = $stream->read3ByteIntLE();
         $packetNum = $stream->readUInt8();
 
-        $isResponse = $this->isResponse($connection);
-        if ($isResponse) {
-            return $this->dissectResponse($packetLen, $packetNum, $stream, $connection);
-        } else {
+        $connection->currentPacket->pktNums[] = $packetNum;
+        $isRequest = $this->isRequest($connection);
+        if ($isRequest) {
             return $this->dissectRequest($packetLen, $packetNum, $stream, $connection);
+        } else {
+            return $this->dissectResponse($packetLen, $packetNum, $stream, $connection);
         }
     }
 
@@ -121,8 +122,8 @@ class MySQLDissector implements Dissector
                 // if the query does not need to return a result set;
                 // for example, INSERT, UPDATE, or ALTER TABLE
 
-                case MySQLCommand::COM_PROCESS_INFO:
                 case MySQLCommand::COM_QUERY:
+                case MySQLCommand::COM_PROCESS_INFO:
                 case MySQLCommand::COM_STMT_FETCH:
                 case MySQLCommand::COM_STMT_EXECUTE:
                     $this->state = MySQLState::RESPONSE_TABULAR;
@@ -135,12 +136,12 @@ class MySQLDissector implements Dissector
                 case MySQLCommand::COM_CREATE_DB:
                 case MySQLCommand::COM_DROP_DB:
 
+                case MySQLCommand::COM_SET_OPTION:
                 case MySQLCommand::COM_STMT_RESET:
                 case MySQLCommand::COM_PROCESS_KILL:
                 case MySQLCommand::COM_CHANGE_USER:
                 case MySQLCommand::COM_REFRESH:
                 case MySQLCommand::COM_SHUTDOWN:
-                case MySQLCommand::COM_SET_OPTION:
                     $this->state = MySQLState::RESPONSE_OK;
                     break;
 
@@ -179,8 +180,9 @@ class MySQLDissector implements Dissector
             }
         }
 
-        // 复用一个pdu对象 !!!
-        // $connection->currentPacket = null;
+        // 注释掉即可在request中复用pdu对象，但是pktNum会是错的
+        $connection->currentPacket = null;
+        $connection->lastPacket = $packet;
         return $packet;
     }
 
@@ -210,7 +212,6 @@ class MySQLDissector implements Dissector
 
                 // sys_echo("Server Response ERR");
                 $packet->payload = $stream->readResponseERR($packetLen);
-                // $packet->payload = $stream->read($packetLen); // SKIP
                 $packet->pktType = MySQLPDU::PKT_ERR;
                 $connection->currentPacket = null;
                 return $packet;
@@ -241,7 +242,6 @@ class MySQLDissector implements Dissector
 
                     // sys_echo("Server Response OK");
                     $packet->payload = $stream->readResponseOK($packetLen);
-                    // $packet->payload = $stream->read($packetLen); // SKIP
                     $packet->pktType = MySQLPDU::PKT_OK;
                     $connection->currentPacket = null;
                     return $packet;
@@ -254,12 +254,11 @@ class MySQLDissector implements Dissector
 
             } else if ($code === 0xFE && $lenRemaining < 9) { // EOF
 
-                // if ($lenRemaining > 0) {
-                    // 4.1 协议都应该有
-                    assert($lenRemaining > 0);
+                // 4.1 协议都应该有
+                if ($lenRemaining > 0) {
                     list($this->serverStatus, $flags) = $stream->readEOF();
                     // sys_echo("Server Response EOF, serverStatus=0x" . dechex($this->serverStatus) . ", flags=0x" . dechex($flags));
-                // }
+                }
 
                 switch ($this->state) {
                     case MySQLState::FIELD_PACKET:

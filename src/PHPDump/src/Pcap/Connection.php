@@ -56,6 +56,11 @@ class Connection
     public $currentPacket;
 
     /**
+     * @var static
+     */
+    public $reverseConnection;
+
+    /**
      * @var callable[]
      */
     private $events;
@@ -76,6 +81,11 @@ class Connection
     public function setDissector(Dissector $dissector)
     {
         $this->dissector = $dissector;
+    }
+
+    public function reverseWith(Connection $reverseConnection)
+    {
+        $this->reverseConnection = $reverseConnection;
     }
 
     public function isDetected()
@@ -136,5 +146,15 @@ class Connection
                 }
             }
         }
+    }
+
+    public function __toString()
+    {
+        $srcIP = $this->IPHdr->source_ip;
+        $dstIP = $this->IPHdr->destination_ip;
+        $srcPort = $this->TCPHdr->source_port;
+        $dstPort = $this->TCPHdr->destination_port;
+
+        return "$srcIP:$srcPort > $dstIP:$dstPort";
     }
 }

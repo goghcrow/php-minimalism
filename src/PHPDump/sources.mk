@@ -4,6 +4,7 @@ SOURCES = \
     src/Util/Terminal.php \
     src/Util/T.php \
     src/Util/FileAppender.php \
+    src/Util/AsciiTable.php \
     src/functions.php \
     src/Buffer/Buffer.php \
     src/Buffer/StringBuffer.php \

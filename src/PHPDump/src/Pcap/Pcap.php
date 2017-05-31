@@ -145,13 +145,12 @@ class Pcap
             $dstPort = $tcp_hdr->destination_port;
 
             $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
+            $reverseConnKey = "$dstIp:$dstPort-$srcIp:$srcPort";
 
             // trigger close event
             if ($tcp_hdr->flag_FIN) {
-                if (isset($this->connections[$connKey])) {
-                    $connection = $this->connections[$connKey];
-                    $connection->trigger(Connection::EVT_CLOSE);
-                    unset($this->connections[$connKey]); // 关闭之后移除连接
+                $isContinue = $this->triggerCloseEvent($connKey, $reverseConnKey);
+                if ($isContinue) {
                     continue;
                 }
             }
@@ -189,6 +188,7 @@ class Pcap
 
             } else {
                 $connection = new Connection($rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
+                $this->reverseWith($connection, $reverseConnKey);
                 $connection->buffer->write($recordBuffer->read(PHP_INT_MAX));
 
                 // 检查该连接应用层协议
@@ -215,5 +215,40 @@ class Pcap
                 }
             }
         }
+    }
+
+    private function reverseWith(Connection $connection, $reverseConnKey)
+    {
+        if (isset($this->connections[$reverseConnKey])) {
+            $reverseConnection = $this->connections[$reverseConnKey];
+            $connection->reverseWith($reverseConnection);
+            $reverseConnection->reverseWith($connection);
+        }
+    }
+
+    private function triggerCloseEvent($connKey, $reverseConnKey)
+    {
+        $isContinue = false;
+        if (isset($this->connections[$connKey])) {
+            $connection = $this->connections[$connKey];
+            try {
+                $connection->trigger(Connection::EVT_CLOSE);
+            } catch (\Exception $e) {
+                echo $e;
+            }
+            unset($this->connections[$connKey]); // 关闭之后移除连接
+            $isContinue = true;
+        }
+        if (isset($this->connections[$reverseConnKey])) {
+            $reverseConnection = $this->connections[$reverseConnKey];
+            try {
+                $reverseConnection->trigger(Connection::EVT_CLOSE);
+            } catch (\Exception $e) {
+                echo $e;
+            }
+            unset($this->connections[$reverseConnKey]); // 关闭之后移除连接
+            $isContinue = true;
+        }
+        return $isContinue;
     }
 }

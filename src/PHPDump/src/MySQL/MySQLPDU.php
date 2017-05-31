@@ -11,6 +11,7 @@ namespace Minimalism\PHPDump\MySQL;
 
 use Minimalism\PHPDump\Pcap\Connection;
 use Minimalism\PHPDump\Pcap\PDU;
+use Minimalism\PHPDump\Util\AsciiTable;
 use Minimalism\PHPDump\Util\T;
 
 class MySQLPDU extends PDU
@@ -26,6 +27,7 @@ class MySQLPDU extends PDU
     const PKT_STMT_OK = 6;
     const PKT_RESULT = 7;
 
+    public $pktNums = [];
     public $pktType;
     public $payload;
 
@@ -42,6 +44,14 @@ class MySQLPDU extends PDU
         $src = T::format("$srcIp:$srcPort", T::BRIGHT);
         $dst = T::format("$dstIp:$dstPort", T::BRIGHT);
 
+        if (count($this->pktNums) > 1) {
+            $s = reset($this->pktNums);
+            $e = end($this->pktNums);
+            $pktNum = T::format("$s~$e", T::BRIGHT);
+        } else {
+            $pktNum = T::format($this->pktNums[0], T::BRIGHT);
+        }
+
         $sec = $connection->recordHdr->ts_sec;
         $usec = $connection->recordHdr->ts_usec;
 
@@ -49,15 +59,33 @@ class MySQLPDU extends PDU
             case static::PKT_CMD:
                 list($cmd, $args) = $this->payload;
                 if ($cmd === MySQLCommand::COM_QUERY) {
-                    sys_echo("$src > $dst {$args["sql"]}", $sec, $usec);
+                    sys_echo("$src > $dst pktnum $pktNum", $sec, $usec);
+                    $sql = T::format($args["sql"], T::FG_GREEN);
+                    sys_echo($sql, $sec, $usec);
                 }
                 break;
             case static::PKT_RESULT:
+
+                $sql = "";
+                if ($reverseConnection = $connection->reverseConnection) {
+                    if (property_exists($reverseConnection, "lastPacket")) {
+                        $packet = $reverseConnection->lastPacket;
+                        list($cmd, $args) = $packet->payload;
+                        if ($cmd === MySQLCommand::COM_QUERY) {
+                            $sql = $args["sql"];
+                        }
+                    }
+                }
+
                 $res = $this->payload;
                 list($fieldCount, $ext) = $res["header"];
-                $r = $this->formatResult($res["fields"], $res["rows"]);
-                $r = T::format(json_encode($r), T::DIM);
-                sys_echo("$src > $dst $r", $sec, $usec);
+
+                list($fieldsStr, $rows) = $this->formatResult($res["fields"], $res["rows"]);
+                sys_echo("$src > $dst  pktnum $pktNum", $sec, $usec);
+                echo T::format("($sql)", T::DIM), "\n";
+                echo T::format(implode("\n", $fieldsStr), T::DIM), "\n";
+                echo json_encode($rows), "\n";
+                (new AsciiTable())->draw($rows);
                 echo "\n";
                 break;
 
@@ -66,19 +94,30 @@ class MySQLPDU extends PDU
                 $r = T::format(json_encode($this->payload), T::DIM);
                 sys_echo("$src > $dst $r", $sec, $usec);
                 break;
-            
+
             default:
 
         }
     }
 
+    /**
+     * @param MySQLField[] $fields
+     * @param array $rows
+     * @return array
+     */
     private function formatResult(array $fields, array $rows)
     {
         $names = array_column($fields, "name");
-        $r = [];
+        $_rows = [];
         foreach ($rows as $row) {
-            $r[] = array_combine($names, $row);
+            foreach ($fields as $i => $field) {
+                $row[$i] = $field->fmtValue($row[$i]);
+            }
+            $_rows[] = array_combine($names, $row);
         }
-        return $r;
+
+        $_fields = array_map("strval", $fields);
+
+        return [$_fields, $_rows];
     }
 }
