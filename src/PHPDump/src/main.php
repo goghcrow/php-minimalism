@@ -255,6 +255,10 @@ function mysql_get_port(Opt $opt)
             echo "$name $port\n";
         }
         $mysqlPort = read_line("输入MySQL Server监听端口号:\n");
+
+        if ($mysqlPort) {
+            $opt->tcpFilter .= " and port $mysqlPort";
+        }
     }
 
     if (!$mysqlPort) {
@@ -374,12 +378,18 @@ switch ($opt->protocol) {
 set_error_handler(function($code, $message, $file, $line) use($opt) {
     global $argv;
     $self = strstr($argv[0], ".", true) ?: $argv[0];
+
     $t = date("H:i:s");
+    $msg = "$t::$file::$line::$code::$message\n";
+
+    ob_start();
+    debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+    $msg .= ob_get_clean();
+
     if ($opt->debug) {
-        sys_error("$t::$file::$line::$code::$message");
-        debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        sys_error("$msg");
     } else {
-        swoole_async_write("$self.err.log", "$t::$file::$line::$code::$message\n", -1);
+        swoole_async_write("$self.err.log", "$msg\n\n", -1);
     }
 });
 
@@ -389,5 +399,6 @@ if ($opt->pcapFile) {
     $phpDump->readFile($opt->pcapFile);
 } else {
     `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
+    sys_echo("expression $opt->tcpFilter");
     $phpDump->readTcpdump($opt->tcpFilter);
 }

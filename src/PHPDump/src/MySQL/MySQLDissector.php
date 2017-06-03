@@ -99,16 +99,12 @@ class MySQLDissector implements Dissector
         $stream = new MySQLBinaryStream($connection->buffer);
         $packetLen = $stream->read3ByteIntLE();
         $packetNum = $stream->readUInt8();
-
-        sys_error(strval($connection));
-        sys_error("len=$packetLen, num=$packetNum");
-
+        // sys_error(strval($connection) . "   len=$packetLen, num=$packetNum");
 
         $connection->currentPacket->pktNums[] = $packetNum;
         $isRequest = $this->isRequest($connection);
 
         if ($isRequest) {
-            sys_error($connection->buffer->get(PHP_INT_MAX));
             return $this->dissectRequest($packetLen, $packetNum, $stream, $connection);
         } else {
             return $this->dissectResponse($packetLen, $packetNum, $stream, $connection);

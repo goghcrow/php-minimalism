@@ -62,7 +62,7 @@ class MySQLPDU extends PDU
                 if ($cmd === MySQLCommand::COM_QUERY) {
                     sys_echo("$src > $dst pktnum $pktNum", $sec, $usec);
                     $sql = T::format($args["sql"], T::FG_GREEN);
-                    sys_echo($sql, $sec, $usec);
+                    sys_echo("$sql\n", $sec, $usec);
                 }
                 break;
 
@@ -87,27 +87,9 @@ class MySQLPDU extends PDU
                 sys_echo("$src > $dst  pktnum $pktNum", $sec, $usec);
 
                 if ($sql) {
-                    echo T::format("($sql)", T::DIM), "\n";
+                    echo T::format("(SQL: $sql)", T::DIM), "\n";
                 } else {
-
-                    // TODO TODO debug
-                    if ($reverseConnection = $connection->reverseConnection) {
-                        if (property_exists($reverseConnection, "requestPacket")) {
-                            /** @noinspection PhpUndefinedFieldInspection */
-                            $packet = $reverseConnection->requestPacket;
-                            list($cmd, $args) = $packet->payload;
-                            if ($cmd === MySQLCommand::COM_QUERY) {
-                                $sql = $args["sql"];
-                            } else {
-                                sys_error("DEBUG $cmd cmd类型不对");
-                            }
-                        } else {
-                            sys_error("DEBUG 没有属性");
-                            // var_dump($reverseConnection->buffer->get(PHP_INT_MAX));
-                        }
-                    } else {
-                        sys_error("DEBUG 没有反向连接");
-                    }
+                    sys_error("sql not found");
                 }
 
                 // echo T::format(implode("\n", $fieldsStr), T::DIM), "\n";
