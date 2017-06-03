@@ -45,9 +45,8 @@ class NovaCopy
                     $jsonArgs = json_encode(array_combine($names, $args));
                 }
                 $novaCmd = "nova -h=$ip -p=$port -m=$service.$method -a '$jsonArgs'\n";
-                echo $novaCmd;
+                echo $novaCmd, "\n";
                 swoole_async_write($this->file, $novaCmd, -1);
-
             }
         }
     }

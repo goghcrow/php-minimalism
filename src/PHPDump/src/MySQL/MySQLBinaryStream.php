@@ -137,7 +137,7 @@ class MySQLBinaryStream extends BinaryStream
 
     public function read3ByteIntLE()
     {
-        return unpack("V", $this->buffer->read(3) . "\0\0")[1];
+        return unpack("V", $this->buffer->read(3) . "\0")[1];
     }
 
     /**
@@ -217,7 +217,7 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readLengthCodedBinary(&$len = null)
+    public function readLengthCodedBinary(&$len = 0)
     {
         $prefix = $this->readUInt8();
         switch ($prefix) {
@@ -304,6 +304,10 @@ class MySQLBinaryStream extends BinaryStream
             $bin = $this->get(4);
             $packetNum = unpack("C", substr($bin, 3, 1))[1];
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
+
+            if ($len > 1024 * 16) {
+                sys_error("too large mysql packet, len=$len");
+            }
 
             if ($this->buffer->readableBytes() >= $len + 4) {
                 if ($consumeHeader) {

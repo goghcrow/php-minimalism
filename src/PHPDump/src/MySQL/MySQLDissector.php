@@ -69,8 +69,21 @@ class MySQLDissector implements Dissector
      */
     public function isReceiveCompleted(Connection $connection)
     {
-        $stream = new MySQLBinaryStream($connection->buffer);
-        return $stream->isReceiveCompleted() > 0;
+        $buffer = $connection->buffer;
+
+        if ($buffer->readableBytes() < 4) {
+            return false;
+        } else {
+            $bin = $buffer->get(4);
+            $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
+            if ($len > 1024 * 1024 * 16) {
+                sys_error("too large mysql packet, len=$len");
+                $connection->close();
+                return false;
+            }
+
+            return $buffer->readableBytes() >= $len + 4;
+        }
     }
 
     /**
@@ -87,9 +100,15 @@ class MySQLDissector implements Dissector
         $packetLen = $stream->read3ByteIntLE();
         $packetNum = $stream->readUInt8();
 
+        sys_error(strval($connection));
+        sys_error("len=$packetLen, num=$packetNum");
+
+
         $connection->currentPacket->pktNums[] = $packetNum;
         $isRequest = $this->isRequest($connection);
+
         if ($isRequest) {
+            sys_error($connection->buffer->get(PHP_INT_MAX));
             return $this->dissectRequest($packetLen, $packetNum, $stream, $connection);
         } else {
             return $this->dissectResponse($packetLen, $packetNum, $stream, $connection);
@@ -180,9 +199,11 @@ class MySQLDissector implements Dissector
             }
         }
 
-        // 注释掉即可在request中复用pdu对象，但是pktNum会是错的
         $connection->currentPacket = null;
-        $connection->lastPacket = $packet;
+
+        /** @noinspection PhpUndefinedFieldInspection */
+        $connection->requestPacket = $packet;
+
         return $packet;
     }
 

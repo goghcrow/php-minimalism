@@ -14,6 +14,8 @@ use Minimalism\PHPDump\Buffer\BufferFactory;
  */
 class Connection
 {
+    private $pcap;
+
     /**
      * @var RecordHdr
      */
@@ -68,8 +70,9 @@ class Connection
     const EVT_CLOSE = 1;
     const EVT_RESPONSE = 2;
 
-    public function __construct(RecordHdr $recordHdr, LinuxSLLHdr $linuxSLLHdr, IPHdr $IPHdr, TCPHdr $TCPHdr)
+    public function __construct(Pcap $pcap, RecordHdr $recordHdr, LinuxSLLHdr $linuxSLLHdr, IPHdr $IPHdr, TCPHdr $TCPHdr)
     {
+        $this->pcap = $pcap;
         $this->recordHdr = $recordHdr;
         $this->linuxSLLHdr = $linuxSLLHdr;
         $this->IPHdr = $IPHdr;
@@ -140,21 +143,35 @@ class Connection
                     $pdu->inspect($this);
                     $pdu->postInspect();
                 } catch (\Exception $ex) {
-                    echo $ex, "\n";
                     $dissector = $this->dissector->getName();
                     sys_abort("dissector $dissector dissect fail");
+                    sys_error($ex->__toString());
                 }
             }
         }
     }
 
+    public function close()
+    {
+        $this->pcap->closeConnection($this);
+    }
+
     public function __toString()
     {
-        $srcIP = $this->IPHdr->source_ip;
-        $dstIP = $this->IPHdr->destination_ip;
-        $srcPort = $this->TCPHdr->source_port;
-        $dstPort = $this->TCPHdr->destination_port;
+        return static::makeKey($this->IPHdr, $this->TCPHdr);
+    }
 
-        return "$srcIP:$srcPort > $dstIP:$dstPort";
+    public static function makeKey(IPHdr $ipHdr, TCPHdr $tcpHdr, $reverse = false)
+    {
+        $srcIp = $ipHdr->source_ip;
+        $dstIp = $ipHdr->destination_ip;
+        $srcPort = $tcpHdr->source_port;
+        $dstPort = $tcpHdr->destination_port;
+
+        if ($reverse) {
+            return "$dstIp:$dstPort > $srcIp:$srcPort";
+        } else {
+            return "$srcIp:$srcPort > $dstIp:$dstPort";
+        }
     }
 }

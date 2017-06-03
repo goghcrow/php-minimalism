@@ -329,7 +329,7 @@ class HttpDissector implements Dissector
                         break;
                     case Dissector::UNDETECTED:
                         print_r($packet);
-                        sys_abort("malformed http message:" . $buffer->read(PHP_INT_MAX));
+                        sys_abort("malformed http message:" . $buffer->readFull());
                 }
             }
         }
@@ -400,7 +400,7 @@ class HttpDissector implements Dissector
         $buffer = $connection->buffer;
 
         // 读取全部parseHeader
-        $raw = $buffer->read(PHP_INT_MAX);
+        $raw = $buffer->readFull();
 
         $packet = new HttpPDU($connection);
         assert(strpos($raw, self::CRLF2) !== false);
@@ -505,7 +505,7 @@ class HttpDissector implements Dissector
         // assert($crlf === self::CRLF);
         if ($crlf !== self::CRLF) {
             debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-            sys_abort("malformed chunk message: " . $buffer->read(PHP_INT_MAX));
+            sys_abort("malformed chunk message: " . $buffer->readFull());
         }
     }
 }

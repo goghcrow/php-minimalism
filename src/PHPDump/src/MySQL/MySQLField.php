@@ -295,13 +295,31 @@ class MySQLField
 
     public $default;
 
-    public function __toString()
+    public function __debugInfo()
     {
         $charset = $this->getCharset();
         $type = $this->getType();
         $flags = $this->getFlags();
 
         $name = "$this->database.$this->table.$this->name";
+
+        return [
+            "name" => $name,
+            "type" => "$type($this->length)",
+            "flags" => $flags,
+            "charset" => $charset,
+            "def" => $this->default,
+        ];
+    }
+
+    public function __toString()
+    {
+        $type = $this->getType();
+        $flags = $this->getFlags();
+
+        $name = "$this->database.$this->table.$this->name";
+
+
         if ($this->default !== null) {
             return "$name $type($this->length) $flags def={$this->default}";
         } else {
@@ -309,7 +327,6 @@ class MySQLField
         }
     }
 
-    // TODO
     public function fmtValue($value)
     {
         switch ($this->type) {

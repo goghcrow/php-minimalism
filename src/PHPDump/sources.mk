@@ -43,5 +43,9 @@ SOURCES = \
     src/MySQL/MySQLDissector.php \
     src/MySQL/MySQLPDU.php \
     src/MySQL/MySQLCopy.php \
+    src/Redis/RedisPDU.php \
+    src/Redis/RedisStream.php \
+    src/Redis/RedisDissector.php \
+    src/Redis/RedisCopy.php \
     src/PHPDump.php \
-    src/novadump.php
+    src/main.php

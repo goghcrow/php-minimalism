@@ -41,65 +41,44 @@ class Pcap
      */
     private $connections = [];
 
-    // TODO 计算 tcp segment 真实长度, 计算是否捕获完整
-    // private $lastSeqLen = [];
+    // TODO ！！！！！ 计算 tcp segment 真实长度, 计算是否捕获完整
+    private $lastSeqLen = [];
 
     /**
      * @var Dissector[]
      */
-    public static $protocols = [];
+    public static $dissectors = [];
 
     public function __construct(Buffer $buffer)
     {
         $this->buffer = $buffer;
     }
 
-    public static function registerProtocol(Dissector $protocol)
+    public static function registerDissector(Dissector $dissector)
     {
-        static::$protocols[] = $protocol;
+        static::$dissectors[] = $dissector;
     }
 
-    private function unpackGlobalHdr()
+    /**
+     * 关闭单向连接
+     * @param Connection $connection
+     */
+    public function closeConnection(Connection $connection)
     {
-        if ($this->pcap_hdr === null) {
-            $this->pcap_hdr = PcapHdr::unpack($this->buffer, $this);
-        }
-    }
-
-    private function unpackRecordHdr()
-    {
-        return RecordHdr::unpack($this->buffer, $this);
-    }
-
-    private function unpackLinuxSLL(Buffer $recordBuffer)
-    {
-        return LinuxSLLHdr::unpack($recordBuffer, $this);
-    }
-
-    private function unpackIpHdr(Buffer $recordBuffer)
-    {
-        return IPHdr::unpack($recordBuffer, $this);
-    }
-
-    private function unpackTcpHdr(Buffer $recordBuffer)
-    {
-        return TCPHdr::unpack($recordBuffer, $this);
-    }
-
-    private function isRecordReceiveCompleted()
-    {
-        return RecordHdr::isReceiveCompleted($this->buffer, $this);
+        unset($this->connections[strval($connection)]);
     }
 
     public function captureLoop()
     {
-        $this->unpackGlobalHdr();
+        if ($this->pcap_hdr === null) {
+            $this->pcap_hdr = PcapHdr::unpack($this->buffer, $this);
+        }
 
         /* Loop reading packets */
-        while ($this->isRecordReceiveCompleted()) {
+        while (RecordHdr::isReceiveCompleted($this->buffer, $this)) {
 
             /* 1. Read packet header */
-            $rec_hdr = $this->unpackRecordHdr();
+            $rec_hdr = RecordHdr::unpack($this->buffer, $this);
 
             /* 2. Read packet raw data */
             $incl_len = $rec_hdr->incl_len;
@@ -120,14 +99,14 @@ class Pcap
             // }
 
             /* 3. unpack linux sll frame */
-            $linux_sll = $this->unpackLinuxSLL($recordBuffer);
+            $linux_sll = LinuxSLLHdr::unpack($recordBuffer, $this);;
             // 过滤非IPV4
             if ($linux_sll->eth_type !== LinuxSLLHdr::IPV4) {
                 continue;
             }
 
             /* 4. unpack ip datagram */
-            $ip_hdr = $this->unpackIpHdr($recordBuffer);
+            $ip_hdr = IPHdr::unpack($recordBuffer, $this);
             if ($ip_hdr->version !== IPHdr::VER4) { // 过滤非IPV4
                 continue;
             }
@@ -136,16 +115,11 @@ class Pcap
             }
 
             /* 5. unpack tcp segment */
-            $tcp_hdr = $this->unpackTcpHdr($recordBuffer);
+            $tcp_hdr = TCPHdr::unpack($recordBuffer, $this);
 
             /* 6. detect and analyze protocol  */
-            $srcIp = $ip_hdr->source_ip;
-            $dstIp = $ip_hdr->destination_ip;
-            $srcPort = $tcp_hdr->source_port;
-            $dstPort = $tcp_hdr->destination_port;
-
-            $connKey = "$srcIp:$srcPort-$dstIp:$dstPort";
-            $reverseConnKey = "$dstIp:$dstPort-$srcIp:$srcPort";
+            $connKey = Connection::makeKey($ip_hdr, $tcp_hdr);
+            $reverseConnKey = Connection::makeKey($ip_hdr, $tcp_hdr, true);
 
             // trigger close event
             if ($tcp_hdr->flag_FIN) {
@@ -161,46 +135,26 @@ class Pcap
 
             if (isset($this->connections[$connKey])) {
                 $connection = $this->connections[$connKey];
-                $connection->buffer->write($recordBuffer->read(PHP_INT_MAX));
-
-                if ($connection->isDetected()) {
-                    $connection->loopDissect();
-                    continue;
-
-                } else {
-                    foreach (static::$protocols as $protocol) {
-                        $detectedState = $protocol->detect($connection);
-
-                        switch ($detectedState) {
-                            case Dissector::DETECTED:
-                                $connection->setDissector($protocol);
-                                $connection->loopDissect();
-                                continue 2;
-
-                            case Dissector::DETECT_WAIT:
-                                break;
-                            case Dissector::UNDETECTED:
-                            default:
-                                break;
-                        }
-                    }
-                }
-
             } else {
-                $connection = new Connection($rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
+                $connection = new Connection($this, $rec_hdr, $linux_sll, $ip_hdr, $tcp_hdr);
                 $this->reverseWith($connection, $reverseConnKey);
-                $connection->buffer->write($recordBuffer->read(PHP_INT_MAX));
+            }
 
+            $connection->buffer->write($recordBuffer->readFull());
+
+            if ($connection->isDetected()) {
+                $connection->loopDissect();
+            } else {
                 // 检查该连接应用层协议
-                foreach (static::$protocols as $protocol) {
-                    $detectedState = $protocol->detect($connection);
+                foreach (static::$dissectors as $dissector) {
+                    $detectedState = $dissector->detect($connection);
 
                     switch ($detectedState) {
                         case Dissector::DETECTED:
-                            $connection->setDissector($protocol);
                             $this->connections[$connKey] = $connection;
+                            $connection->setDissector($dissector);
                             $connection->loopDissect();
-                            continue 2;
+                            break 2;
 
                         case Dissector::DETECT_WAIT:
                             // 暂时持有未检测到协议的连接

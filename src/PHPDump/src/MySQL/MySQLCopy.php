@@ -24,7 +24,9 @@ class MySQLCopy
             list($cmd, $args) = $mySQLPacket->payload;
             if ($cmd === MySQLCommand::COM_QUERY) {
                 $sql = $args["sql"];
-                swoole_async_write($this->file, $sql, -1);
+                if ($sql) {
+                    swoole_async_write($this->file, $sql . "\n", -1);
+                }
             }
         }
     }

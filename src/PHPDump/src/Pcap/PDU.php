@@ -11,7 +11,7 @@ abstract class PDU
     private static $filters = [];
     private static $terminators = [];
 
-    public static function registerBefore($filter)
+    public static function registerPreFilter($filter)
     {
         assert(is_callable($filter));
         if (!isset(self::$filters[static::class])) {
@@ -20,7 +20,7 @@ abstract class PDU
         self::$filters[static::class][] =  $filter;
     }
 
-    public static function registerAfter($terminator)
+    public static function registerPostEvent($terminator)
     {
         assert(is_callable($terminator));
         if (!isset(self::$terminators[static::class])) {

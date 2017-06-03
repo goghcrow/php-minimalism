@@ -21,3 +21,5 @@ $stub = $argv[2];
 $phar->addFile(__DIR__ . "/$stub", $stub);
 $phar->setStub($phar->createDefaultStub($stub));
 
+`mkdir build 2>/dev/null`;
+`mv $argv[1] build`;

@@ -15,6 +15,8 @@ class HttpCopy
     public function __invoke(HttpPDU $httpPacket)
     {
         $curl = $httpPacket->asCurl();
-        swoole_async_write($this->file, $curl, -1);
+        if ($curl) {
+            swoole_async_write($this->file, $curl, -1);
+        }
     }
 }

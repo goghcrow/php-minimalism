@@ -138,7 +138,7 @@ class MySQLBinaryStream extends BinaryStream
 
     public function read3ByteIntLE()
     {
-        return unpack("V", $this->buffer->read(3) . "\0\0")[1];
+        return unpack("V", $this->buffer->read(3) . "\0")[1];
     }
 
     /**
@@ -218,20 +218,25 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readLengthCodedBinary()
+    public function readLengthCodedBinary(&$len = 0)
     {
         $prefix = $this->readUInt8();
         switch ($prefix) {
             case 251:
+                $len = 1;
                 return 0;
             case 252:
+                $len = 3;
                 return $this->readUInt16LE();
             case 253:
+                $len = 4;
                 return $this->read3ByteIntLE();
 //                return $this->readUInt32LE();
             case 254:
+                $len = 9;
                 return $this->readUInt64LE();
             default: // < 251
+                $len = 1;
                 return $prefix;
         }
     }
@@ -251,43 +256,12 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readLengthCodedString()
-    {
-        $len = $this->readLengthCodedBinary();
-        return $this->read($len);
-
-
-        $c = $this->readUInt8();
-        if ($c === 0) {
-            return "";
-        } else if ($c === 253) {
-            $strlen = $this->read3ByteIntLE();
-            return $this->read($strlen);
-        } else {
-            return $this->read($c);
-        }
-    }
-
-    public function readLengthCodedStringReturnLen(&$return)
+    public function readLengthCodedString(&$len = null)
     {
         $ll = $this->getLengthCodedBinaryLen();
         $binLen = $this->readLengthCodedBinary();
-        $return = $this->read($binLen);
-        return $ll + $binLen;
-
-// TODO
-        $c = $this->readUInt8();
-        if ($c === 0) {
-            $return = "";
-            return 1;
-        } else if ($c === 253) {
-            $strlen = $this->read3ByteIntLE();
-            $return = $this->read($strlen);
-            return 1 + 3 + $strlen;
-        } else {
-            $return = $this->read($c);
-            return 1 + $c;
-        }
+        $len = $ll + $binLen;
+        return $this->read($binLen);
     }
 
     public function writeNullTerminatedString($string)
@@ -331,6 +305,10 @@ class MySQLBinaryStream extends BinaryStream
             $bin = $this->get(4);
             $packetNum = unpack("C", substr($bin, 3, 1))[1];
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
+
+            if ($len > 1024 * 16) {
+                sys_error("too large mysql packet, len=$len");
+            }
 
             if ($this->buffer->readableBytes() >= $len + 4) {
                 if ($consumeHeader) {
@@ -412,9 +390,27 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeLengthCodedString($message);
     }
 
-    public function readResponseOK($len)
+    public function readResponseOK($packetLen)
     {
+        $r = [];
+        assert($this->readUInt8() === 0x00);
+        $packetLen -= 1;
+        $r["affectedRows"] = $this->readLengthCodedBinary($len);
+        $packetLen -= $len;
+        $r["lastInsertId"] = $this->readLengthCodedBinary($len);
+        $packetLen -= $len;
+        $r["serverStatus"] = $this->readUInt16LE();
+        $packetLen -= 2;
+        $r["waringCount"] = $this->readUInt16LE();
+        $packetLen -= 2;
+        if ($packetLen > 0) {
+            // TODO read packet
+            $r["message"] = $this->readLengthCodedString();
+        } else {
+            $r["message"] = "";
+        }
 
+        return $r;
     }
 
     /**
@@ -441,9 +437,23 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeNullTerminatedString("$message");
     }
 
-    public function readResponseERR()
+    public function readResponseERR($packetLen)
     {
+        $r = [];
+        assert($this->readUInt8() === 0xff);
+        $packetLen -= 1;
+        $r["error"] = $this->readUInt16LE();
+        $packetLen -= 2;
+        $r["sqlstate"] = $this->read(5);
+        $packetLen -= 5;
+        if ($packetLen > 0) {
+            // TODO read packet
+            $r["message"] = $this->readNullTerminatedString();
+        } else {
+            $r["message"] = null;
+        }
 
+        return $r;
     }
 
     /**
@@ -507,7 +517,7 @@ class MySQLBinaryStream extends BinaryStream
         $this->writeLengthCodedString($field->originalTable);
         $this->writeLengthCodedString($field->name);
         $this->writeLengthCodedString($field->originalName);
-        $this->writeUInt8(0);
+        $this->writeUInt8(0); // TODO ? 12
         $this->writeUInt16LE($field->charset);
         $this->writeUInt32LE($field->length);
         $this->writeUInt8($field->type);
@@ -519,24 +529,31 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readField($len)
+    public function readField($packetLen)
     {
         $field = new MySQLField();
 
-        $len -= $this->readLengthCodedStringReturnLen($field->catalog);
-        $len -= $this->readLengthCodedStringReturnLen($field->database);
-        $len -= $this->readLengthCodedStringReturnLen($field->table);
-        $len -= $this->readLengthCodedStringReturnLen($field->originalTable);
-        $len -= $this->readLengthCodedStringReturnLen($field->name);
-        $len -= $this->readLengthCodedStringReturnLen($field->originalName);
-        $filter1 = $this->readUInt8(); $len -= 1;
-        $field->charset = $this->readUInt16LE(); $len -= 2;
-        $field->length = $this->readUInt32LE(); $len -= 4;
-        $field->type = $this->readUInt8(); $len -= 1;
-        $field->flags = $this->readUInt16LE(); $len -= 2;
-        $field->decimals = $this->readUInt8(); $len -= 1;
-        $filter2 = $this->readUInt16LE(); $len -= 2;
-        if ($len > 0) {
+        $field->catalog = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+        $field->database = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+        $field->table = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+        $field->originalTable = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+        $field->name = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+        $field->originalName = $this->readLengthCodedString($len);
+        $packetLen -= $len;
+
+        $filter1 = $this->readUInt8(); $packetLen -= 1;
+        $field->charset = $this->readUInt16LE(); $packetLen -= 2;
+        $field->length = $this->readUInt32LE(); $packetLen -= 4;
+        $field->type = $this->readUInt8(); $packetLen -= 1;
+        $field->flags = $this->readUInt16LE(); $packetLen -= 2;
+        $field->decimals = $this->readUInt8(); $packetLen -= 1;
+        $filter2 = $this->readUInt16LE(); $packetLen -= 2;
+        if ($packetLen > 0) {
             $field->default = $this->readLengthCodedString();
         }
 
@@ -619,11 +636,13 @@ class MySQLBinaryStream extends BinaryStream
         }
     }
 
-    public function readRowData($len)
+    public function readRowData($packetLen)
     {
         $row = [];
-        while ($len > 0) {
-            $len -= $this->readLengthCodedStringReturnLen($field);
+        while ($packetLen > 0) {
+            $field = $this->readLengthCodedString($len);
+            $packetLen -= $len;
+
             $row[] = $field;
             unset($field);
         }

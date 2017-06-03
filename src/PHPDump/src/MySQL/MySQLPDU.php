@@ -56,6 +56,7 @@ class MySQLPDU extends PDU
         $usec = $connection->recordHdr->ts_usec;
 
         switch ($this->pktType) {
+
             case static::PKT_CMD:
                 list($cmd, $args) = $this->payload;
                 if ($cmd === MySQLCommand::COM_QUERY) {
@@ -64,12 +65,14 @@ class MySQLPDU extends PDU
                     sys_echo($sql, $sec, $usec);
                 }
                 break;
+
             case static::PKT_RESULT:
 
                 $sql = "";
                 if ($reverseConnection = $connection->reverseConnection) {
-                    if (property_exists($reverseConnection, "lastPacket")) {
-                        $packet = $reverseConnection->lastPacket;
+                    if (property_exists($reverseConnection, "requestPacket")) {
+                        /** @noinspection PhpUndefinedFieldInspection */
+                        $packet = $reverseConnection->requestPacket;
                         list($cmd, $args) = $packet->payload;
                         if ($cmd === MySQLCommand::COM_QUERY) {
                             $sql = $args["sql"];
@@ -80,14 +83,40 @@ class MySQLPDU extends PDU
                 $res = $this->payload;
                 list($fieldCount, $ext) = $res["header"];
 
-                list($fieldsStr, $rows) = $this->formatResult($res["fields"], $res["rows"]);
+                list($fields, $fieldsStr, $rows) = $this->formatResult($res["fields"], $res["rows"]);
                 sys_echo("$src > $dst  pktnum $pktNum", $sec, $usec);
-                echo T::format("($sql)", T::DIM), "\n";
-                echo T::format(implode("\n", $fieldsStr), T::DIM), "\n";
-                echo json_encode($rows), "\n";
+
+                if ($sql) {
+                    echo T::format("($sql)", T::DIM), "\n";
+                } else {
+
+                    // TODO TODO debug
+                    if ($reverseConnection = $connection->reverseConnection) {
+                        if (property_exists($reverseConnection, "requestPacket")) {
+                            /** @noinspection PhpUndefinedFieldInspection */
+                            $packet = $reverseConnection->requestPacket;
+                            list($cmd, $args) = $packet->payload;
+                            if ($cmd === MySQLCommand::COM_QUERY) {
+                                $sql = $args["sql"];
+                            } else {
+                                sys_error("DEBUG $cmd cmd类型不对");
+                            }
+                        } else {
+                            sys_error("DEBUG 没有属性");
+                            // var_dump($reverseConnection->buffer->get(PHP_INT_MAX));
+                        }
+                    } else {
+                        sys_error("DEBUG 没有反向连接");
+                    }
+                }
+
+                // echo T::format(implode("\n", $fieldsStr), T::DIM), "\n";
+                (new AsciiTable())->draw($fields, 10, 50);
                 (new AsciiTable())->draw($rows);
+                echo T::format(json_encode($rows), T::DIM), "\n";
                 echo "\n";
                 break;
+
 
             case static::PKT_OK:
             case static::PKT_ERR:
@@ -108,16 +137,22 @@ class MySQLPDU extends PDU
     private function formatResult(array $fields, array $rows)
     {
         $names = array_column($fields, "name");
-        $_rows = [];
+        $fmtRows = [];
         foreach ($rows as $row) {
             foreach ($fields as $i => $field) {
                 $row[$i] = $field->fmtValue($row[$i]);
             }
-            $_rows[] = array_combine($names, $row);
+            $fmtRows[] = array_combine($names, $row);
         }
 
-        $_fields = array_map("strval", $fields);
+        $fmtFieldsStr = [];
+        $fmtFields = [];
 
-        return [$_fields, $_rows];
+        foreach ($fields as $field) {
+            $fmtFieldsStr[] = $field->__toString();
+            $fmtFields[] = $field->__debugInfo();
+        }
+
+        return [$fmtFields, $fmtFieldsStr, $fmtRows];
     }
 }
