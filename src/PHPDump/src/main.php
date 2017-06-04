@@ -25,6 +25,8 @@ Usage:
 
     # 全部参数可选
     
+    sudo php phpdump.phar install
+    
     phpdump --protocol=nova|http|mysql
             --filter=tcpdump过滤表达式
             --file=pcap文件
@@ -182,7 +184,7 @@ function parseOpt()
 }
 
 
-function listApps($path)
+function nova_get_apps($path)
 {
     $list = [];
     $prompt = "\n选择应用(可选):\n";
@@ -193,8 +195,12 @@ function listApps($path)
             if($fileInfo->isDot()) {
                 continue;
             }
+            $name = $fileInfo->getFilename();
+            if ($name[0] === ".") {
+                continue;
+            }
+            
             if ($fileInfo->isDir()) {
-                $name = $fileInfo->getFilename();
                 $path = $fileInfo->getRealPath();
 
                 $list[$i] = [$name, $path];
@@ -306,7 +312,7 @@ switch ($opt->protocol) {
 
     case "nova":
         if (!$opt->app || !$opt->path) {
-            list($apps, $prompt) = listApps("/home/www");
+            list($apps, $prompt) = nova_get_apps("/home/www");
 
             if ($apps) {
                 $index = read_line($prompt);
