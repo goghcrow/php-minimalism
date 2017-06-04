@@ -15,13 +15,10 @@ use Minimalism\PHPDump\Pcap\Dissector;
 
 class MySQLDissector implements Dissector
 {
-    private $state;
-
-    private $serverStatus = 0; // TODO
+    private $serverStatus = 0;  // TODO
     private $stmtNumFields = 0; // TODO
-
-    private $isSLL;
-    private $isCompressed;
+    private $isSLL;             // TODO
+    private $isCompressed;      // TODO
 
     /**
      * @var int mysql port
@@ -31,12 +28,42 @@ class MySQLDissector implements Dissector
     public function __construct($mysqlServerPort)
     {
         $this->mysqlServerPort = intval($mysqlServerPort);
-        $this->state = MySQLState::UNDEFINED;
     }
 
     public function getName()
     {
         return "MySQL";
+    }
+
+    // 状态记录在requestConnection中
+    private function setState($state, Connection $requestConnection)
+    {
+        $requestConnection->state = $state;
+
+        if ($state === MySQLState::REQUEST) {
+            /** @noinspection PhpUndefinedFieldInspection */
+            $requestConnection->stateTrace = [];
+        }
+
+        // for debug
+        /** @noinspection PhpUndefinedFieldInspection */
+        $requestConnection->stateTrace[] = MySQLState::getName($state);
+    }
+
+    private function connectionInit(Connection $connection)
+    {
+        $isRequest = $this->isRequest($connection);
+        if ($isRequest) {
+            // 状态保存在 request connection
+            /** @noinspection PhpUndefinedFieldInspection */
+            $connection->state = MySQLState::UNDEFINED;
+            /** @noinspection PhpUndefinedFieldInspection */
+            $connection->stateTrace = [];
+        } else {
+            //
+            /** @noinspection PhpUndefinedFieldInspection */
+            $connection->requestPacket = null;
+        }
     }
 
     private function isRequest(Connection $connection)
@@ -54,11 +81,11 @@ class MySQLDissector implements Dissector
      */
     public function detect(Connection $connection)
     {
-        // TODO mysql 协议指纹？！
-        // 抓取mysql需要人工过滤端口号 !!! 这里假定拿到的都是mysql协议流
+        // 不容易识别mysql协议指纹？！抓取mysql需要人工过滤端口号 !!! 这里假定拿到的都是mysql协议流
         if ($connection->buffer->readableBytes() < 4) {
             return Dissector::DETECT_WAIT;
         } else {
+            $this->connectionInit($connection);
             return Dissector::DETECTED;
         }
     }
@@ -76,8 +103,9 @@ class MySQLDissector implements Dissector
         } else {
             $bin = $buffer->get(4);
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
-            if ($len > 1024 * 1024 * 16) {
-                sys_error("too large mysql packet, len=$len");
+
+            if ($len <= 0 || $len >= 1024 * 1024 * 16) {
+                sys_error("malformed mysql packet, len=$len");
                 $connection->close();
                 return false;
             }
@@ -99,15 +127,19 @@ class MySQLDissector implements Dissector
         $stream = new MySQLBinaryStream($connection->buffer);
         $packetLen = $stream->read3ByteIntLE();
         $packetNum = $stream->readUInt8();
-        // sys_error(strval($connection) . "   len=$packetLen, num=$packetNum");
 
+        // 记录packet num
         $connection->currentPacket->pktNums[] = $packetNum;
         $isRequest = $this->isRequest($connection);
-
         if ($isRequest) {
             return $this->dissectRequest($packetLen, $packetNum, $stream, $connection);
         } else {
-            return $this->dissectResponse($packetLen, $packetNum, $stream, $connection);
+            if ($reverseConnection = $connection->reverseConnection) {
+                return $this->dissectResponse($packetLen, $packetNum, $stream, $connection, $reverseConnection);
+            } else {
+                $stream->read($packetLen);
+                return null;
+            }
         }
     }
 
@@ -116,14 +148,14 @@ class MySQLDissector implements Dissector
         /** @var MySQLPDU $packet */
         $packet = $connection->currentPacket;
 
-        if ($this->state === MySQLState::LOGIN && $packetNum === 1) {
+        if ($connection->state === MySQLState::LOGIN && $packetNum === 1) {
             // sys_echo("Authorization Request");
 
             $packet->pktType = MySQLPDU::PKT_AUTH;
             $packet->payload = $stream->readAuthorizationPacket();
             // TODO $packet->authInfo["capabilities"] 这里要根据客户端能力判断是否是压缩数据 !!!
 
-            $this->state = MySQLState::RESPONSE_OK;
+            $this->setState(MySQLState::RESPONSE_OK, $connection);
         } else {
             // sys_echo("Request");
 
@@ -141,7 +173,7 @@ class MySQLDissector implements Dissector
                 case MySQLCommand::COM_PROCESS_INFO:
                 case MySQLCommand::COM_STMT_FETCH:
                 case MySQLCommand::COM_STMT_EXECUTE:
-                    $this->state = MySQLState::RESPONSE_TABULAR;
+                    $this->setState(MySQLState::RESPONSE_TABULAR, $connection);
                     break;
 
                 case MySQLCommand::COM_DEBUG:
@@ -157,19 +189,19 @@ class MySQLDissector implements Dissector
                 case MySQLCommand::COM_CHANGE_USER:
                 case MySQLCommand::COM_REFRESH:
                 case MySQLCommand::COM_SHUTDOWN:
-                    $this->state = MySQLState::RESPONSE_OK;
+                    $this->setState(MySQLState::RESPONSE_OK, $connection);
                     break;
 
                 case MySQLCommand::COM_STATISTICS:
-                    $this->state = MySQLState::RESPONSE_MESSAGE;
+                    $this->setState(MySQLState::RESPONSE_MESSAGE, $connection);
                     break;
 
                 case MySQLCommand::COM_STMT_PREPARE:
-                    $this->state = MySQLState::RESPONSE_PREPARE;
+                    $this->setState(MySQLState::RESPONSE_PREPARE, $connection);
                     break;
 
                 case MySQLCommand::COM_FIELD_LIST:
-                    $this->state = MySQLState::RESPONSE_SHOW_FIELDS;
+                    $this->setState(MySQLState::RESPONSE_SHOW_FIELDS, $connection);
                     break;
 
                 case MySQLCommand::COM_STMT_SEND_LONG_DATA:
@@ -178,7 +210,7 @@ class MySQLDissector implements Dissector
                 case MySQLCommand::COM_CONNECT_OUT:
                 case MySQLCommand::COM_REGISTER_SLAVE:
                 case MySQLCommand::COM_STMT_CLOSE:
-                    $this->state = MySQLState::REQUEST;
+                    $this->setState(MySQLState::REQUEST, $connection);
                     break;
 
                 case MySQLCommand::COM_QUIT:
@@ -191,7 +223,7 @@ class MySQLDissector implements Dissector
                 case MySQLCommand::COM_DELAYED_INSERT:
                 */
                 default:
-                    $this->state = MySQLState::UNDEFINED;
+                    $this->setState(MySQLState::UNDEFINED, $connection);
             }
         }
 
@@ -203,19 +235,20 @@ class MySQLDissector implements Dissector
         return $packet;
     }
 
-    private function dissectResponse($packetLen, $packetNum, MySQLBinaryStream $stream, Connection $connection)
+    private function dissectResponse($packetLen, $packetNum, MySQLBinaryStream $stream,
+                                     Connection $connection, Connection $requestConnection)
     {
         /** @var MySQLPDU $packet */
         $packet = $connection->currentPacket;
 
-        if ($packetNum === 0 && $this->state === MySQLState::UNDEFINED) {
+        if ($packetNum === 0 && $requestConnection->state === MySQLState::UNDEFINED) {
             // sys_echo("Server Greeting");
 
             $packet->pktType = MySQLPDU::PKT_GREETING;
             // $stream->readGreetingPacket(); // TODO
             $packet->payload = $stream->read($packetLen); // SKIP
 
-            $this->state = MySQLState::LOGIN;
+            $this->setState(MySQLState::LOGIN, $requestConnection);
 
             $connection->currentPacket = null;
             return $packet;
@@ -225,7 +258,7 @@ class MySQLDissector implements Dissector
             $code = unpack("C", $stream->get(1))[1];
             $lenRemaining = $packetLen - 1;
             if ($code === 0xFF) { // ERR
-                $this->state = MySQLState::REQUEST;
+                $this->setState(MySQLState::REQUEST, $requestConnection);
 
                 // sys_echo("Server Response ERR");
                 $packet->payload = $stream->readResponseERR($packetLen);
@@ -237,8 +270,8 @@ class MySQLDissector implements Dissector
                 // sys_echo("Server Response");
                 // OK OR ResultSetHeaderFieldCount
 
-                if ($this->state === MySQLState::RESPONSE_PREPARE) {
-                    $this->state = MySQLState::REQUEST;
+                if ($requestConnection->state === MySQLState::RESPONSE_PREPARE) {
+                    $this->setState(MySQLState::REQUEST, $requestConnection);
 
                     assert(false); // proxy 不支持prepare语句, 所以这里应该不会走到
                     // sys_echo("Server Response Prepare OK");
@@ -246,16 +279,16 @@ class MySQLDissector implements Dissector
                     $packet->payload = $stream->read($packetLen); // SKIP
                     $packet->pktType = MySQLPDU::PKT_STMT_OK;
 //                        if (stmt_num_params > 0) {
-//                            $this->state = MySQLState::PREPARED_PARAMETERS;
+//                          $this->setState(MySQLState::PREPARED_PARAMETERS, $requestConnection);
 //                        } else if (stmt_num_fields > 0) {
-//                            $this->state = MySQLState::PREPARED_FIELDS;
+//                          $this->setState(MySQLState::PREPARED_FIELDS, $requestConnection);
 //                        } else {
 //                        }
                     $connection->currentPacket = null;
                     return $packet;
 
                 } else if ($lenRemaining > $stream->getLengthCodedBinaryLen()) {
-                    $this->state = MySQLState::REQUEST;
+                    $this->setState(MySQLState::REQUEST, $requestConnection);
 
                     // sys_echo("Server Response OK");
                     $packet->payload = $stream->readResponseOK($packetLen);
@@ -273,22 +306,23 @@ class MySQLDissector implements Dissector
 
                 // 4.1 协议都应该有
                 if ($lenRemaining > 0) {
+                    /** @noinspection PhpUnusedLocalVariableInspection */
                     list($this->serverStatus, $flags) = $stream->readEOF();
                     // sys_echo("Server Response EOF, serverStatus=0x" . dechex($this->serverStatus) . ", flags=0x" . dechex($flags));
                 }
 
-                switch ($this->state) {
+                switch ($requestConnection->state) {
                     case MySQLState::FIELD_PACKET:
                         // 读完field声明 之后应该读数据
-                        $this->state = MySQLState::ROW_PACKET;
+                        $this->setState(MySQLState::ROW_PACKET, $requestConnection);
                         break;
 
                     case MySQLState::ROW_PACKET:
                         // more result
                         if ($this->serverStatus & 0x0008) {// #define MYSQL_STAT_MU 0x0008
-                            $this->state = MySQLState::RESPONSE_TABULAR;
+                            $this->setState(MySQLState::RESPONSE_TABULAR, $requestConnection);
                         } else {
-                            $this->state = MySQLState::REQUEST;
+                            $this->setState(MySQLState::REQUEST, $requestConnection);
 
                             $connection->currentPacket = null;
                             return $packet;
@@ -298,9 +332,9 @@ class MySQLDissector implements Dissector
                     case MySQLState::PREPARED_PARAMETERS:
                         // parameter -> field
                         if ($this->stmtNumFields > 0) {
-                            $this->state = MySQLState::PREPARED_FIELDS;
+                            $this->setState(MySQLState::PREPARED_FIELDS, $requestConnection);
                         } else {
-                            $this->state = MySQLState::REQUEST;
+                            $this->setState(MySQLState::REQUEST, $requestConnection);
 
                             $connection->currentPacket = null;
                             return $packet;
@@ -308,34 +342,33 @@ class MySQLDissector implements Dissector
                         break;
 
                     case MySQLState::PREPARED_FIELDS:
-                        $this->state = MySQLState::REQUEST;
+                        $this->setState(MySQLState::REQUEST, $requestConnection);
                         break;
 
                     default:
                         // 这里应该抓到请求响应不完整的包，比如直接抓到field字段
-                        $this->state = MySQLState::REQUEST;
+                        $this->setState(MySQLState::REQUEST, $requestConnection);
                         return $packet;
                 }
             } else {
 
-                switch ($this->state) {
+                switch ($requestConnection->state) {
                     case MySQLState::RESPONSE_MESSAGE:
-                        $this->state = MySQLState::REQUEST;
+                        $this->setState(MySQLState::REQUEST, $requestConnection);
 
                         // sys_echo("Server Response Message");
                         $stream->read($packetLen); // SKIP
                         break;
 
-                    case MySQLState::REQUEST: // TODO WHY !
                     case MySQLState::RESPONSE_TABULAR:
                         list($fieldCount, $ext) = $stream->readResultSetHeader($packetLen);
                         $packet->pktType = MySQLPDU::PKT_RESULT;
                         $packet->payload = ["header" => [$fieldCount, $ext], "fields" => [], "rows" => []];
                         // sys_echo("Server Response Tabular, fieldCount=$fieldCount, ext=$ext");
                         if ($fieldCount > 0) {
-                            $this->state = MySQLState::FIELD_PACKET;
+                            $this->setState(MySQLState::FIELD_PACKET, $requestConnection);
                         } else {
-                            $this->state = MySQLState::ROW_PACKET;
+                            $this->setState(MySQLState::ROW_PACKET, $requestConnection);
                         }
                         break;
 
@@ -363,7 +396,7 @@ class MySQLDissector implements Dissector
 
                     default:
                         $stream->read($packetLen); // SKIP
-                        $this->state = MySQLState::UNDEFINED;
+                        $this->setState(MySQLState::UNDEFINED, $requestConnection);
                 }
 
             }

@@ -63,6 +63,15 @@ class Connection
     public $reverseConnection;
 
     /**
+     * 协议解析状态机的状态
+     * 为了数据处理方便，这里连接是单向的
+     * 应该抽象一个双向的连接，这里的状态是针对两个Connection对象，
+     *
+     * @var mixed
+     */
+    public $state;
+
+    /**
      * @var callable[]
      */
     private $events;

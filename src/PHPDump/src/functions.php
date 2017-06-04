@@ -47,3 +47,26 @@ function read_line($prompt = "", $len = 1024)
         return stream_get_line(STDIN, $len, PHP_EOL);
 //    }
 }
+
+/**
+ * @param int $argType 1 基本类型  2 忽略 3 全部
+ * @return string
+ */
+function backtrace($argType = 1)
+{
+    switch ($argType) {
+        case 2:
+            ob_start();
+            debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+            return ob_get_clean();
+
+        case 3:
+            ob_start();
+            debug_print_backtrace();
+            return ob_get_clean();
+
+        case 1:
+        default:
+            return (new \Exception)->getTraceAsString();
+    }
+}

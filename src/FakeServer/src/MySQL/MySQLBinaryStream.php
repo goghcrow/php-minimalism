@@ -306,8 +306,8 @@ class MySQLBinaryStream extends BinaryStream
             $packetNum = unpack("C", substr($bin, 3, 1))[1];
             $len = unpack("V", substr($bin, 0, 3) . "\0\0")[1];
 
-            if ($len > 1024 * 16) {
-                sys_error("too large mysql packet, len=$len");
+            if ($len <= 0 || $len >= 1024 * 1024 * 16) {
+                sys_error("malformed mysql packet, len=$len");
             }
 
             if ($this->buffer->readableBytes() >= $len + 4) {

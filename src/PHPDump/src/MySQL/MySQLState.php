@@ -25,4 +25,18 @@ class MySQLState
     const PREPARED_FIELDS = 11;
     const AUTH_SWITCH_REQUEST = 12;
     const AUTH_SWITCH_RESPONSE = 13;
+
+    public static function getName($state)
+    {
+        $cache = null;
+        if ($cache === null) {
+            $clazz = new \ReflectionClass(static::class);
+            $valueNames = array_flip($clazz->getConstants());
+        }
+        if (isset($valueNames[$state])) {
+            return $valueNames[$state];
+        } else {
+            return "UNKNOWN";
+        }
+    }
 }

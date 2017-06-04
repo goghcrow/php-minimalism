@@ -15,6 +15,7 @@ use Minimalism\PHPDump\Nova\NovaPDU;
 use Minimalism\PHPDump\Nova\NovaPacketFilter;
 use Minimalism\PHPDump\Nova\NovaDissector;
 use Minimalism\PHPDump\Pcap\Pcap;
+use Phar;
 
 
 define("USAGE", <<<'USAGE'
@@ -34,6 +35,7 @@ Usage:
             -m=方法fnmatch表达式,仅nova协议可用
             
             --copy=导出请求到文件,nova,http,mysql可用
+            --debug
              
     
     [注意] 1. 暂不支持 PcapNG格式
@@ -49,10 +51,11 @@ Usage:
     
     # HTTP
     phpdump --protocol=http
+    phpdump --protocol=http --filter="tcp and port 80"
     
-    
-    # MYSQL
+    # MYSQL 因协议识别问题，需要人工指定server端口
     phpdump --protocol=mysql
+    phpdump --protocol=mysql --filter="tcp and port 3306"
     
     
     # NOVA
@@ -97,9 +100,9 @@ function envCheck()
 {
     global $argv;
 
-    $self = __FILE__;
+    $phar = Phar::running(false);
     if (isset($argv[1]) && $argv[1] === "install") {
-        `chmod +x $self && cp $self /usr/local/bin/phpdump`;
+        `chmod +x $phar && cp $phar /usr/local/bin/phpdump`;
         exit();
     }
 
@@ -380,14 +383,11 @@ set_error_handler(function($code, $message, $file, $line) use($opt) {
     $self = strstr($argv[0], ".", true) ?: $argv[0];
 
     $t = date("H:i:s");
-    $msg = "$t::$file::$line::$code::$message\n";
-
-    ob_start();
-    debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-    $msg .= ob_get_clean();
+    $bt = backtrace();
+    $msg = "$t::$file::$line::$code::$message\n$bt\n";
 
     if ($opt->debug) {
-        sys_error("$msg");
+        sys_abort("$msg");
     } else {
         swoole_async_write("$self.err.log", "$msg\n\n", -1);
     }

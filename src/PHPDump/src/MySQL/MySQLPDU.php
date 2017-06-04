@@ -70,10 +70,10 @@ class MySQLPDU extends PDU
 
                 $sql = "";
                 if ($reverseConnection = $connection->reverseConnection) {
-                    if (property_exists($reverseConnection, "requestPacket")) {
+                    /** @noinspection PhpUndefinedFieldInspection */
+                    if ($reverseConnection->requestPacket instanceof MySQLPDU) {
                         /** @noinspection PhpUndefinedFieldInspection */
-                        $packet = $reverseConnection->requestPacket;
-                        list($cmd, $args) = $packet->payload;
+                        list($cmd, $args) = $reverseConnection->requestPacket->payload;
                         if ($cmd === MySQLCommand::COM_QUERY) {
                             $sql = $args["sql"];
                         }
