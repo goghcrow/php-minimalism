@@ -23,10 +23,10 @@ if (isset($argv[1]) && $argv[1] === "install") {
 $usage = <<<USAGE
 Usage: nova -h主机 -p端口 -m方法 -a参数 [-e附加字段 -t超时]
     -a 参数 与 -e nova协议头Attachment 均传递JSON字符串
-    nova -h10.9.97.143 -p8050 -m=com.youzan.material.general.service.TokenService.getToken -a='{"kdtId":1,"scope":""}'
-    nova -h10.9.97.143 -p8050 -m=com.youzan.material.general.service.TokenService.getToken -a='{"kdtId":1,"scope":""}' -e='{"kdtId":1}'
-    nova -h10.9.188.33 -p8050 -m=com.youzan.material.general.service.MediaService.getMediaList -a='{"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}'
-    nova -hqabb-dev-scrm-test0 -p8100 -mcom.youzan.scrm.customer.service.customerService.getByYzUid -a '{"kdtId":1, "yzUid": 1}'
+    nova -h127.0.0.1 -p8050 -m=com.youzan.material.general.service.TokenService.getToken -a='{"xxxId":1,"scope":""}'
+    nova -h127.0.0.1 -p8050 -m=com.youzan.material.general.service.TokenService.getToken -a='{"xxxId":1,"scope":""}' -e='{"xxxId":1}'
+    nova -h127.0.0.1 -p8050 -m=com.youzan.material.general.service.MediaService.getMediaList -a='{"query":{"categoryId":2,"xxxId":1,"pageNo":1,"pageSize":5}}'
+    nova -hqabb-dev-scrm-test0 -p8100 -mcom.youzan.scrm.customer.service.customerService.getByYzUid -a '{"xxxId":1, "yzUid": 1}'
 
 USAGE;
 
