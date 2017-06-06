@@ -116,8 +116,9 @@ class MySQLConnection
         $this->resetSeqAndState();
     }
 
-    public function authorize($pwd)
+    public function authorize(array $data)
     {
+        return true;
         // $this->remoteHost // $this->database // $this->salt
     }
     

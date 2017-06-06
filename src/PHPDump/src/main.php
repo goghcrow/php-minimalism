@@ -199,7 +199,7 @@ function nova_get_apps($path)
             if ($name[0] === ".") {
                 continue;
             }
-            
+
             if ($fileInfo->isDir()) {
                 $path = $fileInfo->getRealPath();
 

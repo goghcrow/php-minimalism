@@ -35,17 +35,17 @@ class NovaBench extends NovaTestPlan
      */
     public function config()
     {
-        return new Config("10.9.188.33", 8050);
+        return new Config("127.0.0.1", 8050);
     }
 }
 
 
-$service = "com.youzan.material.general.service.MediaService";
+$service = "com.xxx.material.general.service.MediaService";
 $method = "getMediaList";
 $args = [
     'query' => [
         'categoryId' => 2,
-        'kdtId' => 1,
+        'xxxId' => 1,
         'pageNo' => 1,
         'pageSize' => 5,
     ],
