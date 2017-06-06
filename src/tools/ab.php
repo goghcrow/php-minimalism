@@ -21,10 +21,10 @@ Usage: ab -x类型 -h主机 -p端口 -c并发数 -n请求数 -t超时 -l测试�
           -x nova -s服务 -m方法 -aJson参数
           -x mysql -w密码 -b数据库 -r字符编码
 
-    ab -x http -h 115.239.210.27 -p 80 -c 200 -n 200000   
-    ab -x tcp -h 10.9.143.96 -p 9001 -c 200 -n 200000
-    ab -x mysql -h 10.9.34.172 -p 3306 -u showcase -w showcase -b showcase -r utf8mb4 -c 200 -n 200000
-    ab -x nova -h 10.9.188.33 -p 8050 -s com.youzan.material.general.service.MediaService -m getMediaList -a '{"query":{"categoryId":2,"kdtId":1,"pageNo":1,"pageSize":5}}'
+    ab -x http -h 127.0.0.1 -p 80 -c 200 -n 200000   
+    ab -x tcp -h 127.0.0.1 -p 9001 -c 200 -n 200000
+    ab -x mysql -h 127.0.0.1 -p 3306 -u showcase -w showcase -b showcase -r utf8mb4 -c 200 -n 200000
+    ab -x nova -h 127.0.0.1 -p 8050 -s com.youzan.material.general.service.MediaService -m getMediaList -a '{"query":{"categoryId":2,"xxxId":1,"pageNo":1,"pageSize":5}}'
 USAGE;
 
 $opt = getopt('x:h:p:c:n:t:l:s:m:a:u:w:b:r:');
