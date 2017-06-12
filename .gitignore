@@ -260,5 +260,5 @@ test/_
 src/Coroutine
 test/Config/config
 src/tools/#internal
-.ide-helper
+# .ide-helper
 .tmp

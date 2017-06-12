@@ -1,15 +1,36 @@
 <?php
+$tcp_pool = new \swoole_connpool(\swoole_connpool::SWOOLE_CONNPOOL_TCP);
+$r = $tcp_pool->setConfig([
+    "host" => "10.9.37.103",
+    "port" => 2280,
+]);
+$tcp_pool->createConnPool(10, 10);
+$tcp_pool->get(100, function($self, $client) {
+    assert($client !== false);
+    var_dump($client->isConnected());
+    $r = $client->sendwithcallback("HELLO", function() {
+        var_dump(func_get_args());
+    });
+
+
+//    var_dump($r);
+    // swoole_event_exit();
+});
+
+exit;
 
 
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-
-
+date_default_timezone_set('Asia/Shanghai');
+swoole_timer_after(5000, function() {
+    echo "evtime:" , date("H:i:s", nova_get_time()), "\n";
+    echo "systime:", date("H:i:s", time()). "\n";
+});
 
 exit;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
 
 function int2Bytes($int)
 {

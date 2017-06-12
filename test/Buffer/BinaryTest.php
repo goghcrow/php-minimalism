@@ -5,12 +5,39 @@ namespace Minimalism\Test\Buffer;
 
 use Minimalism\Buffer\BinaryStream;
 use Minimalism\Buffer\MemoryBuffer;
+use Minimalism\Buffer\StringBuffer;
 
 
 require __DIR__ . "/../../src/Buffer/Buffer.php";
 require __DIR__ . "/../../src/Buffer/MemoryBuffer.php";
+require __DIR__ . "/../../src/Buffer/StringBuffer.php";
 require __DIR__ . "/../../src/Buffer/BinaryStream.php";
 
+
+$buf = new MemoryBuffer();
+//$buf = new StringBuffer();
+assert($buf->readableBytes() === 0);
+//assert($buf->writableBytes() === MemoryBuffer::kInitialSize);
+//assert($buf->prependableBytes() === MemoryBuffer::kCheapPrepend);
+
+
+$buf->write("\r\n");
+$buf->write("HELLO\r\n");
+$buf->write("WORLD\r\n");
+
+assert($buf->readLine() === "");
+assert($buf->readLine() === "HELLO");
+assert($buf->readLine() === "WORLD");
+assert($buf->readLine() === false);
+
+
+$buf->write("HELLO");
+assert($buf->peek(5) === "");
+assert($buf->peek(0, 5) === "HELLO");
+assert($buf->peek(0, 4) === "HELL");
+assert($buf->peek(1, 4) === "ELLO");
+
+// ========================================================
 
 $bin = new BinaryStream(new MemoryBuffer());
 

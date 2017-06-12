@@ -18,8 +18,12 @@ class RedisCopy
         $this->file = $file;
     }
 
-    public function __invoke(RedisPDU $redisMsg)
+    public function __invoke(RedisPDU $msg)
     {
-        // swoole_async_write($this->file, $sql, -1);
+        if ($msg->isRequest()) {
+            $args = $msg->getArgs();
+            $cmd = implode(" ", $args);
+            swoole_async_write($this->file, $cmd . "\n", -1);
+        }
     }
 }

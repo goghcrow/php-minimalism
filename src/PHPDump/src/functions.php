@@ -29,6 +29,13 @@ function sys_abort($s)
     exit(1);
 }
 
+function dump(...$args)
+{
+    ob_start();
+    var_dump(...$args);
+    return ob_get_clean();
+}
+
 function is_big_endian()
 {
     // return bin2hex(pack("L", 0x12345678)[0]) === "12";

@@ -13,8 +13,35 @@ use Minimalism\PHPDump\Pcap\Connection;
 use Minimalism\PHPDump\Pcap\Dissector;
 use Minimalism\PHPDump\Pcap\PDU;
 
+/**
+ * Class RedisDissector
+ * @package Minimalism\PHPDump\Redis
+ *
+ * @ref https://redis.io/topics/protocol
+ * @ref http://redisdoc.com/topic/protocol.html
+ */
 class RedisDissector implements Dissector
 {
+    /**
+     * @var int TODO redis server listen port
+     */
+    private $redisServerPort;
+
+    public function __construct($redisServerPort = null)
+    {
+        $this->redisServerPort = $redisServerPort;
+    }
+
+    private function isRequest(Connection $connection)
+    {
+        assert($this->redisServerPort !== null);
+
+        if ($connection->TCPHdr->destination_port === $this->redisServerPort) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     public function getName()
     {
@@ -27,23 +54,18 @@ class RedisDissector implements Dissector
      */
     public function detect(Connection $connection)
     {
-        $buffer = $connection->buffer;
-        if ($buffer->readableBytes() < 1) {
+        $buf = $connection->buffer;
+
+        if ($buf->readableBytes() < 4) {
             return Dissector::DETECT_WAIT;
-        }
-
-
-        $t = $buffer->get(self::$maxMethodSize);
-
-        if (substr($t, 0, 4) === "HTTP") {
-            return Dissector::DETECTED;
         } else {
-            foreach (self::$methods as $method => $len) {
-                if (substr($t, 0, $len) === $method) {
-                    return Dissector::DETECTED;
-                }
+            $in = strpos("+-:$*", $buf->get(1));
+            $index = $buf->search("\r\n");
+            if ($in && $index) {
+                return Dissector::DETECTED;
+            } else {
+                return Dissector::UNDETECTED;
             }
-            return Dissector::UNDETECTED;
         }
     }
 
@@ -53,8 +75,10 @@ class RedisDissector implements Dissector
      */
     public function isReceiveCompleted(Connection $connection)
     {
-        // TODO: Implement isReceiveCompleted() method.
+        $msgLen = $this->isReceiveCompletedRecursive($connection);
+        return $msgLen;
     }
+
 
     /**
      * @param Connection $connection
@@ -62,6 +86,146 @@ class RedisDissector implements Dissector
      */
     public function dissect(Connection $connection)
     {
-        // TODO: Implement dissect() method.
+        /*
+        $isRequest = $this->isRequest($connection);
+        if ($isRequest) {
+            return $this->dissectRequest();
+        } else {
+            return $this->dissectResponse();
+        }
+        */
+        return $this->dissectRecursive($connection);
+    }
+
+    private function isReceiveCompletedRecursive(Connection $connection, $offset = 0)
+    {
+        $buf = $connection->buffer;
+
+        if ($buf->search("\r\n", $offset) === false) {
+            return false;
+        }
+
+        $type = $buf->peek($offset, 1);
+        $offset += 1;
+        switch ($type) {
+            case RedisPDU::MSG_MULTI:
+                $a = $offset;
+                $offset = $buf->search("\r\n", $offset);
+                if ($offset === false) {
+                    return false;
+                } else {
+                    $ll = $offset - $a;
+                    $l = intval($buf->peek($a, $ll));
+                    $offset += 2;
+                    $l = max(0, $l); // TODO
+                    for ($i = 0; $i < $l; $i++) {
+                        $offset = $this->isReceiveCompletedRecursive($connection, $offset);
+                        if ($offset === false) {
+                            return false;
+                        }
+                    }
+                    return $offset;
+                }
+
+            case RedisPDU::MSG_BULK:
+                $a = $offset;
+                $offset = $buf->search("\r\n", $offset);
+                if ($offset === false) {
+                    return false;
+                } else {
+                    $ll = $offset - $a;
+                    $l = intval($buf->peek($a, $ll));
+                    $offset += 2;
+                    if ($l === -1) { // nil $-1\r\n
+                        return $offset;
+                    } else if ($l === 0) { // empty string $0\r\n\r\n
+                        return $offset + 2;
+                    } else if ($l > 0) {
+                        $offset = $offset + $l + 2;
+                        $has = $buf->readableBytes();
+                        if ($has >= $offset) {
+                            return $offset;
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        sys_error("invalid MSG_BULK len: $l");
+                        return false; // for ide
+                    }
+                }
+                break;
+
+            case RedisPDU::MSG_INTEGER:
+            case RedisPDU::MSG_STATUS:
+            case RedisPDU::MSG_ERROR:
+                $offset = $buf->search("\r\n", $offset);
+                if ($offset === false) {
+                    return false;
+                } else {
+                    return $offset + 2;
+                }
+
+            default:
+                echo new \Exception();
+                sys_abort("invalid redis msg(1): type=$type, raw=" . $connection->buffer->readFull());
+                return false; // for ide
+        }
+    }
+
+    private function dissectRecursive(Connection $connection)
+    {
+        $buf = $connection->buffer;
+
+        $msg = new RedisPDU();
+        $msg->msgType = $buf->read(1);
+
+        switch ($msg->msgType) {
+            case RedisPDU::MSG_MULTI:
+                $l = intval($buf->readLine());
+                if ($l === -1) { // nil $-1\r\n
+                    $msg->payload = "nil";
+                } else if ($l === 0) {
+                    $msg->payload = $l; // TODO
+                } else if ($l > 0) {
+                    $msg->payload = [];
+                    for ($i = 0; $i < $l; $i++) {
+                        $msg->payload[] = $this->dissectRecursive($connection);
+                    }
+                } else {
+                    sys_error("invalid MSG_MULTI len: $l");
+                }
+                break;
+
+            case RedisPDU::MSG_BULK:
+                $l = intval($buf->readLine());
+                if ($l === -1) {
+                    $msg->payload = "nil";
+                } else if ($l === 0) { // empty string $0\r\n\r\n
+                    $msg->payload = "";
+                    $crlf = $buf->read(2);
+                    assert($crlf === "\r\n");
+                } else if ($l > 0) {
+                    $msg->payload = $buf->read($l);
+                    $crlf = $buf->read(2);
+                    assert($crlf === "\r\n");
+                } else {
+                    sys_error("invalid MSG_BULK len: $l");
+                }
+                break;
+
+            case RedisPDU::MSG_INTEGER:
+                $msg->payload = intval($buf->readLine());
+                break;
+            case RedisPDU::MSG_STATUS:
+            case RedisPDU::MSG_ERROR:
+                $msg->payload = $buf->readLine();
+                break;
+
+            default:
+                echo new \Exception();
+                sys_abort("invalid redis msg(2): type={$msg->msgType}, raw=" . $connection->buffer->readFull());
+        }
+
+        return $msg;
     }
 }

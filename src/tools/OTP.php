@@ -7,14 +7,14 @@
  * Time: 下午2:22
  */
 
-$secret = "EQZGCJBRGASGU422GBXW4ZLDJVXEQT3FJNKWMUSHHFAVSZKJMY2TQWKDO4ZC43TVI5TEWOLCJUYVQZSJMI4XM22XKF4U43LF1";
+$secret = "这里填写https://cas.qima-inc.com/ 动态密码中的secret";
 $argv[1] = $secret;
 
 if (!isset($argv[1])) {
     echo <<<USAGE
 Usage
     $argv[0] \$secret
-    secret参见 https://cas.qima-inc.com/ 动态密码secret
+    secret参见 https://cas.qima-inc.com/ 动态密码secret (chrome控制台获取)
 USAGE;
     exit(1);
 }

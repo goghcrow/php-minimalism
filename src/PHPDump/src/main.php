@@ -15,6 +15,9 @@ use Minimalism\PHPDump\Nova\NovaPDU;
 use Minimalism\PHPDump\Nova\NovaPacketFilter;
 use Minimalism\PHPDump\Nova\NovaDissector;
 use Minimalism\PHPDump\Pcap\Pcap;
+use Minimalism\PHPDump\Redis\RedisCopy;
+use Minimalism\PHPDump\Redis\RedisDissector;
+use Minimalism\PHPDump\Redis\RedisPDU;
 use Phar;
 
 
@@ -37,7 +40,7 @@ Usage:
             -m=方法fnmatch表达式,仅nova协议可用
             
             --copy=导出请求到文件,nova,http,mysql可用
-            --debug
+            --debug=true 调试模式, 显示错误并退出
              
     
     [注意] 1. 暂不支持 PcapNG格式
@@ -374,9 +377,17 @@ switch ($opt->protocol) {
         break;
 
     case "redis":
-        sys_abort("TODO");
-        break;
 
+        if (!$opt->exportFile) {
+            $opt->exportFile = "redis.log";
+        }
+
+        $redisDissector = new RedisDissector();
+        Pcap::registerDissector($redisDissector);
+
+        $redisCopy = new RedisCopy($opt->exportFile);
+        RedisPDU::registerPostEvent($redisCopy);
+        break;
 
     default:
         usage();

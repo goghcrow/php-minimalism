@@ -18,11 +18,13 @@ use swoole_buffer as SwooleBuffer;
  * |                   |                  |                  |
  * V                   V                  V                  V
  * 0      <=      readerIndex   <=   writerIndex    <=     size
+ *
+ * @ref https://github.com/chenshuo/muduo/blob/master/muduo/net/Buffer.h
  */
 class MemoryBuffer implements Buffer
 {
-    const kCheapPrepend = 4;
-    const kInitialSize = 8192;
+    const kCheapPrepend = 8;
+    const kInitialSize = 1024;
 
     protected $buffer;
 
@@ -32,8 +34,15 @@ class MemoryBuffer implements Buffer
 
     public function __construct($size = self::kInitialSize)
     {
-        $this->buffer = new SwooleBuffer($size);
-        $this->reset();
+        $this->buffer = new SwooleBuffer($size + static::kCheapPrepend);
+        $this->readerIndex = static::kCheapPrepend;
+        $this->writerIndex = static::kCheapPrepend;
+
+        /*
+        assert(static::readableBytes() === 0);
+        assert(static::writableBytes() === static::kInitialSize);
+        assert(static::prependableBytes() === static::kCheapPrepend);
+        */
     }
 
     public function readableBytes()
@@ -75,6 +84,9 @@ class MemoryBuffer implements Buffer
         $len = min($len, $this->readableBytes());
         $read = $this->rawRead($this->readerIndex, $len);
         $this->readerIndex += $len;
+        if ($this->readerIndex === $this->writerIndex) {
+            $this->reset();
+        }
         return $read;
     }
 
@@ -98,15 +110,15 @@ class MemoryBuffer implements Buffer
         }
 
         // expand
-        if ($len > ($this->prependableBytes() + $this->writableBytes() - self::kCheapPrepend)) {
-            $this->expand(($this->readableBytes() + $len) * 2);
+        if ($len > ($this->prependableBytes() + $this->writableBytes() - static::kCheapPrepend)) {
+            $this->expand(($this->writerIndex + $len) * 2);
         }
 
         // copy-move 内部腾挪
-        if ($this->readerIndex !== self::kCheapPrepend) {
-            $this->rawWrite(self::kCheapPrepend, $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex));
-            $this->writerIndex = $this->writerIndex - $this->readerIndex + self::kCheapPrepend;
-            $this->readerIndex = self::kCheapPrepend;
+        if ($this->readerIndex !== static::kCheapPrepend) {
+            $this->rawWrite(static::kCheapPrepend, $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex));
+            $this->writerIndex = $this->writerIndex - $this->readerIndex + static::kCheapPrepend;
+            $this->readerIndex = static::kCheapPrepend;
         }
 
         $this->rawWrite($this->writerIndex, $bytes);
@@ -130,19 +142,87 @@ class MemoryBuffer implements Buffer
         return true;
     }
 
+    public function search($str, $offset = 0)
+    {
+        $len = strlen($str);
+        $offset = $this->readerIndex + $offset;
+        $end = $this->writerIndex - $len;
+
+        while($offset <= $end) {
+            if ($str === $this->buffer->read($offset, $len)) {
+                return $offset - $this->readerIndex;
+            }
+            $offset++;
+        }
+
+        return false;
+    }
+
+    public function findCRLF()
+    {
+        return $this->search("\r\n");
+    }
+
+    public function getUntil($sep, $included = false)
+    {
+        $offset = $this->search($sep);
+
+        if ($offset === false) {
+            return false;
+        } else {
+            if ($included) {
+                return $this->get($offset + strlen($sep));
+            } else {
+                return $this->get($offset);
+            }
+        }
+    }
+
+    public function readUntil($sep, $included = false)
+    {
+        $offset = $this->search($sep);
+
+        if ($offset === false) {
+            return false;
+        } else {
+            if ($included) {
+                return $this->read($offset + strlen($sep));
+            } else {
+                $r = $this->read($offset);
+                $this->read(strlen($sep));
+                return $r;
+            }
+        }
+    }
+
+    public function getLine($br = "\r\n", $included = false)
+    {
+        return $this->getUntil($br, $included);
+    }
+
+    public function readLine($br = "\r\n", $included = false)
+    {
+        return $this->readUntil($br, $included);
+    }
+
+    public function peek($offset, $len = 1)
+    {
+        $offset = $this->readerIndex + max(0, $offset);
+        $len = min($len, $this->writerIndex - $offset);
+        return $this->rawRead($offset, $len);
+    }
+
     public function reset()
     {
         $this->readerIndex = static::kCheapPrepend;
         $this->writerIndex = static::kCheapPrepend;
     }
 
-    public function __toString()
-    {
-        return $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex);
-    }
-
     private function rawRead($offset, $len)
     {
+        if ($len === 0) {
+            return "";
+        }
         if ($offset < 0 || $offset + $len > $this->buffer->capacity) {
             throw new \InvalidArgumentException(__METHOD__ . ": offset=$offset, len=$len, capacity={$this->buffer->capacity}");
         }
@@ -151,15 +231,14 @@ class MemoryBuffer implements Buffer
 
     private function rawWrite($offset, $bytes)
     {
+        if ($bytes === "") {
+            return 0;
+        }
         $len = strlen($bytes);
         if ($offset < 0 || $offset + $len > $this->buffer->capacity) {
             throw new \InvalidArgumentException(__METHOD__ . ": offset=$offset, len=$len, capacity={$this->buffer->capacity}");
         }
-        if ($bytes === "") {
-            return false;
-        } else {
-            return $this->buffer->write($offset, $bytes);
-        }
+        return $this->buffer->write($offset, $bytes);
     }
 
     private function expand($size)
@@ -170,11 +249,22 @@ class MemoryBuffer implements Buffer
         return $this->buffer->expand($size);
     }
 
+    public function __toString()
+    {
+        return $this->rawRead($this->readerIndex, $this->writerIndex - $this->readerIndex);
+    }
+
     public function __debugInfo()
     {
+        $str = $this->__toString();
+        if (strlen($str)) {
+            $hex = implode(" ", array_map(function($v) { return "0x$v"; }, str_split(bin2hex($str), 2)));
+        }else {
+            $hex = "";
+        }
         return [
-            "string" => $this->__toString(),
-            "hex" => bin2hex($this->__toString()),
+            "string" => $str,
+            "hex" => $hex,
             "capacity" => $this->capacity(),
             "readerIndex" => $this->readerIndex,
             "writerIndex" => $this->writerIndex,
@@ -184,72 +274,3 @@ class MemoryBuffer implements Buffer
         ];
     }
 }
-
-/**
- * swoole_buffer的C实现不是很靠谱
- *
- * 1. buffer不是string, substr方法参数有问题, 容易用错
- * 2. append方法BUG, 类属性length应该减去buffer->offset
- *      bug: // zend_update_property_long(swoole_buffer_class_entry_ptr, getThis(), ZEND_STRL("length"), buffer->length TSRMLS_CC);
- *      fix: zend_update_property_long(swoole_buffer_class_entry_ptr, getThis(), ZEND_STRL("length"), buffer->length - buffer->offset TSRMLS_CC);
- * 3. read与write方法受到buffer->offset约束, offset之前数据对其不可见
- * 4. write方法写入数据, 未处理buffer->length, 导致对substr于__toString方法不可见, 只能用read取出
- *
- * 方案:
- *
- * 1. 不使用除expand, read与write外其他方法, 不改变内部swString的offset与length字段, 使其保持初值0
- * 2. 有条件的使用write与read, 保证offset参数必须大于0, 原因见代码
- *      write(offset, str)
- *      read(offset, len)
- *      expand(size)
-
-static PHP_METHOD(swoole_buffer, write)
-{
-    long offset;
-    char *new_str;
-    zend_size_t length;
-
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ls", &offset, &new_str, &length) == FAILURE)
-    {
-        RETURN_FALSE;
-    }
-    swString *buffer = swoole_get_object(getThis());
-    if (offset < 0)
-    {
-        // 没有append任何数据, 此处buffer->length == 0
-        offset = buffer->length + offset;
-    }
-    // 不调用substr(,,true)移动offset下标, 此处buffer->offset == 0
-    offset += buffer->offset;
-    if (length > buffer->size - offset)
-    {
-        php_error_docref(NULL TSRMLS_CC, E_WARNING, "string is too long.");
-        RETURN_FALSE;
-    }
-    memcpy(buffer->str + offset, new_str, length);
-    RETURN_TRUE;
-}
-
-static PHP_METHOD(swoole_buffer, read)
-{
-    long offset;
-    long length;
-
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ll", &offset, &length) == FAILURE)
-    {
-        RETURN_FALSE;
-    }
-    swString *buffer = swoole_get_object(getThis());
-    if (offset < 0)
-    {
-        offset = buffer->length + offset;
-    }
-    offset += buffer->offset;
-    if (length > buffer->size - offset)
-    {
-        php_error_docref(NULL TSRMLS_CC, E_WARNING, "no enough data.");
-        RETURN_FALSE;
-    }
-    SW_RETURN_STRINGL(buffer->str + offset, length, 1);
-}
-*/

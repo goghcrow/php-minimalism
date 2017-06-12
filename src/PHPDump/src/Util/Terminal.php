@@ -65,6 +65,7 @@ class Terminal
 
     public static function error($text, ...$attrs)
     {
+        $text = str_replace("%", "%%", $text);
         fprintf(STDERR, static::format($text, ...$attrs));
     }
 }

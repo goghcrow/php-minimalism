@@ -21,7 +21,7 @@ class MySQLDissector implements Dissector
     private $isCompressed;      // TODO
 
     /**
-     * @var int mysql port
+     * @var int mysql server listen port
      */
     private $mysqlServerPort;
 
