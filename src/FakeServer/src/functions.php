@@ -1,12 +1,15 @@
 <?php
 
-function sys_echo($s) {
+function sys_echo($s)
+{
     $workerId = isset($_SERVER["WORKER_ID"]) ? $_SERVER["WORKER_ID"] : "";
     $dataStr = date("Y-m-d H:i:s");
     echo "[$dataStr #$workerId] $s\n";
 }
 
-function sys_error($s) {
+function sys_error($s)
+{
+    $s = str_replace("%", "%%", $s);
     $workerId = isset($_SERVER["WORKER_ID"]) ? $_SERVER["WORKER_ID"] : "";
     $dataStr = date("Y-m-d H:i:s");
     fprintf(STDERR, "[$dataStr #$workerId] $s\n");

@@ -10,7 +10,6 @@ if (!isset($argv[1])) {
     exit(2);
 }
 
-
 fwrite(STDOUT, "<?php" . PHP_EOL);
 foreach (array_slice($argv, 1) as $file) {
     fwrite(STDOUT, "require __DIR__ . '/$file';" . PHP_EOL);

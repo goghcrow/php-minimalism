@@ -17,15 +17,17 @@ function sys_echo($s, $sec = null, $usec = null)
 
 function sys_error($s)
 {
+    $s = str_replace("%", "%%", $s);
     $time = date("H:i:s");
     $s = T::format($s, T::FG_RED);
     fprintf(STDERR, "$time $s\n");
 }
 
+
 function sys_abort($s)
 {
     T::error($s, T::FG_RED, T::BRIGHT);
-    fprintf(STDERR, "\n\n");
+    echo new \Exception();
     exit(1);
 }
 
