@@ -14,7 +14,10 @@ var_dump(bin2hex($x));
 
 
 var_dump(isGzip($x));
-
+function isGzip($bin)
+{
+    return substr($bin, 0, 3) === "\x1f\x8b\x08";
+}
 exit;
 
 abstract class Node

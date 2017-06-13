@@ -14,6 +14,8 @@ function sys_error($s) {
 
 function sys_abort($s)
 {
+    $s = str_replace("%", "%%", $s);
     fprintf(STDERR, "$s\n");
+    echo new \Exception();
     exit(1);
 }

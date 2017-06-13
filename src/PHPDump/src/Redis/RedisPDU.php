@@ -22,11 +22,13 @@ use Minimalism\PHPDump\Util\T;
  */
 class RedisPDU extends PDU
 {
-    const MSG_STATUS = '+';
+    // RESP
+
+    const MSG_STRING = '+'; // simple string; status
     const MSG_ERROR = '-';
     const MSG_INTEGER = ':';
-    const MSG_BULK = '$';
-    const MSG_MULTI = '*';
+    const MSG_BULK_STRING = '$'; // empty string  "$0\r\n\r\n" ;  "$-1\r\n" Null Bulk String.
+    const MSG_ARRAY = '*'; // "*0\r\n" ; "*-1\r\n"
 
     public $msgType;
     public $payload;
@@ -92,11 +94,11 @@ class RedisPDU extends PDU
 
     public function isRequest()
     {
-        if ($this->msgType === static::MSG_MULTI) {
+        if ($this->msgType === static::MSG_ARRAY) {
             if (is_array($this->payload) && $this->payload) {
                 /** @var static $cmdMsg */
                 $cmdMsg = $this->payload[0];
-                if ($cmdMsg->msgType === static::MSG_BULK) {
+                if ($cmdMsg->msgType === static::MSG_BULK_STRING) {
                     $cmd = $cmdMsg->payload;
                     return static::isRedisCmd($cmd);
                 }
@@ -106,29 +108,13 @@ class RedisPDU extends PDU
         return false;
     }
 
-    public static function dissectPayload(RedisPDU $msg)
-    {
-        if(strpos($msg->payload, "a:") === 0){
-            $value = unserialize($msg->payload);
-            $value = json_encode($value);
-        } else {
-            $value = $msg->payload;
-            if (static::isGzip($value)) {
-                $value = gzdecode($value);
-            }
-        }
-
-        return $value;
-        // return json_encode($value);
-    }
-
     public function getArgs()
     {
         // assert($this->isRequest());
         /** @var static $item */
         $args = [];
         foreach ($this->payload as $item) {
-            assert($item->msgType === static::MSG_BULK);
+            assert($item->msgType === static::MSG_BULK_STRING);
             $args[] = $item->payload;
         }
 
@@ -156,16 +142,7 @@ class RedisPDU extends PDU
         $this->printRecursive($this);
     }
 
-    public static function isGzip($bin)
-    {
-        if (strlen($bin) <= 3) {
-            return false;
-        } else {
-            return substr($bin, 0, 3) === "\x1f\x8b\x08";
-        }
-    }
-
-    public function printRecursive(RedisPDU $msg, $seq = 1, $level = -1)
+    private function printRecursive(RedisPDU $msg, $seq = 1, $level = -1)
     {
         if ($level <= 0) {
             $paddingLeft = "";
@@ -176,7 +153,7 @@ class RedisPDU extends PDU
         $seq = $paddingLeft . "$seq) ";
 
         switch ($msg->msgType) {
-            case static::MSG_MULTI:
+            case static::MSG_ARRAY:
                 if (is_array($this->payload)) {
                     foreach ($this->payload as $seq => $subMsg) {
                         $this->printRecursive($subMsg, $seq + 1, $level + 1);
@@ -186,11 +163,11 @@ class RedisPDU extends PDU
                 }
                 break;
 
-            case static::MSG_BULK:
+            case static::MSG_BULK_STRING:
                 echo $seq, T::format(static::dissectPayload($msg), T::DIM), "\n";
                 break;
 
-            case static::MSG_STATUS:
+            case static::MSG_STRING:
                 echo $seq, T::format(static::dissectPayload($msg), T::DIM), "\n";
                 break;
 
@@ -206,5 +183,30 @@ class RedisPDU extends PDU
                 print_r($this);
                 sys_error("invalid redis pdu");
         }
+    }
+
+    public static function isGzip($bin)
+    {
+        if (strlen($bin) <= 3) {
+            return false;
+        } else {
+            // 0x08 ZLIB_ENCODING_DEFLATE
+            return substr($bin, 0, 3) === "\x1f\x8b\x08";
+        }
+    }
+
+    public static function dissectPayload(RedisPDU $msg)
+    {
+        if(strpos($msg->payload, "a:") === 0){
+            $value = unserialize($msg->payload);
+            $value = json_encode($value);
+        } else {
+            $value = $msg->payload;
+            if (static::isGzip($value)) {
+                $value = gzdecode($value);
+            }
+        }
+
+        return $value;
     }
 }

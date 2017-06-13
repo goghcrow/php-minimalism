@@ -22,9 +22,7 @@ use Minimalism\PHPDump\Pcap\PDU;
  */
 class RedisDissector implements Dissector
 {
-    /**
-     * @var int TODO redis server listen port
-     */
+    /*
     private $redisServerPort;
 
     public function __construct($redisServerPort = null)
@@ -42,6 +40,7 @@ class RedisDissector implements Dissector
             return false;
         }
     }
+    */
 
     public function getName()
     {
@@ -108,33 +107,43 @@ class RedisDissector implements Dissector
         $type = $buf->peek($offset, 1);
         $offset += 1;
         switch ($type) {
-            case RedisPDU::MSG_MULTI:
+            case RedisPDU::MSG_ARRAY:
                 $a = $offset;
                 $offset = $buf->search("\r\n", $offset);
                 if ($offset === false) {
                     return false;
                 } else {
                     $ll = $offset - $a;
-                    $l = intval($buf->peek($a, $ll));
+                    $l = filter_var($buf->peek($a, $ll), FILTER_VALIDATE_INT);
+                    assert($l !== false, "buf: " . $buf->get(PHP_INT_MAX));
                     $offset += 2;
-                    $l = max(0, $l); // TODO
-                    for ($i = 0; $i < $l; $i++) {
-                        $offset = $this->isReceiveCompletedRecursive($connection, $offset);
-                        if ($offset === false) {
-                            return false;
+                    if ($l === -1) {
+                        return $offset;
+                    } else if ($l === 0) {
+                        return $offset;
+                    } else if ($l > 0) {
+                        for ($i = 0; $i < $l; $i++) {
+                            $offset = $this->isReceiveCompletedRecursive($connection, $offset);
+                            if ($offset === false) {
+                                return false;
+                            }
                         }
+                        return $offset;
+                    } else {
+                        sys_error("invalid MSG_ARRAY len: $l");
+                        return false; // for ide
                     }
-                    return $offset;
                 }
 
-            case RedisPDU::MSG_BULK:
+            case RedisPDU::MSG_BULK_STRING:
                 $a = $offset;
                 $offset = $buf->search("\r\n", $offset);
                 if ($offset === false) {
                     return false;
                 } else {
                     $ll = $offset - $a;
-                    $l = intval($buf->peek($a, $ll));
+                    $l = filter_var($buf->peek($a, $ll), FILTER_VALIDATE_INT);
+                    assert($l !== false, "buf: " . $buf->get(PHP_INT_MAX));
                     $offset += 2;
                     if ($l === -1) { // nil $-1\r\n
                         return $offset;
@@ -156,7 +165,7 @@ class RedisDissector implements Dissector
                 break;
 
             case RedisPDU::MSG_INTEGER:
-            case RedisPDU::MSG_STATUS:
+            case RedisPDU::MSG_STRING:
             case RedisPDU::MSG_ERROR:
                 $offset = $buf->search("\r\n", $offset);
                 if ($offset === false) {
@@ -166,7 +175,6 @@ class RedisDissector implements Dissector
                 }
 
             default:
-                echo new \Exception();
                 sys_abort("invalid redis msg(1): type=$type, raw=" . $connection->buffer->readFull());
                 return false; // for ide
         }
@@ -180,12 +188,13 @@ class RedisDissector implements Dissector
         $msg->msgType = $buf->read(1);
 
         switch ($msg->msgType) {
-            case RedisPDU::MSG_MULTI:
-                $l = intval($buf->readLine());
+            case RedisPDU::MSG_ARRAY:
+                $l = filter_var($buf->readLine(), FILTER_VALIDATE_INT);
+                assert($l !== false, "buf: " . $buf->get(PHP_INT_MAX));
                 if ($l === -1) { // nil $-1\r\n
                     $msg->payload = "nil";
                 } else if ($l === 0) {
-                    $msg->payload = $l; // TODO
+                    $msg->payload = [];
                 } else if ($l > 0) {
                     $msg->payload = [];
                     for ($i = 0; $i < $l; $i++) {
@@ -196,33 +205,34 @@ class RedisDissector implements Dissector
                 }
                 break;
 
-            case RedisPDU::MSG_BULK:
-                $l = intval($buf->readLine());
+            case RedisPDU::MSG_BULK_STRING:
+                $l = filter_var($buf->readLine(), FILTER_VALIDATE_INT);
+                assert($l !== false, "buf: " . $buf->get(PHP_INT_MAX));
                 if ($l === -1) {
                     $msg->payload = "nil";
                 } else if ($l === 0) { // empty string $0\r\n\r\n
                     $msg->payload = "";
                     $crlf = $buf->read(2);
-                    assert($crlf === "\r\n");
+                    assert($crlf === "\r\n", "buf: " . $buf->get(PHP_INT_MAX));
                 } else if ($l > 0) {
                     $msg->payload = $buf->read($l);
                     $crlf = $buf->read(2);
-                    assert($crlf === "\r\n");
+                    assert($crlf === "\r\n", "buf: " . $buf->get(PHP_INT_MAX));
                 } else {
                     sys_error("invalid MSG_BULK len: $l");
                 }
                 break;
 
             case RedisPDU::MSG_INTEGER:
-                $msg->payload = intval($buf->readLine());
+                $msg->payload = filter_var($buf->readLine(), FILTER_VALIDATE_INT);
+                assert($msg->payload !== false, "buf: " . $buf->get(PHP_INT_MAX));
                 break;
-            case RedisPDU::MSG_STATUS:
+            case RedisPDU::MSG_STRING:
             case RedisPDU::MSG_ERROR:
                 $msg->payload = $buf->readLine();
                 break;
 
             default:
-                echo new \Exception();
                 sys_abort("invalid redis msg(2): type={$msg->msgType}, raw=" . $connection->buffer->readFull());
         }
 
