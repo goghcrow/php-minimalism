@@ -82,8 +82,9 @@ $tcpClient->on("receive", function(TcpClient $cli, $s, $recv) {
     echo "ON_RECEIVE\n\n";
     var_dump($recv);
 
-    $r = $cli->send("GET / HTTP/1.1\r\n\r\n");
-    var_dump($r);
+    $cli->ev->after(1000, function() use($cli) {
+        $cli->send("GET / HTTP/1.1\r\n\r\n");
+    });
 });
 $tcpClient->on("close", function(TcpClient $cli, $s) {
     echo "ON_CLOSED\n";

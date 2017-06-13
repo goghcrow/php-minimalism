@@ -62,23 +62,26 @@ class TcpClient
         }
     }
 
+    public function isConnected()
+    {
+        // is connected === is_resource
+        // 已经close: resource(n) of type (Unknown)
+        return is_resource($this->s);
+    }
+
     public function send($data)
     {
         if ($this->s) {
             $this->ev->onWrite($this->s, function(EventLoop $ev, $s) use(&$data) {
-                if (is_resource($s)) { // is connected === is_resource
-                    $n = fwrite($this->s, $data);
-                    if ($n === false) {
-                        $this->close();
-                    } else {
-                        if ($n === strlen($data)) {
-                            $ev->onWrite($s, null);
-                        } else {
-                            $data = substr($data, $n);
-                        }
-                    }
+                $n = fwrite($this->s, $data);
+                if ($n === false) {
+                    $this->close();
                 } else {
-                    fclose($this->s);
+                    if ($n === strlen($data)) {
+                        $ev->onWrite($s, null);
+                    } else {
+                        $data = substr($data, $n);
+                    }
                 }
             });
             return true;

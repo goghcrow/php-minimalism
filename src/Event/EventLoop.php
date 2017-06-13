@@ -36,9 +36,8 @@ class EventLoop
      */
     public function onRead($s, callable $on = null)
     {
+        // 已经close: resource(n) of type (Unknown)
         if ($on && is_resource($s)) {
-            // 已经close: resource(n) of type (Unknown)
-            // is_resource === false !!!
             $this->onReadFd[(int)$s] = $s;
             $this->onReadCb[(int)$s] = $on;
         } else {
