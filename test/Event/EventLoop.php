@@ -68,33 +68,7 @@ function testOnRead()
     });
 }
 
-//testOnRead();
-
-$ev = new EventLoop();
-
-$tcpClient = new TcpClient($ev);
-$tcpClient->on("connect", function(TcpClient $cli, $s) {
-    echo "ON_CONNECT\n\n";
-    $r = $cli->send("GET / HTTP/1.1\r\n\r\n");
-    var_dump($r);
-});
-$tcpClient->on("receive", function(TcpClient $cli, $s, $recv) {
-    echo "ON_RECEIVE\n\n";
-    var_dump($recv);
-
-    $cli->ev->after(1000, function() use($cli) {
-        $cli->send("GET / HTTP/1.1\r\n\r\n");
-    });
-});
-$tcpClient->on("close", function(TcpClient $cli, $s) {
-    echo "ON_CLOSED\n";
-    // var_dump($cli->errno);
-    // var_dump($cli->errstr);
-});
-
-$tcpClient->connect("tcp://115.239.211.112:80");
-
-
+// testOnRead();
 
 function testTcpClient()
 {
@@ -129,5 +103,37 @@ function testTcpClient()
         });
     }
 }
+
+
+// testTcpClient();
+
+
+
+$ev = new EventLoop();
+
+$tcpClient = new TcpClient($ev);
+$tcpClient->on("connect", function(TcpClient $cli, $s) {
+    echo "ON_CONNECT\n\n";
+    $r = $cli->send("GET / HTTP/1.1\r\n\r\n");
+    var_dump($r);
+});
+$tcpClient->on("receive", function(TcpClient $cli, $s, $recv) {
+    echo "ON_RECEIVE\n\n";
+    var_dump($recv);
+
+    $cli->ev->after(1000, function() use($cli) {
+        $cli->send("GET / HTTP/1.1\r\n\r\n");
+    });
+});
+$tcpClient->on("close", function(TcpClient $cli, $s) {
+    echo "ON_CLOSED\n";
+    // var_dump($cli->errno);
+    // var_dump($cli->errstr);
+});
+
+$tcpClient->connect("tcp://115.239.211.112:80");
+
+
+
 
 

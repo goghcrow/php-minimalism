@@ -12,7 +12,7 @@ namespace Minimalism\Event;
 class EventLoop
 {
     private $nextTick, $nextTick_;
-    private $timer;
+    private $timer, $timer_;
     private $onReadFd, $onReadCb, $onWriteFd, $onWriteCb;
     private $run;
 
@@ -23,6 +23,7 @@ class EventLoop
         $this->nextTick     = new \SplQueue();
         $this->nextTick_    = new \SplQueue();
         $this->timer        = new \SplPriorityQueue();
+        $this->timer_       = [];
 
         register_shutdown_function(function() {
             $this->loop();
@@ -81,6 +82,7 @@ class EventLoop
     {
         $timer = _Timer::after($ms, $after);
         $this->timer->insert($timer, -$ms);
+        $this->timer_[$timer->id] = $timer;
         return $timer->id;
     }
 
@@ -94,6 +96,7 @@ class EventLoop
     {
         $timer = _Timer::tick($ms, $tick);
         $this->timer->insert($timer, -$ms);
+        $this->timer_[$timer->id] = $timer;
         return $timer->id;
     }
 
@@ -103,11 +106,10 @@ class EventLoop
      */
     public function clear($id)
     {
-        foreach ($this->timer as $timer/** @var _Timer $timer */) {
-            if ($timer->id === $id) {
-                $timer->valid = false;
-                return;
-            }
+        if (isset($this->timer_[$id])) {
+            /** @var _Timer $timer */
+            $timer = $this->timer_[$id];
+            $timer->valid = false;
         }
     }
 
@@ -178,6 +180,7 @@ class EventLoop
                     // clear invalid timer
                     if ($timer->valid === false) {
                         $this->timer->extract();
+                        unset($this->timer_[$timer->id]);
                         continue;
                     } else {
                         $timeout = max(0, $timer->at - $now);
@@ -193,6 +196,15 @@ class EventLoop
             }
 
             // 4. select
+            foreach ($this->onReadFd as $i => $s) {
+                // 已经close: resource(n) of type (Unknown)
+                if (is_resource($s) === false) {
+                    $onRead = $this->onReadCb[$i];
+                    $onRead($this, ""); // close
+                    $this->onRead($s, null); // clear read
+                    $this->onWrite($s, null); // clear write
+                }
+            }
             if ($this->onReadFd || $this->onWriteFd) {
                 $read = $this->onReadFd;
                 $write = $this->onWriteFd;

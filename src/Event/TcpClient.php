@@ -73,14 +73,18 @@ class TcpClient
     {
         if ($this->s) {
             $this->ev->onWrite($this->s, function(EventLoop $ev, $s) use(&$data) {
-                $n = fwrite($this->s, $data);
-                if ($n === false) {
-                    $this->close();
+                if ($data === "") {
+                    $ev->onWrite($s, null);
                 } else {
-                    if ($n === strlen($data)) {
-                        $ev->onWrite($s, null);
+                    $n = fwrite($this->s, $data);
+                    if ($n === false) {
+                        $this->close();
                     } else {
-                        $data = substr($data, $n);
+                        if ($n === strlen($data)) {
+                            $ev->onWrite($s, null);
+                        } else {
+                            $data = substr($data, $n);
+                        }
                     }
                 }
             });
