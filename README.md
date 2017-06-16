@@ -2,4 +2,4 @@
 
 2015-now 写得各种不务正业的东西
 
-![svg-test](./test.svg)
+<img src="https://cdn.rawgit.com/goghcrow/php-minimalism/master/test.svg">
