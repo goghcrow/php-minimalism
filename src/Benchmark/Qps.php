@@ -14,7 +14,7 @@ namespace Minimalism\Benchmark;
  * !!! apc.enable_cli
  * @package Minimalism\Benchmark
  *
- * apcu 在mac上回发生死锁 !!!
+ * apcu 在mac上会发生死锁 !!!
  */
 class Qps
 {
@@ -28,13 +28,10 @@ class Qps
      */
     private static $ko_counter;
 
-    private static $report_last;
-
     public static function init()
     {
         self::$ok_counter = new Counter();
         self::$ko_counter = new Counter();
-        self::$report_last = self::now();
     }
 
     public static function success()
@@ -51,17 +48,18 @@ class Qps
         }
     }
 
-    public static function summary()
+    public static function summary($interval)
     {
-        $now = self::now();
-        $elapsed = $now - self::$report_last;
-
         $okCount = self::$ok_counter->get();
         $koCount = self::$ko_counter->get();;
 
-        self::computation("ALL", $okCount + $koCount, $elapsed);
-        self::computation("OK", $okCount, $elapsed);
-        self::computation("KO", $koCount, $elapsed);
+        list($qps, $rt) = self::computation($okCount + $koCount, $interval);
+        list($ok_qps, $ok_rt) = self::computation($okCount, $interval);
+        list($ko_qps, $ko_rt) = self::computation($koCount, $interval);
+
+        $time = date("H:i:s", time());
+        $summary = "[$time] qps=$qps, ok=$ok_qps, ko=$ko_qps, rt=$rt\n";
+        fprintf(STDERR, $summary);
 
         if ($okCount) {
             self::$ok_counter->decr($okCount);
@@ -69,25 +67,17 @@ class Qps
         if ($koCount) {
             self::$ko_counter->decr($koCount);
         }
-        self::$report_last = $now;
     }
 
-    public static function computation($desc, $requests, $elapsed)
+    public static function computation($requests, $elapsed)
     {
-        if ($requests === 0) {
-            $avg_res_time = 0;
-        } else {
+        if ($requests) {
             $avg_res_time = number_format($elapsed / $requests, 2);
+        } else {
+            $avg_res_time = 0;
         }
         $qps = intval($requests / $elapsed * 1000);
 
-        $time = date("Y-m-d H:i:s", time());
-        $summary = "[$time] QPS $desc qps=$qps, avg=$avg_res_time\n";
-        fprintf(STDERR, $summary);
-    }
-
-    private static function now()
-    {
-        return intval(microtime(true) * 1000);
+        return [$qps, $avg_res_time];
     }
 }

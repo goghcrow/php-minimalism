@@ -96,7 +96,7 @@ class TCodec
                 }
                 $reader->readMapEnd();
 
-                $fieldVal = $this->buildMapField(TType::SET, $keyType, $valType, $elemVal);
+                $fieldVal = $this->buildMapField(TType::MAP, $keyType, $valType, $elemVal);
                 break;
 
             case TType::SET:

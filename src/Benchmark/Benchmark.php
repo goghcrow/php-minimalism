@@ -71,7 +71,7 @@ class Benchmark
 
 
 
-                Report::start($conf->label, $report_file);
+                Report::start($conf->label, $report_file, 2000);
 
                 for ($j = 0; $j < $conf->concurrency; $j++) {
                     self::$clients[] = Client::make($test, $conf, $setting);
@@ -102,7 +102,7 @@ class Benchmark
     {
 
         while (self::$enable) {
-            Qps::summary();
+            Qps::summary(1000); // ms
             // usleep(200 * 1000);
             sleep(1);
             pcntl_signal_dispatch();

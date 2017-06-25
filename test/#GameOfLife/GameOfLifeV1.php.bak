@@ -1,0 +1,96 @@
+<?php
+
+//$game = new Game(65, 220);
+//$game->run();
+
+$game = new Game(40, 150);
+$game->run();
+
+
+class Game
+{
+    private $height, $width;
+    private $matrix, $matrix_;
+
+    public function __construct($height, $width)
+    {
+        $this->height = $height;
+        $this->width = $width;
+
+        for ($r = 0; $r < $this->height; $r++) {
+            for ($c = 0; $c < $this->width; $c++) {
+                $this->matrix[$r][$c] = rand(0, 1);
+            }
+        }
+    }
+
+    private function idx($i, $limit)
+    {
+        if ($i < 0) {
+            return $i + $limit;
+        } else if ($i >= $limit) {
+            return $i - $limit;
+        } else {
+            return $i;
+        }
+    }
+
+    private function cell($r, $c)
+    {
+        $r = $this->idx($r, $this->height);
+        $c = $this->idx($c, $this->width);
+        return $this->matrix[$r][$c];
+    }
+
+    private function next()
+    {
+        for ($r = 0; $r < $this->height; $r++) {
+            for ($c = 0; $c < $this->width; $c++) {
+
+                $n = $this->cell($r - 1, $c - 1) +
+                    $this->cell($r - 1, $c) +
+                    $this->cell($r - 1, $c + 1) +
+                    $this->cell($r, $c - 1) +
+                    $this->cell($r, $c + 1) +
+                    $this->cell($r + 1, $c - 1) +
+                    $this->cell($r + 1, $c) +
+                    $this->cell($r + 1, $c + 1);
+
+                $now = $this->matrix[$r][$c];
+                if ($n === 3 || ($n === 2 && $now === 1)) {
+                    $this->matrix_[$r][$c] = 1;
+                } else {
+                    $this->matrix_[$r][$c] = 0;
+                }
+            }
+        }
+
+        $this->matrix = $this->matrix_;
+    }
+
+    private function draw()
+    {
+        ob_start();
+        echo chr(27) . "[0G";
+        for ($r = 0; $r < $this->height; $r++) {
+            for ($c = 0; $c < $this->width; $c++) {
+                if ($this->matrix[$r][$c] === 1) {
+                    echo "\033[1;m@\e[0m"; // 32
+                } else {
+                    echo ".";
+                }
+            }
+            echo "\n";
+        }
+        echo chr(27) . "[{$this->height}A";
+        ob_end_flush();
+    }
+
+    public function run()
+    {
+        while (true) {
+            $this->draw();
+            $this->next();
+        }
+    }
+}

@@ -200,7 +200,7 @@ class EventLoop
                 // 已经close: resource(n) of type (Unknown)
                 if (is_resource($s) === false) {
                     $onRead = $this->onReadCb[$i];
-                    $onRead($this, ""); // close
+                    $onRead($this, null); // close
                     $this->onRead($s, null); // clear read
                     $this->onWrite($s, null); // clear write
                 }

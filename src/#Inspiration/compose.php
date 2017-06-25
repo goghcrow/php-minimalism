@@ -9,12 +9,12 @@
 // TODO exception handler
 
 
-function defer($syncFn)
-{
-    return function($ctx, $next) use($syncFn) {
-        $syncFn($ctx, $next);
-    };
-}
+//function defer($syncFn)
+//{
+//    return function($ctx, $next) use($syncFn) {
+//        $syncFn($ctx, $next);
+//    };
+//}
 
 function array_right_reduce(array $input, callable $function, $initial = null)
 {

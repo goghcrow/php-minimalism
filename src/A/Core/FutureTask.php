@@ -28,11 +28,7 @@ final class FutureTask
     {
         $this->state = self::PENDING;
 
-        if ($parent) {
-            $asyncTask = new Task($gen, $parent);
-        } else {
-            $asyncTask = new Task($gen);
-        }
+        $asyncTask = new Task($gen, $parent);
 
         $asyncTask->start(function($r, $ex = null)  {
             // PENDING or TIMEOUT

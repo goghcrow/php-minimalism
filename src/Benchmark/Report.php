@@ -13,21 +13,19 @@ class Report
 {
     private static $offset = 0;
     private static $report;
-    private static $report_last;
     private static $file;
     private static $label;
     private static $enable;
     private static $pid;
 
-    public static function start($label, $file)
+    public static function start($label, $file, $interval)
     {
         self::$label = $label;
         self::$file = $file;
         self::$pid = posix_getpid();
-        self::$report_last = self::now();
         self::$enable = true;
 
-        self::summary();
+        self::summary($interval);
     }
 
     public static function stop()
@@ -85,27 +83,25 @@ class Report
 
     /**
      * 单进程数据
+     * @param $interval
      */
-    private static function summary()
+    private static function summary($interval)
     {
-        swoole_timer_after(2000, function() {
-            $now = self::now();
-            $elapsed = $now - self::$report_last;
-            Qps::computation("pid=" . self::$pid, count(self::$report), $elapsed);
+        swoole_timer_after($interval, function() use($interval) {
+            // Qps::computation("pid=" . self::$pid, count(self::$report), $interval);
 
             if (empty(self::$report)) {
-                self::summary();
+                self::summary($interval);
             } else {
                 $r = [];
                 foreach (self::$report as $item) {
                     $r[] = implode(",", array_values($item));
                 }
                 self::$report = [];
-                self::$report_last = $now;
                 $log = implode("\n", $r) . "\n";
-                self::write($log, function() {
+                self::write($log, function() use($interval) {
                     if (self::$enable) {
-                        self::summary();
+                        self::summary($interval);
                     } else {
                         // 保证日志文件落盘
                         swoole_event_exit();

@@ -17,6 +17,7 @@
         },
         "files": [
             "src/A/Core/functions.php",
+            "src/Coroutine/functions.php",
             "src/A/Client/functions.php",
             "src/A/Server/Http/functions.php"
         ]

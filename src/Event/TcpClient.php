@@ -32,6 +32,7 @@ class TcpClient
         stream_set_blocking($r, 0);
         $this->s = $r;
         $this->ev->onWrite($this->s, function(EventLoop $ev, $s) {
+            // connected
             $ev->onWrite($s, null);
             if ($onConnect = $this->onConnect) {
                 $onConnect($this, $s);

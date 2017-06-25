@@ -7,6 +7,7 @@
  */
 
 namespace Minimalism\A\Core;
+
 use Minimalism\A\Core\Exception\TaskCanceledException;
 
 
@@ -19,7 +20,8 @@ use Minimalism\A\Core\Exception\TaskCanceledException;
 
 /**
  * Class Task
- * yield实现的半协程递归调度器
+ *
+ * 半协程调度器
  *
  * @author xiaofeng
  *
@@ -38,7 +40,7 @@ use Minimalism\A\Core\Exception\TaskCanceledException;
  * 3. 抛出 CancelTaskException 及其子类, 不在任务间透传, 直接终止异步任务(停止迭代), 执行continuation回调
  * 4. 抛出 其他异常 内部不捕获, 任务会终止, 异常通过continuation回调参数传递
  * 5. 抛出 其他异常 内部捕获, 任务继续执行
- * 6. IAsync 实现类内部通过回调函数参数传递执行结果与异常
+ * 6. Async 实现类内部通过回调函数参数传递执行结果与异常
  * 7. 递归实现, 避免在大循环内部同步yield, 会占用大量内存, 如果有Async返回则没问题, 回调函数之前会退栈
  */
 final class Task implements Async
@@ -296,7 +298,7 @@ final class Task implements Async
     }
 
     /**
-     * 跨父子AsyncTask设置上下文
+     * 跨父子AsyncTask获取上下文
      * @param string $key
      * @param mixed $default
      * @return Syscall
@@ -314,7 +316,7 @@ final class Task implements Async
     }
 
     /**
-     * 跨父子AsyncTask获取上下文
+     * 跨父子AsyncTask设置上下文
      * @param string $key
      * @param mixed $val
      * @return Syscall
