@@ -4,14 +4,18 @@ namespace Minimalism\Test\Coroutine;
 
 use function Minimalism\Coroutine\callcc;
 use function Minimalism\Coroutine\chan;
-use Minimalism\Coroutine\Channel;
+use Minimalism\Coroutine\Channel\Channel;
 use function Minimalism\Coroutine\go;
-use function Minimalism\Coroutine\self;
+use Minimalism\Coroutine\Task;
 use Minimalism\Coroutine\Time;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
 
+
+Task::setUnObservedExceptionHandler(function($result, $ex, Task $task) {
+    echo $ex;
+});
 
 swoole_async_set([
     "disable_dns_cache" => true,
@@ -33,6 +37,7 @@ call_user_func(function() {
     $ch = chan();
 
     ($ch->recv())->start(function($r, $ex) {
+        list($r, ) = $r;
         assert($r === 42);
     });
 
@@ -58,9 +63,9 @@ call_user_func(function() {
 
     go(function() use($ch, &$buf) {
         /** @var Channel $anotherCh */
-        $anotherCh = (yield $ch->recv());
+        list($anotherCh, $ok) = (yield $ch->recv());
         $buf .=  "recv another channel\n";
-        $val = (yield $anotherCh->recv());
+        list($val, $ok) = (yield $anotherCh->recv());
         $buf .=  $val . "\n";
         assert($buf === <<<RAW
 send another channel
@@ -80,8 +85,7 @@ call_user_func(function() {
 
     go(function() use($ch) {
         // $buf .=  "before recv\n";
-        $ip = (yield $ch->recv());
-        // var_dump($ip);
+        list($ip) = (yield $ch->recv());
         assert(ip2long($ip));
     });
 
@@ -93,14 +97,12 @@ call_user_func(function() {
     });
 });
 
-
-
 // timeout
+/*
 call_user_func(function() {
-    /*
     $ch = chan();
 
-    go(function() use($ch) {
+    run(function() use($ch) {
         $ex = null;
         try {
             recv:
@@ -112,13 +114,13 @@ call_user_func(function() {
     });
 
 
-    go(function() use($ch) {
+    run(function() use($ch) {
         yield Time::sleep(2000);
         $buf .=  "send\n";
         yield $ch->send(42);
     });
-    */
 });
+*/
 
 
 // buffered channel
@@ -128,13 +130,13 @@ call_user_func(function() {
     $buf = "";
 
     go(function() use($ch, &$buf) {
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .= "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .= "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
         assert($buf === <<<RAW
 send 1
@@ -168,13 +170,13 @@ call_user_func(function() {
     $ch = chan(rand(1, 4));
 
     go(function() use($ch, &$buf) {
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .=  "recv $recv\n";
         // echo $buf;
     });
@@ -210,14 +212,14 @@ call_user_func(function() {
 
 
     go(function() use($ch, &$buf) {
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .= "recv $recv\n";
 
         // sleep 不会阻塞第二次send
         yield Time::sleep(100);
         $buf .= "recv: after 1s\n";
 
-        $recv = (yield $ch->recv());
+        list($recv) = (yield $ch->recv());
         $buf .= "recv $recv\n";
 
         assert($buf === <<<RAW
@@ -242,7 +244,7 @@ $producerConsumer = function() {
 
     go(function() use($ch) {
         while (true) {
-            list($host, $ip) = (yield $ch->recv());
+            list(list($host, $ip), ) = (yield $ch->recv());
             echo "$host: $ip\n";
         }
     });
@@ -263,6 +265,7 @@ $producerConsumer = function() {
         }
     });
 };
+//$producerConsumer();
 
 
 // ping pong
@@ -273,7 +276,8 @@ $pingPong = function() {
 
     go(function() use($pingCh, $pongCh) {
         while (true) {
-            echo (yield $pingCh->recv());
+            list($r) = (yield $pingCh->recv());
+            echo $r;
             yield $pongCh->send("PONG\n");
 
             yield Time::sleep(100);
@@ -282,7 +286,8 @@ $pingPong = function() {
 
     go(function() use($pingCh, $pongCh) {
         while (true) {
-            echo (yield $pongCh->recv());
+            list($r) =  (yield $pongCh->recv());
+            echo $r;
             yield $pingCh->send("PING\n");
 
             yield Time::sleep(100);
@@ -294,6 +299,7 @@ $pingPong = function() {
         yield $pingCh->send("PING\n");
     });
 };
+// $pingPong();
 
 
 
@@ -303,7 +309,7 @@ $_ = function() {
 
     go(function() use($ch, &$buf) {
         while (true) {
-            $recv = (yield $ch->recv());
+            list($recv, ) = (yield $ch->recv());
             echo  "a recv\n";
             yield Time::sleep(1);
         }
@@ -311,7 +317,7 @@ $_ = function() {
 
     go(function() use($ch, &$buf) {
         while (true) {
-            $recv = (yield $ch->recv());
+            list($recv, ) = (yield $ch->recv());
             echo  "b recv\n";
             yield Time::sleep(1);
         }
@@ -333,6 +339,7 @@ $_ = function() {
         }
     });
 };
+//$_();
 
 
 
@@ -355,43 +362,17 @@ $_ = function() {
 
     go(function() use($ch) {
         while (true) {
-            $recv = (yield $ch->recv());
+            list($recv, ) = (yield $ch->recv());
             echo "consumer1 recv from $recv\n";
         }
     });
 
     go(function() use($ch) {
         while (true) {
-            $recv = (yield $ch->recv());
+            list($recv, ) = (yield $ch->recv());
             echo "consumer2 recv from $recv\n";
         }
     });
 };
 
-
-$_ = function() {
-
-    function ping($val)
-    {
-        echo yield self(); // 查看 task tree
-
-        echo "ping: $val\n";
-        yield Time::sleep(500);
-        yield pong($val + 1);
-    }
-
-    function pong($val)
-    {
-        echo "pong: $val\n";
-        yield Time::sleep(500);
-        yield ping($val + 1);
-    }
-
-    go(function() {
-        yield ping(0);
-    });
-
-    go(function() {
-        yield ping(0);
-    });
-};
+//$_();

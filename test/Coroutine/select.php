@@ -14,10 +14,11 @@ go(function() {
     $ch1 = chan();
     $timeout = Time::after(1000);
 
-    $r = (yield select([
+    list($r, $ok) = (yield select([
         $ch1,
         $timeout,
     ]));
+
     assert($r === Time::TIMEOUT);
 });
 

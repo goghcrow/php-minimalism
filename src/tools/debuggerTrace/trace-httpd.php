@@ -9,8 +9,7 @@ namespace Minimalism\DebuggerTrace;
  * @author xiaofeng
  *
  * TODO 1. 命令行版本
- * TODO 2. 回车绑定
- * TODO 3. 历史记录
+ * TODO 2. 历史记录
  *
  */
 
@@ -46,15 +45,16 @@ class TraceServer
             // 'pipe_buffer_size' => 1024 * 1024 * 1024,
             // 'max_connection' => 100,
             // 'max_request' => 100000,
-            'dispatch_mode' => 3,
             'open_tcp_nodelay' => 1,
             'open_cpu_affinity' => 1,
             'daemonize' => 0,
             'reactor_num' => 1,
 
             // 因为要把http返回trace信息的sid与websocket连接关联起来,
-            // 多个worker需要共享数据, 暂时只使用一个Worker
+            // 多个worker需要共享数据, 这里简单处理成一个worker
             'worker_num' => 1,
+            'dispatch_mode' => 3, // TODO -> bind
+
         ]);
     }
 

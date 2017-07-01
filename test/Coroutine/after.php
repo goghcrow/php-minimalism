@@ -2,7 +2,7 @@
 
 namespace Minimalism\Test\Coroutine;
 
-use Minimalism\Coroutine\Channel;
+use Minimalism\Coroutine\Channel\Channel;
 use function Minimalism\Coroutine\go;
 use Minimalism\Coroutine\Time;
 
