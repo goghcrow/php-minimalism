@@ -76,7 +76,6 @@ class PHPDump
         while (is_resource($pipes[1])) {
             $contents = stream_get_contents($pipes[1], $bufferSize);
             if ($contents !== false) {
-                sys_error(strlen($contents));
                 $this->buffer->write($contents);
                 $this->pcap->captureLoop();
             } else {
