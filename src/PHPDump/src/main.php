@@ -417,5 +417,5 @@ if ($opt->pcapFile) {
 } else {
     `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
     sys_echo("expression $opt->tcpFilter");
-    $phpDump->readTcpdump($opt->tcpFilter);
+    $phpDump->readTcpdump2($opt->tcpFilter);
 }

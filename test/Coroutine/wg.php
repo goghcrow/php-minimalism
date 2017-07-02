@@ -6,7 +6,7 @@ use function Minimalism\Coroutine\callcc;
 use function Minimalism\Coroutine\fork;
 use function Minimalism\Coroutine\go;
 use Minimalism\Coroutine\Time;
-use function Minimalism\Coroutine\waitGroup;
+use function Minimalism\Coroutine\wg;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
@@ -27,7 +27,7 @@ function gethostbyname($host, $timeout = 100)
 }
 
 go(function() {
-    $wg = waitGroup();
+    $wg = wg();
 
     $wg->add(1);
 
@@ -38,7 +38,7 @@ go(function() {
 
 
 go(function() {
-    $wg = waitGroup();
+    $wg = wg();
 
     $wg->add();
 
@@ -56,7 +56,7 @@ go(function() {
 
 
 go(function() {
-    $wg = waitGroup();
+    $wg = wg();
 
     $hosts = [
         "www.golang.org",

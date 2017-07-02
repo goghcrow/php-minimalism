@@ -17,7 +17,7 @@ $task = go(function() {
         yield kill();
         echo 2;
     } finally {
-        echo "finally";
+//        echo "finally";
     }
     echo 3;
 });// $task->cancel();
@@ -25,7 +25,7 @@ $task = go(function() {
 
 go(function() {
     yield defer(function() {
-       echo "defer";
+//       echo "defer";
     });
 
     yield kill();

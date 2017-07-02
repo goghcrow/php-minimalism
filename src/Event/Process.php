@@ -39,7 +39,8 @@ class Process
         $tmp = sys_get_temp_dir();
         $pid = getmypid();
         $now = time();
-        $this->redirectUnix = "unix:///$tmp/$now-$pid.sock";
+        $this->redirectUnix = "unix:///$tmp/process_{$now}_{$pid}.sock";
+
         register_shutdown_function(function() {
             @unlink($this->redirectUnix);
         });
@@ -95,11 +96,10 @@ class Process
         $pid = pcntl_fork();
 
         if ($pid < 0) {
-            return false;
+            throw new \RuntimeException("fork fail");
         }
 
         if ($pid === 0) {
-            /** @noinspection PhpUndefinedVariableInspection */
             fclose($sock1);
 
             /*
@@ -148,7 +148,7 @@ class Process
             } else {
                 fwrite($sock1, "KO\n");
                 fclose($sock1);
-                return false;
+                throw new \RuntimeException("stream_socket_server fail");
             }
 
             $this->sockSTDOUT = stream_socket_accept($this->sockServer, 1); // 1s timeout
@@ -157,7 +157,7 @@ class Process
             if (!is_resource($this->sockSTDOUT) || !is_resource($this->sockSTDERR)) {
                 $this->sockClear();
                 pcntl_waitpid($pid, $status);
-                return false;
+                throw new \RuntimeException("stream_socket_accept fail");
             }
 
             stream_set_blocking($this->sockSTDOUT, 0);

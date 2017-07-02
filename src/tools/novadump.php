@@ -149,7 +149,7 @@ if ($pcapFile) {
 } else {
     `ps aux|grep tcpdump | grep -v grep | awk '{print $2}' | sudo xargs kill -9 2> /dev/null`;
     $fd = $novadump->tcpdump($tcpFilter);
-    $novadump->readLoop($fd);
+    $novadump->readLoop2($fd);
 }
 
 
@@ -426,6 +426,20 @@ class NovaDump
                 $this->pcap->captureLoop();
             }
         });
+    }
+
+    public function readLoop2()
+    {
+        $proc = proc_open("tcpdump -i any -s0 -U -w -", [ 1 => ["pipe", "w"] ], $pipes);
+        if ($proc === false) {
+            fprintf(STDERR, "proc_open fail");
+            exit(255);
+        }
+        register_shutdown_function(function() use($proc) { proc_terminate($proc); `pkill tcpdump`; });
+        while (is_resource($pipes[1]) && $contents = stream_get_contents($pipes[1], 2048)) {
+            $this->buffer->write($contents);
+            $this->pcap->captureLoop();
+        }
     }
 
     /**

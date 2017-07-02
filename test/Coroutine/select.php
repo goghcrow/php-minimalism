@@ -12,7 +12,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 go(function() {
     $ch1 = chan();
-    $timeout = Time::after(1000);
+    $timeout = Time::after(100);
 
     list($r, $ok) = (yield select([
         $ch1,

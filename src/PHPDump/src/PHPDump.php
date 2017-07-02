@@ -17,7 +17,7 @@ class PHPDump
     private $pcap;
 
     /**
-     * @var \swoole_process
+     * @var \swoole_process|resource
      */
     private $proc;
 
@@ -47,9 +47,47 @@ class PHPDump
         $this->loopRead($fd);
     }
 
+    public function readTcpdump2($filter = "", $bufferSize = 8192)
+    {
+        $this->proc = proc_open("tcpdump -i any -s0 -U -w - $filter", [ 1 => ["pipe", "w"] ], $pipes);
+        if ($this->proc === false) {
+            sys_abort("proc_open fail");
+        }
+
+        register_shutdown_function(function() { proc_terminate($this->proc); `pkill tcpdump`; });
+
+        /*
+        $pcapFd = $pipes[1];
+        $read = [$pcapFd];
+        $write = $except = null;
+        while (true) {
+            $n = stream_select($read, $write, $except, null);
+            if ($n) {
+                $contents = stream_get_contents($read[0], $bufferSize);
+                if ($contents !== false) {
+                    $this->buffer->write($contents);
+                    $this->pcap->captureLoop();
+                }
+            }
+        }
+        //*/
+
+
+        while (is_resource($pipes[1])) {
+            $contents = stream_get_contents($pipes[1], $bufferSize);
+            if ($contents !== false) {
+                sys_error(strlen($contents));
+                $this->buffer->write($contents);
+                $this->pcap->captureLoop();
+            } else {
+                sys_error("stream_get_contents return false");
+            }
+        }
+    }
+
     private function forkTcpdump($filter = "")
     {
-        $proc = new \swoole_process(function(\swoole_process $proc) use($filter) {
+        $this->proc = new \swoole_process(function(\swoole_process $proc) use($filter) {
             $args = ["-i", "any", "-s", "0","-U", "-w", "-"];
 
             // 旧版本tcpdump -s 0
@@ -70,19 +108,18 @@ class PHPDump
             $proc->exit();
         }, true, 1);
 
-        $this->pid = $proc->start();
+        $this->pid = $this->proc->start();
         if ($this->pid === false) {
             sys_abort("fork fail");
         }
 
-        $this->proc = $proc;
-        return $proc->pipe;
+        return $this->proc->pipe;
     }
 
     /**
      * sudo tcpdump -i any -s 0 -U -w - host 10.9.97.143 and port 8050 | hexdump
      * sudo tcpdump -i any -s0 -U -w - port 8050 | php novadump.php
-     * @param int|resource $fd
+     * @param bool|int|resource $fd
      */
     private function loopRead($fd = STDIN)
     {

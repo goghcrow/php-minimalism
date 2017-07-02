@@ -6,13 +6,13 @@ namespace Minimalism\Test\Coroutine;
 use function Minimalism\Coroutine\cond;
 use function Minimalism\Coroutine\go;
 use Minimalism\Coroutine\Time;
-use function Minimalism\Coroutine\waitGroup;
+use function Minimalism\Coroutine\wg;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
 
 go(function() {
-    $wg = waitGroup(2);
+    $wg = wg(2);
 
     go(function() use($wg) {
         go(function() use($wg) {
