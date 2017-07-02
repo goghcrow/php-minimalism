@@ -4,11 +4,23 @@ namespace Minimalism\Test\Coroutine;
 
 use Minimalism\Coroutine\CancelTaskException;
 use function Minimalism\Coroutine\go;
+use Minimalism\Coroutine\Syscall;
 use Minimalism\Coroutine\Task;
 use Minimalism\Coroutine\Time;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
+
+
+// !!! syscall 内部支持 生成器函数
+call_user_func(function() {
+    go(function() {
+        $r = (yield new Syscall(function(Task $task) {
+            yield 42;
+        }));
+        assert($r === 42);
+    });
+});
 
 // 测试 异常跨异步回调传递
 call_user_func(function() {
@@ -195,4 +207,5 @@ call_user_func(function() {
         throw new \Exception("unObservedExceptionHandler");
     });
 });
+
 

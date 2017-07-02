@@ -4,7 +4,7 @@ namespace Minimalism\Test\Coroutine;
 
 use function Minimalism\Coroutine\fork;
 use function Minimalism\Coroutine\go;
-use function Minimalism\Coroutine\self;
+use function Minimalism\Coroutine\getTask;
 use Minimalism\Coroutine\Time;
 
 require __DIR__ . "/../../vendor/autoload.php";
@@ -31,7 +31,7 @@ $task = go(function() {
                         yield;
                     });
                     yield fork(function() {
-                        // echo (yield self());
+                        // echo (yield getTask());
                         yield;
                     });
                 });

@@ -2,16 +2,16 @@
 
 namespace Minimalism\Test\Coroutine;
 
-use function Minimalism\Coroutine\next_tick;
+use function Minimalism\Coroutine\nextTick;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
 $test = function() {
     $r = "";
-    next_tick(function() use(&$r) {
-        next_tick(function() use(&$r) {
+    nextTick(function() use(&$r) {
+        nextTick(function() use(&$r) {
             $r.= "2";
-            next_tick(function() use(&$r) {
+            nextTick(function() use(&$r) {
                 $r .= "3";
                 assert($r === "0123");
             });

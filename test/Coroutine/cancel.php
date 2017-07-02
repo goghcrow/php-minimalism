@@ -3,7 +3,7 @@
 namespace Minimalism\Test\Coroutine;
 
 use function Minimalism\Coroutine\await;
-use function Minimalism\Coroutine\canceltask;
+use function Minimalism\Coroutine\cancelTask;
 use Minimalism\Coroutine\CancelTaskException;
 use function Minimalism\Coroutine\go;
 use Minimalism\Coroutine\Task;
@@ -12,7 +12,7 @@ require __DIR__ . "/../../vendor/autoload.php";
 
 
 go(function() {
-    yield canceltask();
+    yield cancelTask();
     assert(false);
 }, function($r, $ex, Task $task) {
     assert($task->isCanceled());
@@ -32,7 +32,7 @@ go(function() {
     yield await(function() {
         yield await(function() {
             // 取消 task tree
-            yield canceltask();
+            yield cancelTask();
             assert(false);
         });
         assert(false);
@@ -65,7 +65,7 @@ go(function() {
 go(function() {
     yield await(function() {
         yield await(function() {
-            yield canceltask();
+            yield cancelTask();
             assert(false);
         });
         assert(false);
@@ -79,7 +79,7 @@ go(function() {
 
 
 go(function() {
-   yield canceltask();
+   yield cancelTask();
 });
 
 Task::setUnObservedExceptionHandler(function($r, $ex, Task $task) {

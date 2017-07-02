@@ -3,7 +3,7 @@
 namespace Minimalism\Test\Coroutine;
 
 use function Minimalism\Coroutine\go;
-use function Minimalism\Coroutine\self;
+use function Minimalism\Coroutine\getTask;
 use Minimalism\Coroutine\Time;
 
 require __DIR__ . "/../../vendor/autoload.php";
@@ -13,7 +13,7 @@ $_ = function() {
 
     function ping($val)
     {
-        echo yield self(); // 查看 task tree
+        echo yield getTask(); // 查看 task tree
 
         echo "ping: $val\n";
         yield Time::sleep(500);
