@@ -55,6 +55,11 @@
 # = =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= #
 
 
+# sudo yum-test install -y yz-php7-debuginfo.x86_64
+# sudo yum-test install -y gdb
+# sudo yum-test install -y yz-php7-swoole-soa-debuginfo.x86_64
+
+
 php5_script()
 {
 cat>$FILE<<EOF

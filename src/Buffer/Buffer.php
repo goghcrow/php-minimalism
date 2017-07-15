@@ -34,4 +34,6 @@ interface Buffer
     public function readLine($br = "\r\n", $included = false);
 
     public function reset();
+
+    public function on($ev, callable $cb);
 }

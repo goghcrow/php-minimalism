@@ -113,7 +113,9 @@ final class Interpreter
             }
 
             switch ($ast[0]) {
+
                 // seq 非必须，可以作为函数存在
+                // [seq, statement1, statement2, ...]
                 case Keywords::SEQ_KEYWORD:
                     abort(count($ast) > 1, $ast);
                     // 多条statements, 独立作用域
@@ -129,6 +131,7 @@ final class Interpreter
                     });
 
                 // define 也非必须，语法糖, 可通λ参数进行bind
+                // [def, name, value]
                 case Keywords::DEF_KEYWORD:
                     abort(count($ast) === 3, $ast);
                     list(, $name, $value) = $ast;
@@ -139,6 +142,7 @@ final class Interpreter
                         return $ctx(null);
                     });
 
+                // [fun, [...params], [...body]]
                 case Keywords::FUN_KEYWORD:
                     abort(count($ast) === 3, $ast);
                     list(, $params, $body) = $ast;
@@ -147,6 +151,7 @@ final class Interpreter
                     }
                     return $this->interpDefun($params, $body, $env, $ctx);
 
+                // [if, test, then, else]
                 case Keywords::IF_KEYWORD:
                     abort(count($ast) === 4, $ast);
                     list(, $test, $then, $else) = $ast;
@@ -172,6 +177,7 @@ final class Interpreter
                         return $interpBody($fctx);
                     });
 
+                // [quote, symbol]
                 case Keywords::QUOTE_KEYWORD:
                     abort(count($ast) === 2, $ast);
                     return $ctx($ast[1]);
@@ -240,6 +246,7 @@ final class Interpreter
         if (empty($args)) {
             return $ctx([]);
         } else {
+            // 自左至右解释参数
             $arg0 = $args[0];
             $args = array_slice($args, 1);
             return $this->interp1($arg0, $env, function($arg0) use($args, $env, $ctx) {

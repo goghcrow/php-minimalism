@@ -14,7 +14,7 @@ class Keywords
     const SEQ_KEYWORD = "seq"; // begin
     const FUN_KEYWORD = "fun";
     const IF_KEYWORD = "if";
-    const DEF_KEYWORD = "define";
+    const DEF_KEYWORD = "def";
     const QUOTE_KEYWORD = "quote";
     const CALLCC_KEYWORD = "call/cc";
 }

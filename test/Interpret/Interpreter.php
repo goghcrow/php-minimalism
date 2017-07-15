@@ -18,7 +18,26 @@ require __DIR__ . "/../../src/Interpret/Interpreter.php";
 
 function interp($ast)
 {
+    $ast = desugarQuote($ast);
     return (new Interpreter())->interp($ast);
+}
+
+
+function desugarQuote($ast)
+{
+    if (is_array($ast)) {
+        $r = [];
+        foreach ($ast as $item) {
+            $r[] = desugarQuote($item);
+        }
+        return $r;
+    } else {
+        if (strlen($ast) && $ast[0] === ":") {
+            return ["quote", substr($ast, 1)];
+        } else {
+            return $ast;
+        }
+    }
 }
 
 
@@ -50,7 +69,7 @@ function testScope()
 {
     $r = interp(
         ["seq",
-            ["define", "a", ["quote", 1]],
+            ["def", "a", ["quote", 1]],
             "a"
         ]
     );
@@ -58,7 +77,8 @@ function testScope()
 
     $r = interp(
         ["seq",
-            ["seq", ["define", "a", ["quote", 1]]],
+            ["seq",
+                ["def", "a", ["quote", 1]]],
             "a"
         ]
     );
@@ -108,10 +128,10 @@ testIf();
 
 
 
-// define 就是个语法糖
+// def 就是个语法糖
 function testDef()
 {
-//     (define var hello)
+//     (def var hello)
     $fun = ["fun", ["var"], null];
     $call = [$fun, "hello"];
     $r = interp($call);
@@ -134,7 +154,7 @@ function testDef()
 
     $ast = [
         "seq",
-        ["define", "foo", ["quote", "bar"]],
+        ["def", "foo", ["quote", "bar"]],
         [["fun", [], "foo"]] // 词法作用域
     ];
     $r = interp($ast);
@@ -143,7 +163,7 @@ function testDef()
 
     $ast = [
         "seq",
-        ["define", "hello",
+        ["def", "hello",
             ["fun", ["name"],
                 ["string-append",
                     ["quote", "hello "],
@@ -258,7 +278,7 @@ testCurry();
 
 function testClosure()
 {
-    $upValue = ["define", "a", ["quote", 100]];
+    $upValue = ["def", "a", ["quote", 100]];
     $fun =
         ["fun",
             ["b", "c"],
@@ -291,13 +311,13 @@ function yinyang() {
     interp($ast);
 }
 
-yinyang();
-exit;
+//yinyang();
+//exit;
 
 
 // 死循环
 //interp(["seq",
-//    ["define", "k",
+//    ["def", "k",
 //        ["call/cc", ["fun", ["cc"], ["cc", "cc"]]]],
 //    ["echo", ["quote", "~"]],
 //    ["k", "k"]
@@ -308,7 +328,7 @@ exit;
 $ast = [
     "seq",
 
-    ["define", "test",
+    ["def", "test",
         ["fun", ["arg"],
             ["if", [">", ["quote", 1], ["quote", 0]],
                 ["echo", "arg"],

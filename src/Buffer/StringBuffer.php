@@ -7,14 +7,18 @@ class StringBuffer implements Buffer
 {
     private $bytes = "";
 
+    protected $evMap;
+
     public function __construct($bytes = "")
     {
         $this->bytes = $bytes;
+        $this->evMap = [];
     }
 
     public function write($bytes)
     {
         $this->bytes .= $bytes;
+        $this->trigger("write", $bytes);
         return true;
     }
 
@@ -108,6 +112,19 @@ class StringBuffer implements Buffer
     public function reset()
     {
         $this->bytes = "";
+    }
+
+    public function on($ev, callable $cb)
+    {
+        $this->evMap[$ev] = $cb;
+    }
+
+    protected function trigger($ev, ...$args)
+    {
+        if (isset($this->evMap[$ev])) {
+            $cb = $this->evMap[$ev];
+            $cb(...$args);
+        }
     }
 
     public function __toString()

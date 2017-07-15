@@ -32,17 +32,14 @@ class MemoryBuffer implements Buffer
 
     protected $writerIndex;
 
+    protected $evMap;
+
     public function __construct($size = self::kInitialSize)
     {
         $this->buffer = new SwooleBuffer($size + static::kCheapPrepend);
         $this->readerIndex = static::kCheapPrepend;
         $this->writerIndex = static::kCheapPrepend;
-
-        /*
-        assert(static::readableBytes() === 0);
-        assert(static::writableBytes() === static::kInitialSize);
-        assert(static::prependableBytes() === static::kCheapPrepend);
-        */
+        $this->evMap = [];
     }
 
     public function readableBytes()
@@ -106,6 +103,7 @@ class MemoryBuffer implements Buffer
         if ($len <= $this->writableBytes()) {
             $this->rawWrite($this->writerIndex, $bytes);
             $this->writerIndex += $len;
+            $this->trigger("write", $bytes);
             return true;
         }
 
@@ -123,6 +121,7 @@ class MemoryBuffer implements Buffer
 
         $this->rawWrite($this->writerIndex, $bytes);
         $this->writerIndex += $len;
+        $this->trigger("write", $bytes);
         return true;
     }
 
@@ -216,6 +215,19 @@ class MemoryBuffer implements Buffer
     {
         $this->readerIndex = static::kCheapPrepend;
         $this->writerIndex = static::kCheapPrepend;
+    }
+
+    public function on($ev, callable $cb)
+    {
+        $this->evMap[$ev] = $cb;
+    }
+
+    protected function trigger($ev, ...$args)
+    {
+        if (isset($this->evMap[$ev])) {
+            $cb = $this->evMap[$ev];
+            $cb(...$args);
+        }
     }
 
     private function rawRead($offset, $len)

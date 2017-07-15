@@ -23,6 +23,11 @@ class BinaryStream
         $this->buffer = $buffer;
     }
 
+    public function getBuffer()
+    {
+        return $this->buffer;
+    }
+
     public function __call($name, $args)
     {
         /** @var callable $fn */
