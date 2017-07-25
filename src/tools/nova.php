@@ -10,8 +10,21 @@ namespace Minimalism\Nova;
  * 2017-01-25 V1
  * 2017-04-30 加入超时参数, 加入或优化 DNS查询超时, 连接超时, 数据收发超时
  * 2017-04-30 加入attach参数
+ * 2017-07-24
  */
 
+// java 包名首字母小写, 类名首字母大写
+function service2javaClass($service) {
+    $pkg = explode(".", $service);
+    if (count($pkg) > 1) {
+        $class = ucfirst(end($pkg));
+        unset($pkg[count($pkg) - 1]);
+        $pkg = array_map(function($a) { return lcfirst($a); }, $pkg);
+        $pkg[] = $class;
+        return implode(".", $pkg);
+    }
+    return $service;
+}
 
 if (isset($argv[1]) && $argv[1] === "install") {
     $self = __FILE__;
@@ -66,6 +79,12 @@ if ($split === false) {
     exit(1);
 }
 $service = substr($service_method, 0, $split);
+$service = service2javaClass($service);
+
+
+
+
+
 $method = substr($service_method, $split + 1);
 
 
@@ -98,6 +117,10 @@ NovaClient::call($host, $port, $service, $method, $args, $attach, function(\swoo
 
 class NovaClient
 {
+    // 必须满足java 包名类名大小写
+    const GENERIC_SERVICE = "com.youzan.nova.framework.generic.service.GenericService";
+    const GENERIC_METHOD = "invoke";
+
     private static $ver_mask = 0xffff0000;
     private static $ver1 = 0x80010000;
 
@@ -328,10 +351,8 @@ class NovaClient
 
         $return = "";
         $this->seq = nova_get_sequence();
-        $ok = nova_encode("Com.Youzan.Nova.Framework.Generic.Service.GenericService", "invoke",
-                $localIp, $localPort,
-                $this->seq,
-                $attach, $thriftBin, $return);
+
+        $ok = nova_encode(static::GENERIC_SERVICE, static::GENERIC_METHOD, $localIp, $localPort, $this->seq, $attach, $thriftBin, $return);
         assert($ok);
         return $return;
     }
