@@ -3,6 +3,7 @@
 
 namespace Minimalism\Nova;
 
+
 /**
  * Nova 命令行工具
  * @author xiaofeng
@@ -10,7 +11,7 @@ namespace Minimalism\Nova;
  * 2017-01-25 V1
  * 2017-04-30 加入超时参数, 加入或优化 DNS查询超时, 连接超时, 数据收发超时
  * 2017-04-30 加入attach参数
- * 2017-07-24
+ * 2017-07-24 修复因包名类型大小写敏感导致调用java类加载失败,调用nova服务失败
  */
 
 // java 包名首字母小写, 类名首字母大写
@@ -58,12 +59,9 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     exit(1);
 }
 
-$attach = new \stdClass();
+$attach = [];
 if (isset($a['e'])) {
-    $attach = json_decode($a['e'], true);
-    if ($attach === null) {
-        $attach = new \stdClass();
-    }
+    $attach = json_decode($a['e'], true) ?: [];
     if (json_last_error() !== JSON_ERROR_NONE) {
         echo "\033[1;31m", "-e attachment参数有误: ", json_last_error_msg(), "\033[0m\n";
         exit(1);
@@ -80,11 +78,6 @@ if ($split === false) {
 }
 $service = substr($service_method, 0, $split);
 $service = service2javaClass($service);
-
-
-
-
-
 $method = substr($service_method, $split + 1);
 
 
@@ -153,6 +146,9 @@ class NovaClient
 
     public static function call($host, $port, $service, $method, array $args, array $attach, callable $callback)
     {
+        if (empty($attach)) {
+            $attach = new \stdClass();
+        }
         (new static($host, $port))->invoke($service, $method, $args, $attach, $callback);
     }
 
@@ -160,10 +156,10 @@ class NovaClient
      * @param string $service
      * @param string $method
      * @param array $args
-     * @param array $attach
+     * @param array|\stdClass $attach
      * @param callable $callback (receive, errorMsg)
      */
-    public function invoke($service, $method, array $args, array $attach, callable $callback)
+    public function invoke($service, $method, array $args, $attach, callable $callback)
     {
         $this->recvArgs = func_get_args();
         $this->callback = $callback;
@@ -283,6 +279,10 @@ class NovaClient
      */
     private static function unpackThrift($buf)
     {
+        if (getenv("NOVA_DEBUG")) {
+            echo "raw thrift buffer:\n";
+            echo $buf, "\n\n";
+        }
         $read = function($n) use(&$offset, $buf) {
             static $offset = 0;
             assert(strlen($buf) - $offset >= $n);
@@ -336,10 +336,10 @@ class NovaClient
      * @param string $service
      * @param string $method
      * @param array $args
-     * @param array $attach
+     * @param array|\stdClass $attach
      * @return string
      */
-    private function packNova($service, $method, array $args, array $attach)
+    private function packNova($service, $method, array $args, $attach)
     {
         $args = self::packArgs($args);
         $thriftBin = self::packThrift($service, $method, $args);

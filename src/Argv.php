@@ -3,6 +3,80 @@
 namespace Minimalism;
 
 
+
+class CmdBuilder
+{
+
+}
+
+class YArgs implements \ArrayAccess
+{
+    private $map;
+
+    public function usage()
+    {
+
+    }
+
+    public function help()
+    {
+
+    }
+
+    public function alias($origin, $alias)
+    {
+
+    }
+
+    public function count()
+    {
+
+    }
+
+    public function demand(array $args)
+    {
+
+    }
+
+    public function default($var, $def)
+    {
+
+    }
+
+
+    public function __get($name)
+    {
+        if (isset($this->map[$name])) {
+            return $this->map[$name];
+        } else {
+            return null;
+        }
+    }
+
+    public function offsetExists($offset)
+    {
+        // TODO: Implement offsetExists() method.
+    }
+
+    public function offsetGet($offset)
+    {
+        // TODO: Implement offsetGet() method.
+    }
+
+    public function offsetSet($offset, $value)
+    {
+        // TODO: Implement offsetSet() method.
+    }
+
+    public function offsetUnset($offset)
+    {
+        // TODO: Implement offsetUnset() method.
+    }
+}
+
+
+
+
 class Argv
 {
     private $opts = [];

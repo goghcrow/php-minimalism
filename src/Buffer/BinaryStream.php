@@ -13,6 +13,9 @@ namespace Minimalism\Buffer;
  * @method string readFull()
  * @method bool write($bytes)
  * @method bool prepend($bytes)
+ *
+ * Note that the distinction between signed and unsigned values only affects the function unpack(),
+ * where as function pack() gives the same result for signed and unsigned format codes.
  */
 class BinaryStream
 {
@@ -38,6 +41,16 @@ class BinaryStream
     public function writeUInt8($i)
     {
         return $this->buffer->write(pack('C', $i));
+    }
+
+    public function writeInt16BE($i)
+    {
+        return $this->buffer->write(pack('n', $i));
+    }
+
+    public function writeInt16LE($i)
+    {
+        return $this->buffer->write(pack('v', $i));
     }
 
     public function writeUInt16BE($i)
@@ -98,6 +111,16 @@ class BinaryStream
     {
         $ret = unpack("Cr", $this->buffer->read(1));
         return $ret == false ? null : $ret["r"];
+    }
+
+    public function readInt16BE()
+    {
+
+    }
+
+    public function readInt16LE()
+    {
+
     }
 
     public function readUInt16BE()

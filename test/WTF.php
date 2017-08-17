@@ -1,4 +1,254 @@
 <?php
+
+
+//$poolEx = new \swoole_connpool(\swoole_connpool::SWOOLE_CONNPOOL_REDIS);
+//$r = $poolEx->setConfig([
+//    "host" => "10.9.33.59",
+//    "port" => 7143,
+//    "password" =>  "material:br、k44emcFPBbg9fdp3WG",
+//]);
+//if ($r === false) {
+//    throw new InvalidArgumentException("invalid connection pool config, [pool=$this->poolType]");
+//}
+//$poolEx->createConnPool(2, 2);
+//$r = $poolEx->get(1000, function() {
+//    var_dump(func_get_args());
+//});
+//var_dump($r);
+//
+//exit;
+
+//$min = $poolConf["minimum-connection-count"];
+//$max = $poolConf["maximum-connection-count"];
+//if($min >= 0 && $max > 0 && $min < $max) {
+//    $r = $this->poolEx->createConnPool($min, $max);
+//}
+
+
+$redis = new \swoole_redis();
+$r = $redis->connect("10.9.33.59", 7143, function($redis, $result){
+    assert($result);
+    $r = $redis->auth("material:brk44emcFPBbg9fdp3WG", function($redis, $result) {
+        var_dump($result);
+    $redis->incr("material.video", function($redis, $result) {
+        var_dump($result);
+    });
+    });
+    assert($r);
+1
+});
+
+exit;
+
+$redis = new \swoole_redis([
+    "password" => "material:brk44emcFPBbg9fdp3WG"
+]);
+$redis->connect("10.9.33.59", 7143, function($redis, $result){
+    assert($result);
+    $redis->incr("material.video", function($redis, $result) {
+        var_dump($result);
+    });
+});
+exit;
+
+
+
+function get() {
+    $cli = new \swoole_http_client("10.200.175.230", 80);
+    $cli->on("close", function() use($cli) {
+        echo "close\n";
+        get();
+    });
+    swoole_timer_after(1, function() {});
+    $cli->get("/", function($cli) {
+        echo $cli->statusCode;
+        $cli->close();
+    });
+}
+get();
+
+
+(new HttpServer())->listen(3000);
+
+// /bin/bash -c "ulimit -Sc unlimited; exec ...."
+
+class HttpServer
+{
+    /**
+     * @var \swoole_http_server
+     */
+    public $httpServer;
+
+    public function defaultConfig()
+    {
+        return [
+            "host" => "0.0.0.0",
+            "ssl" => false,
+            "max_connection" => 10240,
+            'max_request' => 100000,
+            'dispatch_mode' => 3,
+            "open_tcp_nodelay" => 1,
+            "open_cpu_affinity" => 1,
+            "daemonize" => 0,
+            "reactor_num" => 1,
+            "worker_num" => \swoole_cpu_num(),
+        ];
+    }
+
+    public function listen($port = 8000, array $config = [])
+    {
+        $config = ['port' => $port] + $config + $this->defaultConfig();
+        $this->httpServer = new \swoole_http_server($config['host'], $config['port'], SWOOLE_PROCESS, SWOOLE_SOCK_TCP);
+        $this->httpServer->set($config);
+        $this->bindEvent();
+        $this->httpServer->start();
+    }
+
+    protected function bindEvent()
+    {
+        $this->httpServer->on('start', [$this, 'onStart']);
+        $this->httpServer->on('shutdown', [$this, 'onShutdown']);
+        $this->httpServer->on('connect', [$this, 'onConnect']);
+        $this->httpServer->on('close', [$this, 'onClose']);
+
+        $this->httpServer->on('workerStart', [$this, 'onWorkerStart']);
+        $this->httpServer->on('workerStop', [$this, 'onWorkerStop']);
+        $this->httpServer->on('workerError', [$this, 'onWorkerError']);
+        $this->httpServer->on('request', [$this, 'onRequest']);
+
+        // output buffer overflow, reactor will block, dont wait
+        \swoole_async_set(["socket_dontwait" => 1]);
+        socket_set_option($this->httpServer->getSocket(), SOL_SOCKET, SO_REUSEADDR, 1);
+    }
+
+    public function onConnect(\swoole_http_server $httpServer)
+    {
+        sys_echo(__FUNCTION__);
+    }
+
+    public function onClose(\swoole_http_server $httpServer)
+    {
+        sys_echo(__FUNCTION__);
+    }
+
+    public function onStart(\swoole_http_server $httpServer)
+    {
+        sys_echo(__FUNCTION__);
+    }
+
+    public function onShutdown(\swoole_http_server $httpServer)
+    {
+        sys_echo(__FUNCTION__);
+    }
+
+    public function onWorkerStart(\swoole_http_server $httpServer, $workerId)
+    {
+        $_ENV["WORKER_ID"] = $workerId;
+        sys_echo("worker #$workerId start");
+    }
+
+    public function onWorkerStop(\swoole_http_server $httpServer, $workerId)
+    {
+        sys_echo("worker #$workerId stop");
+    }
+
+    public function onWorkerError(\swoole_http_server $httpServer, $workerId, $workerPid, $exitCode, $sigNo)
+    {
+        sys_error("worker error happen [workerId=$workerId, workerPid=$workerPid, exitCode=$exitCode, signalNo=$sigNo]");
+    }
+
+    private $timerMap = [];
+    public function onRequest(\swoole_http_request $req, \swoole_http_response $res)
+    {
+        $fw1 = "10.9.189.90";
+        $php7_test = "10.9.83.107";
+        $cli = new \swoole_http_client($php7_test, 80);
+
+        $timerId = swoole_timer_after(1000, static function() use($cli, $res, &$timerId) {
+            $res->status(500);
+
+            $cost = microtime(true) - $this->timerMap[$timerId];
+            sys_echo("client timeout to close timerId = $timerId cost = $cost");
+            $cli->close();
+            unset($this->timerMap[$timerId]);
+        });
+        $this->timerMap[$timerId] = microtime(true);
+
+        $cli->on("close", static function() use($timerId) {
+            if (swoole_timer_exists($timerId)) {
+                swoole_timer_clear($timerId);
+                unset($this->timerMap[$timerId]);
+            }
+            // sys_echo("client closed");
+        });
+
+        $cli->get("/test", static function($resp) use($timerId, $res, $cli) {
+            if (swoole_timer_exists($timerId)) {
+                swoole_timer_clear($timerId);
+                unset($this->timerMap[$timerId]);
+            }
+            $res->status(200);
+            $res->end($resp->body);
+            $cli->close();
+        });
+    }
+}
+
+function sys_echo($context) {
+    // $_SERVER 会被swoole setglobal 清空, 这里用 $_ENV
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : "";
+    $time = date("Y-m-d H:i:s", time());
+    echo "[$time #$workerId] $context\n";
+}
+
+function sys_error($context) {
+    $workerId = isset($_ENV["WORKER_ID"]) ? $_ENV["WORKER_ID"] : "";
+    $time = date("Y-m-d H:i:s", time());
+    fprintf(STDERR, "[$time #$workerId] $context\n");
+}
+
+
+exit;
+
+
+$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
+socket_set_option($socket, SOL_SOCKET, TCP_NODELAY, 1);
+pcntl_signal(SIGPIPE, function() { });
+
+
+// $ sysctl -A | grep range
+// net.ipv4.ip_local_port_range = 9000	65535
+
+if ($argc < 2) {
+    exit("Usage: " . __FILE__ . " port\n");
+}
+
+self_connect($argv[1]);
+
+function self_connect($port)
+{
+    for ($i = 0; $i < 65536; $i++) {
+        $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+        $r = @socket_connect($socket, "127.0.0.1", $port);
+        if ($r === false) {
+            $errno = socket_last_error($socket);
+            if ($errno === SOCKET_ECONNREFUSED) {
+                continue;
+            } else {
+                echo socket_strerror($errno), "\n";
+                break;
+            }
+        } else {
+            socket_getsockname($socket, $localAddr, $localPort);
+            socket_getpeername($socket, $peerAddr, $peerPort);
+            echo "Connected ($localAddr : $localPort)  ($peerAddr : $peerPort)\n";
+        }
+    }
+}
+
+
+exit;
 $tcp_pool = new \swoole_connpool(\swoole_connpool::SWOOLE_CONNPOOL_TCP);
 $r = $tcp_pool->setConfig([
     "host" => "10.9.37.103",

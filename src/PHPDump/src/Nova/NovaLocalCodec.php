@@ -137,6 +137,11 @@ class NovaLocalCodec
         if (is_readable($autoload)) {
             /** @noinspection PhpIncludeInspection */
             require $autoload;
+            $vendor = "$this->appPath/vendor";
+            $aliasLoader = \ZanPHP\SPI\AliasLoader::getInstance();
+            $aliasLoader->scan($vendor);
+            $serviceLoader = \ZanPHP\SPI\ServiceLoader::getInstance();
+            $serviceLoader->scan($vendor);
             $novaService = $this->appPath . "/vendor/nova-service";
             $this->loadNovaService($novaService);
         } else {
