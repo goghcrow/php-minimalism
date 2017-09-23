@@ -1,7 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-
 // 使用jmeter将日志文件导出报告
 // ~/apache-jmeter-3.1/bin/jmeter -g report.jtl -o ./report
 // cd report

@@ -42,6 +42,20 @@ class MemoryBuffer implements Buffer
         $this->evMap = [];
     }
 
+    public function getWriteIndex()
+    {
+        return $this->writerIndex;
+    }
+
+    public function setWriteIndex($index)
+    {
+        if ($index < $this->readerIndex || $index >= $this->buffer->capacity) {
+            return false;
+        }
+        $this->writerIndex = $index;
+        return true;
+    }
+
     public function readableBytes()
     {
         return $this->writerIndex - $this->readerIndex;

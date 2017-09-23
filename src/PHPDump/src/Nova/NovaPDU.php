@@ -59,17 +59,18 @@ class NovaPDU extends PDU
         $sec = $connection->recordHdr->ts_sec;
         $usec = $connection->recordHdr->ts_usec;
 
-        // 存在nova_ip和nova_port是因为可能发送接收的地址是proxy，nova_ip这里是服务真实ip
-        // !!! 这里显示的时间必须是 pcap包时间戳
-        sys_echo("$_src > $_dst, nova_ip $_ip, nova_port $_port, nova_seq $_seq", $sec, $usec);
-        sys_echo("service $_service, method $_method", $sec, $usec);
-
-        if ($attach && $attach !== "{}") {
-            sys_echo("attach $_attach", $sec, $usec);
-        }
-
         $isHeartbeat = NovaPacketFilter::isHeartbeat($service, $method);
         if ($isHeartbeat === false) {
+
+            // 存在nova_ip和nova_port是因为可能发送接收的地址是proxy，nova_ip这里是服务真实ip
+            // !!! 这里显示的时间必须是 pcap包时间戳
+            sys_echo("$_src > $_dst, nova_ip $_ip, nova_port $_port, nova_seq $_seq", $sec, $usec);
+            sys_echo("service $_service, method $_method", $sec, $usec);
+
+            if ($attach && $attach !== "{}") {
+                sys_echo("attach $_attach", $sec, $usec);
+            }
+
             $this->thriftPacket = ThriftPacket::unpack($thriftBin);
             $fieldsJson = T::format(json_encode($this->thriftPacket->fields), T::DIM);
 
@@ -87,8 +88,9 @@ class NovaPDU extends PDU
                 sys_echo($msgType);
                 sys_echo($fieldsJson);
             }
+            echo "\n";
+
         }
 
-        echo "\n";
     }
 }

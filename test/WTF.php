@@ -1,6 +1,194 @@
 <?php
 
 
+function gen()
+{
+    try {
+        echo "a1\n";
+        yield;
+        echo "a2\n";
+    } finally {
+        echo "a3\n";
+        yield;
+        echo "a4\n";
+    }
+    echo "a5\n";
+}
+
+
+class A
+{
+    public function __construct()
+    {
+        $this->b = new B($this);
+    }
+
+    public function __destruct()
+    {
+        echo "A dtor\n";
+    }
+}
+
+class B
+{
+    public function __construct(A $a = null)
+    {
+        $this->a = $a;
+    }
+
+    public function __destruct()
+    {
+        echo "B dtor\n";
+    }
+}
+
+
+//// 测试循环引用
+//$b = new B();
+//unset($b); // 触发b 析构
+//
+//$a = new A();
+//unset($a); // 因为循环引用, unset($a) 并不会触发析构
+//
+//gc_collect_cycles(); // 触发循环引用检查
+//
+//sleep(99999); // 脚本结束会析构, 阻止脚本结束
+//
+
+
+$a = new A();
+$a->gen = gen();
+$a->gen->current();
+unset($a); // 因为循环引用, unset($a) 并不会触发析构
+
+
+try {
+    gc_collect_cycles(); // 触发循环引用检查
+} catch (\Error $e) {
+    echo $e, "\n";
+}
+sleep(9999);
+
+
+// 生成器 & FINALLY
+// 生成器析构为毛线要执行finally块，并且要恢复生成器
+
+
+//function gen() {
+//    try {
+//        echo "1\n";
+//        yield;
+//        echo "2\n";
+//    } finally {
+//        echo "3\n";
+//    }
+//    echo "5\n";
+//}
+//
+//$gen = gen();
+//$gen->current();
+//exit;
+
+//
+//function gen() {
+//    yield;
+//    try {
+//        echo "1\n";
+//        yield;
+//        echo "2\n";
+//    } finally {
+//        echo "3\n";
+//        yield;
+//        echo "4\n";
+//    }
+//    echo "5\n";
+//}
+//
+//$gen = gen();
+//// $gen->current();
+//$gen->next(); // 必须进入try
+//
+//try {
+//    unset($gen); // 析构close gen触发finall中yield
+//} catch (\Error $t) {
+//    echo $t;
+//}
+//
+//echo "next op\n";
+
+
+//function gen() {
+//    try {
+//        echo "1\n";
+//        yield;
+//        echo "2\n";
+//    } finally {
+//        echo "3\n";
+//        yield;
+//        echo "4\n";
+//    }
+//    echo "5\n";
+//}
+//
+//$gen = gen();
+//$gen->current();
+//unset($gen);
+//exit;
+
+/////////////////////////////////////////////////////////////////////////////////
+
+
+function move_upload_file($src, $dst)
+{
+    $chunk = 1024 * 1024;
+    $offset = 0;
+    $fileSize = filesize($src);
+    $n = (int)ceil($fileSize / $chunk);
+
+    swoole_async_read($src, function($_, $content) use($src, &$offset, &$n, $dst) {
+        $readSize = strlen($content);
+        $continue = ($readSize !== 0);
+        if ($continue) {
+            var_dump($dst);
+            swoole_async_write($dst, $content, $offset, function($_, $writeSize) use($offset, $readSize, &$n) {
+                // assert($readSize === $writeSize); // 断言分块全部写入
+                if (--$n === 0) {
+                    // TODO DONE
+                }
+            });
+        }
+
+        $offset += $readSize;
+        return $continue;
+    });
+}
+
+move_upload_file(__FILE__, __FILE__ . "bak");
+
+exit;
+
+function x($i)
+{
+    $cli = new  \swoole_client(SWOOLE_SOCK_TCP, SWOOLE_SOCK_ASYNC);
+    $cli->on("close", function() use($cli, $i)  {
+        echo "$i ==> close\n";
+        x($i++);
+    });
+    $cli->on("error", function() {
+        echo "error";
+    });
+    $cli->on("connect", function() {});
+    $r = $cli->connect("10.9.193.159", 20883);
+//    var_dump($r);
+
+    swoole_timer_after(1000, function() use($cli) {
+        $cli->close();
+//        var_dump();
+    });
+}
+x(1);
+exit;
+
 //$poolEx = new \swoole_connpool(\swoole_connpool::SWOOLE_CONNPOOL_REDIS);
 //$r = $poolEx->setConfig([
 //    "host" => "10.9.33.59",
@@ -35,7 +223,6 @@ $r = $redis->connect("10.9.33.59", 7143, function($redis, $result){
     });
     });
     assert($r);
-1
 });
 
 exit;

@@ -11,7 +11,7 @@ namespace Minimalism\Test\Buffer;
 
 use Minimalism\Buffer\BinaryStream;
 use Minimalism\Buffer\MemoryBuffer;
-use Minimalism\Buffer\Protocol;
+use Minimalism\Buffer\IteratorProtocol;
 use Minimalism\Buffer\StringBuffer;
 use Minimalism\Validation\P;
 
@@ -25,8 +25,8 @@ require __DIR__ . "/../../src/Buffer/Protocol.php";
 
 call_user_func(function() {
     $buffer = new MemoryBuffer();
-    $protocol = new Protocol($buffer);
-    $protocol->parse(function(Protocol $proto) {
+    $protocol = new IteratorProtocol($buffer);
+    $protocol->parse(function(IteratorProtocol $proto) {
         $bytes = yield "\n";
         var_dump($bytes);
     });
@@ -45,8 +45,8 @@ call_user_func(function() {
     $buffer->write("\n4");
     $buffer->write("56\n78\n");
 
-    $protocol = new Protocol($buffer);
-    $protocol->parse(function(Protocol $proto) {
+    $protocol = new IteratorProtocol($buffer);
+    $protocol->parse(function(IteratorProtocol $proto) {
         $bytes = yield "\n";
         var_dump($bytes);
     });
@@ -56,8 +56,8 @@ echo str_repeat('-=-', 30), "\n";
 
 call_user_func(function() {
     $buffer = new MemoryBuffer();
-    $protocol = new Protocol($buffer);
-    $protocol->parse(function(Protocol $proto) {
+    $protocol = new IteratorProtocol($buffer);
+    $protocol->parse(function(IteratorProtocol $proto) {
         $bytes = yield 1;
         var_dump($bytes);
         $bytes = yield 2;
@@ -80,8 +80,8 @@ call_user_func(function() {
 
     // --------------
 
-    $protocol = new Protocol($buffer);
-    $protocol->parse(function(Protocol $proto) {
+    $protocol = new IteratorProtocol($buffer);
+    $protocol->parse(function(IteratorProtocol $proto) {
         $a = yield $proto->readFloat();
         var_dump($a);
         $a = yield $proto->readInt32BE();
@@ -105,10 +105,10 @@ echo str_repeat('-=-', 30), "\n";
 
 call_user_func(function() {
     $buffer = new MemoryBuffer();
-    $protocol = new Protocol($buffer);
+    $protocol = new IteratorProtocol($buffer);
     $protocol->register("Line", ["\r\n", "\r", "\n"]);
 
-    $protocol->parse(function(Protocol $proto) {
+    $protocol->parse(function(IteratorProtocol $proto) {
         $bytes = yield $proto->readLine();
         var_dump($bytes);
     });
@@ -126,9 +126,9 @@ echo str_repeat('-=-', 30), "\n";
 call_user_func(function() {
 
     $buffer = new MemoryBuffer();
-    $protocol = new Protocol($buffer);
+    $protocol = new IteratorProtocol($buffer);
 
-    $protocol->parse(function(Protocol $proto) {
+    $protocol->parse(function(IteratorProtocol $proto) {
         $reqLine = yield "\r\n";
 
         $httpMsg = [];

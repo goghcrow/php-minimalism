@@ -25,7 +25,7 @@ namespace Minimalism\Buffer;
  * @method int|null readFloat()
  * @method int|null readDouble()
  */
-class Protocol
+class IteratorProtocol
 {
     private $protocol;
 
