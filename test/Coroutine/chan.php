@@ -11,6 +11,26 @@ use Minimalism\Coroutine\Time;
 
 require __DIR__ . "/../../vendor/autoload.php";
 
+$__ = function() {
+    $ch = chan(2);
+
+    go(function() use($ch, &$buf) {
+        while (true) {
+            yield $ch->send(null);
+            echo  "c send\n";
+            yield Time::sleep(1);
+        }
+    });
+
+    go(function() use($ch, &$buf) {
+        while (true) {
+            list($recv, ) = (yield $ch->recv());
+            echo  "b recv\n";
+        }
+    });
+};
+$__();
+exit;
 
 
 Task::setUnObservedExceptionHandler(function($result, $ex, Task $task) {

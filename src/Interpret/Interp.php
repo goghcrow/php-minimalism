@@ -1,6 +1,6 @@
 <?php
 
-//[["lambda", ["a"], [ "print", "a" ]], "a"]
+
 function interp($expr, array $env = [])
 {
     if (is_scalar($expr)) {
