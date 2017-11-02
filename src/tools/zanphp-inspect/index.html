@@ -615,7 +615,7 @@
             data.append("type", type)
             data.append("host", host)
             data.append("port", port)
-            return fetch("/", {
+            return fetch("<?php echo $uri ?>", {
                 method: "POST",
                 body: data
             }).then(res => res.json())
